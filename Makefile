@@ -27,7 +27,11 @@ lint:
 .PHONY: test
 test:
 	@echo "==> Running Go unit and in-memory tests..."
-	go test -v -race ./...
+	go test -v -race ./pkg/... ./cmd/...
+	@if [ -d "ui/node_modules" ]; then \
+		echo "==> Running UI unit tests..."; \
+		(cd ui && yarn test); \
+	fi
 
 .PHONY: build
 build:

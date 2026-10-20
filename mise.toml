@@ -5,7 +5,7 @@ yarn = "1.22.22"
 golangci-lint = "2.15.0"
 
 [env]
-KUBECONFIG = "~/.kube/hv-01.yaml"
+KUBECONFIG = "{{env.KUBECONFIG | default(value=env.HOME ~ '/.kube/hv-01.yaml')}}"
 NB_PORT = "6641"
 SB_PORT = "6642"
 DAEMON_PORT = "8080"
