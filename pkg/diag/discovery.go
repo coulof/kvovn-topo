@@ -119,31 +119,57 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 	return PodRef{}, fmt.Errorf("kube-ovn-cni pod on node %s is not running", nodeName)
 }
 
-// FindNodeOVSPod finds the ovs-ovn pod running on the specified node (or falls back to kube-ovn-cni).
+// FindNodeOVSPod finds the ovs-ovn or ovs pod running on the specified node (or falls back to kube-ovn-cni).
 func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRef, error) {
-	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app=ovs-ovn",
-		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
-	})
-	if err == nil && len(pods.Items) > 0 {
-		for _, p := range pods.Items {
-			if p.Status.Phase == corev1.PodRunning {
-				container := "openvswitch"
-				for _, c := range p.Spec.Containers {
-					if c.Name == "ovs-daemons" || c.Name == "openvswitch" {
-						container = c.Name
-						break
+	selectors := []string{"app=ovs", "app=ovs-ovn"}
+	for _, sel := range selectors {
+		pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+			FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
+		})
+		if err == nil && len(pods.Items) > 0 {
+			for _, p := range pods.Items {
+				if p.Status.Phase == corev1.PodRunning {
+					container := "openvswitch"
+					for _, c := range p.Spec.Containers {
+						if c.Name == "openvswitch" || c.Name == "ovs-daemons" {
+							container = c.Name
+							break
+						}
 					}
+					return PodRef{
+						Namespace: l.namespace,
+						Name:      p.Name,
+						Container: container,
+					}, nil
 				}
-				return PodRef{
-					Namespace: l.namespace,
-					Name:      p.Name,
-					Container: container,
-				}, nil
+			}
+		}
+
+		// Also check by label without field selector
+		allPods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: sel,
+		})
+		if err == nil {
+			for _, p := range allPods.Items {
+				if p.Spec.NodeName == nodeName && p.Status.Phase == corev1.PodRunning {
+					container := "openvswitch"
+					for _, c := range p.Spec.Containers {
+						if c.Name == "openvswitch" || c.Name == "ovs-daemons" {
+							container = c.Name
+							break
+						}
+					}
+					return PodRef{
+						Namespace: l.namespace,
+						Name:      p.Name,
+						Container: container,
+					}, nil
+				}
 			}
 		}
 	}
 
-	// Fallback to kube-ovn-cni on that node if ovs-ovn is absent
+	// Fallback to kube-ovn-cni on that node if dedicated ovs pod is absent
 	return l.FindNodeCNIPod(ctx, nodeName)
 }
