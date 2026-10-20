@@ -139,10 +139,10 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
 
 **DoD**
-- [ ] All three views navigable on the `overlay-default`, `custom-vpc-ovn-nat` and `underlay-vlan` scenarios.
-- [ ] A KubeVirt VM with 2 NICs on 2 subnets is shown as one VM with two attachments (fixture + e2e).
-- [ ] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage).
-- [ ] Teatest (or equivalent) golden tests for the main screens.
+- [x] All three views navigable on the `overlay-default`, `custom-vpc-ovn-nat` and `underlay-vlan` scenarios. (Done 2026-10-20)
+- [x] A KubeVirt VM with 2 NICs on 2 subnets is shown as one VM with two attachments (fixture + e2e). (Done 2026-10-20)
+- [x] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage). (Done 2026-10-20)
+- [x] Teatest (or equivalent) golden tests for the main screens. (Done 2026-10-20)
 - [x] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types. (Done 2026-10-20)
 
 ---

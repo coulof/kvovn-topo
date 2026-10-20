@@ -20,12 +20,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/yaml"
 )
 
 type viewMode int
 
 const (
 	viewTree viewMode = iota
+	viewL2
+	viewChassis
 	viewMatrix
 )
 
@@ -67,19 +70,29 @@ type model struct {
 	width         int
 	height        int
 
+	// L2 & Chassis Views (M2)
+	l2Resp           *api.GraphResponse
+	l2Nodes          []api.GraphNode
+	focusedLS        string
+	focusedLSName    string
+	chassisResp      *api.GraphResponse
+	chassisNodes     []api.GraphNode
+	expandedSwitches map[string]bool
+	switchWorkloads  map[string][]api.GraphNode
+
 	// Tier 1 Diagnostics (ADR-0001)
-	diagMode       bool
-	diagAvailable  bool
-	diagReason     string
-	k8sNamespace   string
-	k8sClient      kubernetes.Interface
-	diagExecutor   diag.Executor
-	diagLocator    *diag.PodLocator
-	diagCentralPod diag.PodRef
-	diagModal      bool
-	diagRunning    bool
-	diagAction     string
-	diagTitle      string
+	diagMode         bool
+	diagAvailable    bool
+	diagReason       string
+	k8sNamespace     string
+	k8sClient        kubernetes.Interface
+	diagExecutor     diag.Executor
+	diagLocator      *diag.PodLocator
+	diagCentralPod   diag.PodRef
+	diagModal        bool
+	diagRunning      bool
+	diagAction       string
+	diagTitle        string
 	diagTraceRes     *diag.TraceResult
 	diagTraceParams  string
 	diagRawOutput    string
@@ -89,6 +102,17 @@ type model struct {
 }
 
 type graphLoadedMsg struct {
+	resp *api.GraphResponse
+	err  error
+}
+
+type l2LoadedMsg struct {
+	lsID string
+	resp *api.GraphResponse
+	err  error
+}
+
+type chassisLoadedMsg struct {
 	resp *api.GraphResponse
 	err  error
 }
@@ -123,10 +147,12 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubec
 		theme:        theme,
 		styles:       CompileStyles(theme),
 		diagMode:     diagMode,
-		k8sNamespace: k8sNamespace,
-		nodeMap:      make(map[string]api.GraphNode),
-		routerPorts:  make(map[string][]RouterPortConnection),
-		switchPorts:  make(map[string][]RouterPortConnection),
+		k8sNamespace:     k8sNamespace,
+		nodeMap:          make(map[string]api.GraphNode),
+		routerPorts:      make(map[string][]RouterPortConnection),
+		switchPorts:      make(map[string][]RouterPortConnection),
+		expandedSwitches: make(map[string]bool),
+		switchWorkloads:  make(map[string][]api.GraphNode),
 	}
 
 	if diagMode {
@@ -223,6 +249,53 @@ func (m model) fetchGraphCmd() tea.Cmd {
 			return graphLoadedMsg{err: err}
 		}
 		return graphLoadedMsg{resp: &resp}
+	}
+}
+
+func (m model) fetchL2Cmd(focusLS string) tea.Cmd {
+	return func() tea.Msg {
+		if focusLS == "" {
+			return l2LoadedMsg{lsID: focusLS}
+		}
+		if m.fixturePath != "" {
+			snap := graph.LoadTestSnapshot(nil)
+			resp, err := snap.BuildGraph("l2", focusLS, 1, 1, 100)
+			return l2LoadedMsg{lsID: focusLS, resp: resp, err: err}
+		}
+		url := fmt.Sprintf("%s/graph?view=l2&focus=%s", strings.TrimRight(m.daemonURL, "/"), focusLS)
+		client := &http.Client{Timeout: 3 * time.Second}
+		r, err := client.Get(url)
+		if err != nil {
+			return l2LoadedMsg{lsID: focusLS, err: err}
+		}
+		defer func() { _ = r.Body.Close() }()
+		var resp api.GraphResponse
+		if err := json.NewDecoder(r.Body).Decode(&resp); err != nil {
+			return l2LoadedMsg{lsID: focusLS, err: err}
+		}
+		return l2LoadedMsg{lsID: focusLS, resp: &resp}
+	}
+}
+
+func (m model) fetchChassisCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.fixturePath != "" {
+			snap := graph.LoadTestSnapshot(nil)
+			resp, err := snap.BuildGraph("chassis", "", 1, 1, 100)
+			return chassisLoadedMsg{resp: resp, err: err}
+		}
+		url := fmt.Sprintf("%s/graph?view=chassis", strings.TrimRight(m.daemonURL, "/"))
+		client := &http.Client{Timeout: 3 * time.Second}
+		r, err := client.Get(url)
+		if err != nil {
+			return chassisLoadedMsg{err: err}
+		}
+		defer func() { _ = r.Body.Close() }()
+		var resp api.GraphResponse
+		if err := json.NewDecoder(r.Body).Decode(&resp); err != nil {
+			return chassisLoadedMsg{err: err}
+		}
+		return chassisLoadedMsg{resp: &resp}
 	}
 }
 
@@ -384,6 +457,16 @@ func (m *model) applyGraph(resp *api.GraphResponse) {
 	if m.selectedIdx >= len(m.nodeList) {
 		m.selectedIdx = 0
 	}
+
+	if m.focusedLS == "" {
+		for _, n := range m.nodeList {
+			if n.Type == api.GraphNodeTypeLS {
+				m.focusedLS = n.Id
+				m.focusedLSName = n.Name
+				break
+			}
+		}
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -400,6 +483,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyGraph(msg.resp)
+		return m, nil
+
+	case l2LoadedMsg:
+		if msg.err == nil && msg.resp != nil {
+			m.l2Resp = msg.resp
+			var lsps []api.GraphNode
+			for _, n := range msg.resp.Nodes {
+				if n.Type == api.GraphNodeTypeLSP {
+					lsps = append(lsps, n)
+				}
+			}
+			m.l2Nodes = lsps
+			if msg.lsID != "" {
+				m.switchWorkloads[msg.lsID] = lsps
+			}
+		}
+		return m, nil
+
+	case chassisLoadedMsg:
+		if msg.err == nil && msg.resp != nil {
+			m.chassisResp = msg.resp
+			m.chassisNodes = msg.resp.Nodes
+		}
 		return m, nil
 
 	case diagProbeMsg:
@@ -572,12 +678,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Theme: %s", m.theme.Name)
 			return m, nil
 		case "tab":
-			if m.mode == viewTree {
-				m.mode = viewMatrix
-				m.selectedIdx = 0
-			} else {
-				m.mode = viewTree
-				m.selectedIdx = 0
+			m.mode = (m.mode + 1) % 4
+			m.selectedIdx = 0
+			if m.mode == viewL2 && (m.l2Resp == nil || len(m.l2Nodes) == 0) {
+				return m, m.fetchL2Cmd(m.focusedLS)
+			}
+			if m.mode == viewChassis && (m.chassisResp == nil || len(m.chassisNodes) == 0) {
+				return m, m.fetchChassisCmd()
+			}
+			return m, nil
+		case "1":
+			m.mode = viewTree
+			m.selectedIdx = 0
+			return m, nil
+		case "2":
+			m.mode = viewL2
+			m.selectedIdx = 0
+			if m.l2Resp == nil || len(m.l2Nodes) == 0 {
+				return m, m.fetchL2Cmd(m.focusedLS)
+			}
+			return m, nil
+		case "3":
+			m.mode = viewChassis
+			m.selectedIdx = 0
+			if m.chassisResp == nil || len(m.chassisNodes) == 0 {
+				return m, m.fetchChassisCmd()
+			}
+			return m, nil
+		case "4":
+			m.mode = viewMatrix
+			m.selectedIdx = 0
+			return m, nil
+		case "e", "enter":
+			if m.mode == viewTree && len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+				node := m.nodeList[m.selectedIdx]
+				if node.Type == api.GraphNodeTypeLS {
+					m.expandedSwitches[node.Id] = !m.expandedSwitches[node.Id]
+					if m.expandedSwitches[node.Id] && len(m.switchWorkloads[node.Id]) == 0 {
+						return m, m.fetchL2Cmd(node.Id)
+					}
+				}
+			}
+			return m, nil
+		case "s":
+			if m.mode == viewL2 {
+				m.cycleFocusedSwitch()
+				return m, m.fetchL2Cmd(m.focusedLS)
 			}
 			return m, nil
 		case "r":
@@ -588,8 +734,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedIdx--
 			}
 		case "down", "j":
-			maxIdx := len(m.nodeList) - 1
-			if m.mode == viewMatrix {
+			maxIdx := 0
+			switch m.mode {
+			case viewTree:
+				maxIdx = len(m.nodeList) - 1
+			case viewL2:
+				maxIdx = len(m.l2Nodes) - 1
+			case viewChassis:
+				maxIdx = len(m.chassisNodes) - 1
+			case viewMatrix:
 				maxIdx = len(m.portList) - 1
 			}
 			if m.selectedIdx < maxIdx {
@@ -655,6 +808,31 @@ func (m model) selectedPortName() string {
 		}
 	}
 	return ""
+}
+
+func (m *model) cycleFocusedSwitch() {
+	var switches []api.GraphNode
+	for _, n := range m.nodeList {
+		if n.Type == api.GraphNodeTypeLS {
+			switches = append(switches, n)
+		}
+	}
+	if len(switches) == 0 {
+		return
+	}
+
+	currentIdx := -1
+	for i, s := range switches {
+		if s.Id == m.focusedLS || s.Name == m.focusedLSName {
+			currentIdx = i
+			break
+		}
+	}
+
+	nextIdx := (currentIdx + 1) % len(switches)
+	m.focusedLS = switches[nextIdx].Id
+	m.focusedLSName = switches[nextIdx].Name
+	m.selectedIdx = 0
 }
 
 func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
@@ -890,22 +1068,30 @@ func (m model) View() string {
 		}
 	}
 
-	treeTab := m.styles.TabInactive.Render("1. Topology Tree")
-	matrixTab := m.styles.TabInactive.Render("2. Port Interconnection Matrix")
-	if m.mode == viewTree {
-		treeTab = m.styles.TabActive.Render("1. Topology Tree")
-	} else {
-		matrixTab = m.styles.TabActive.Render("2. Port Interconnection Matrix")
+	tab1 := m.styles.TabInactive.Render("1. L3 Tree")
+	tab2 := m.styles.TabInactive.Render("2. L2 Subnets")
+	tab3 := m.styles.TabInactive.Render("3. Chassis")
+	tab4 := m.styles.TabInactive.Render("4. Port Matrix")
+
+	switch m.mode {
+	case viewTree:
+		tab1 = m.styles.TabActive.Render("1. L3 Tree")
+	case viewL2:
+		tab2 = m.styles.TabActive.Render("2. L2 Subnets")
+	case viewChassis:
+		tab3 = m.styles.TabActive.Render("3. Chassis")
+	case viewMatrix:
+		tab4 = m.styles.TabActive.Render("4. Port Matrix")
 	}
 
-	tabs := fmt.Sprintf("%s%s", treeTab, matrixTab)
+	tabs := fmt.Sprintf("%s%s%s%s", tab1, tab2, tab3, tab4)
 	diagShortcut := ""
 	if m.diagAvailable {
 		diagShortcut = " | x: diag"
 	}
 
 	statusText := m.styles.MutedText.Render(
-		fmt.Sprintf(" %s [%s]  [Tab: view | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
+		fmt.Sprintf(" %s [%s]  [Tab/1-4: view | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
 
 	b.WriteString(header + " " + diagBadge + tabs + statusText + "\n\n")
 
@@ -925,14 +1111,20 @@ func (m model) View() string {
 		return b.String()
 	}
 
-	if m.mode == viewMatrix {
+	switch m.mode {
+	case viewL2:
+		b.WriteString(m.renderL2View())
+		return b.String()
+	case viewChassis:
+		b.WriteString(m.renderChassisView())
+		return b.String()
+	case viewMatrix:
 		b.WriteString(m.renderMatrixView())
 		return b.String()
+	default:
+		b.WriteString(m.renderTreeView())
+		return b.String()
 	}
-
-	// Tree View
-	b.WriteString(m.renderTreeView())
-	return b.String()
 }
 
 func (m model) renderDiagModal() string {
@@ -1072,12 +1264,41 @@ func (m model) renderTreeView() string {
 			isSel := selectedNode != nil && selectedNode.Id == n.Id
 			line := formatNodeLine(n, m.styles)
 
+			isExpanded := m.expandedSwitches[n.Id]
+			expandHint := ""
+			if n.Type == api.GraphNodeTypeLS {
+				if isExpanded {
+					expandHint = m.styles.MutedText.Render(" (expanded, press 'e' to collapse)")
+				} else {
+					expandHint = m.styles.MutedText.Render(" (press 'e' to expand workloads)")
+				}
+			}
+
 			cursor := "  "
 			if isSel {
 				cursor = "► "
-				boxContent.WriteString(m.styles.SelectedNode.Render(cursor+line) + "\n")
+				boxContent.WriteString(m.styles.SelectedNode.Render(cursor+line) + expandHint + "\n")
 			} else {
-				boxContent.WriteString(m.styles.Node.Render(cursor+line) + "\n")
+				boxContent.WriteString(m.styles.Node.Render(cursor+line) + expandHint + "\n")
+			}
+
+			// If switch is expanded, draw attached workload ports
+			if isExpanded && n.Type == api.GraphNodeTypeLS {
+				workloads := m.switchWorkloads[n.Id]
+				if len(workloads) == 0 {
+					boxContent.WriteString("      " + m.styles.MutedText.Render("└── (no active workloads attached or loading...)") + "\n")
+				} else {
+					for wIdx, w := range workloads {
+						wLast := wIdx == len(workloads)-1
+						wGlyph := "├──"
+						if wLast {
+							wGlyph = "└──"
+						}
+						wDesc := formatWorkloadBadge(w, m.styles)
+						fmt.Fprintf(&boxContent, "      %s %s\n",
+							m.styles.EdgeLine.Render(wGlyph), wDesc)
+					}
+				}
 			}
 
 			// If it's a Router, draw its connected LRP branch ports directly beneath it!
@@ -1129,11 +1350,37 @@ func (m model) renderTreeView() string {
 			isSel := selectedNode != nil && selectedNode.Id == n.Id
 			line := formatNodeLine(n, m.styles)
 			cursor := "  "
+			isExpanded := m.expandedSwitches[n.Id]
+			expandHint := ""
+			if n.Type == api.GraphNodeTypeLS {
+				if isExpanded {
+					expandHint = m.styles.MutedText.Render(" (expanded, press 'e' to collapse)")
+				} else {
+					expandHint = m.styles.MutedText.Render(" (press 'e' to expand workloads)")
+				}
+			}
+
 			if isSel {
 				cursor = "► "
-				sharedContent.WriteString(m.styles.SelectedNode.Render(cursor+line) + "\n")
+				sharedContent.WriteString(m.styles.SelectedNode.Render(cursor+line) + expandHint + "\n")
 			} else {
-				sharedContent.WriteString(m.styles.Node.Render(cursor+line) + "\n")
+				sharedContent.WriteString(m.styles.Node.Render(cursor+line) + expandHint + "\n")
+			}
+
+			if isExpanded && n.Type == api.GraphNodeTypeLS {
+				workloads := m.switchWorkloads[n.Id]
+				if len(workloads) > 0 {
+					for wIdx, w := range workloads {
+						wLast := wIdx == len(workloads)-1
+						wGlyph := "├──"
+						if wLast {
+							wGlyph = "└──"
+						}
+						wDesc := formatWorkloadBadge(w, m.styles)
+						fmt.Fprintf(&sharedContent, "      %s %s\n",
+							m.styles.EdgeLine.Render(wGlyph), wDesc)
+					}
+				}
 			}
 
 			// Show routers connecting into this switch
@@ -1254,6 +1501,187 @@ func (m model) renderTreeView() string {
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel.String(), m.styles.DetailBox.Render(rightPanel.String()))
+}
+
+func (m model) renderL2View() string {
+	var b strings.Builder
+
+	swName := m.focusedLSName
+	if swName == "" {
+		swName = m.focusedLS
+	}
+	if swName == "" {
+		swName = "All Subnets"
+	}
+
+	headerText := fmt.Sprintf("  Subnet: %s (%d attached ports)  [s: cycle subnet | ↑/↓ or j/k: navigate | x: diag]",
+		swName, len(m.l2Nodes))
+	b.WriteString(m.styles.Header.Render(headerText) + "\n\n")
+
+	tblHeader := fmt.Sprintf("  %-32s %-10s %-24s %-20s %s",
+		"NAME / LSP", "TYPE", "IP / MAC", "CHASSIS / NODE", "WORKLOAD IDENTITY")
+	b.WriteString(m.styles.TableHeader.Render(tblHeader) + "\n")
+
+	if len(m.l2Nodes) == 0 {
+		b.WriteString("\n  No attached ports or loading subnet...\n")
+		b.WriteString(m.styles.MutedText.Render("  Tip: Press 's' to cycle focused subnet, '1' for tree, or 'r' to refresh.\n"))
+		return b.String()
+	}
+
+	for idx, n := range m.l2Nodes {
+		props := make(map[string]interface{})
+		if n.Properties != nil {
+			props = *n.Properties
+		}
+
+		portType, _ := props["type"].(string)
+		if portType == "" {
+			portType = "veth"
+		}
+
+		addrStr := ""
+		if addrs, ok := props["addresses"].([]interface{}); ok && len(addrs) > 0 {
+			var strList []string
+			for _, a := range addrs {
+				if s, ok := a.(string); ok {
+					strList = append(strList, s)
+				}
+			}
+			addrStr = strings.Join(strList, ", ")
+		}
+
+		boundState, _ := props["boundState"].(string)
+		chassis, _ := props["boundChassis"].(string)
+		chassisText := "(unbound)"
+		if boundState == "bound" {
+			nodeName := chassis
+			if n.K8s != nil && n.K8s.Node != nil {
+				nodeName = *n.K8s.Node
+			}
+			chassisText = m.styles.BadgeBound.Render(nodeName)
+		} else {
+			chassisText = m.styles.BadgeUnbound.Render(chassisText)
+		}
+
+		workloadText := "(none)"
+		if n.K8s != nil {
+			if n.K8s.WorkloadKind != nil && n.K8s.WorkloadName != nil {
+				ns := ""
+				if n.K8s.Namespace != nil {
+					ns = *n.K8s.Namespace + "/"
+				}
+				owner := ""
+				if n.K8s.Owner != nil && *n.K8s.Owner != "" {
+					owner = fmt.Sprintf(" (%s)", *n.K8s.Owner)
+				}
+				workloadText = fmt.Sprintf("[%s] %s%s%s", *n.K8s.WorkloadKind, ns, *n.K8s.WorkloadName, owner)
+			} else if n.K8s.Pod != nil {
+				workloadText = fmt.Sprintf("[Pod] %s", *n.K8s.Pod)
+			}
+		}
+
+		cursor := "  "
+		if idx == m.selectedIdx {
+			cursor = "► "
+		}
+
+		row := fmt.Sprintf("%s%-32s %-10s %-24s %-20s %s",
+			cursor,
+			truncate(n.Name, 32),
+			truncate(portType, 10),
+			truncate(addrStr, 24),
+			truncate(chassisText, 20),
+			truncate(workloadText, 40))
+
+		if idx == m.selectedIdx {
+			b.WriteString(m.styles.TableRowSelected.Render(row) + "\n")
+		} else {
+			b.WriteString(m.styles.TableRow.Render(row) + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+func (m model) renderChassisView() string {
+	var b strings.Builder
+
+	headerText := fmt.Sprintf("  Cluster Chassis & Nodes (%d members)  [↑/↓ or j/k: navigate | x: diag on node]",
+		len(m.chassisNodes))
+	b.WriteString(m.styles.Header.Render(headerText) + "\n\n")
+
+	tblHeader := fmt.Sprintf("  %-28s %-18s %-18s %-12s %-14s %s",
+		"CHASSIS / NODE", "HOSTNAME", "IP ADDRESS", "ENCAP", "BOUND PORTS", "ACTIVE ROLES")
+	b.WriteString(m.styles.TableHeader.Render(tblHeader) + "\n")
+
+	if len(m.chassisNodes) == 0 {
+		b.WriteString("\n  Loading chassis inventory...\n")
+		return b.String()
+	}
+
+	for idx, ch := range m.chassisNodes {
+		props := make(map[string]interface{})
+		if ch.Properties != nil {
+			props = *ch.Properties
+		}
+
+		nodeName, _ := props["nodeName"].(string)
+		if nodeName == "" {
+			nodeName = ch.Name
+		}
+		hostname, _ := props["hostname"].(string)
+		if hostname == "" {
+			hostname = ch.Name
+		}
+		ip, _ := props["ip"].(string)
+		if ip == "" {
+			ip = "(overlay)"
+		}
+		encap, _ := props["encapType"].(string)
+		if encap == "" {
+			encap = "geneve"
+		}
+		bindingCount := 0
+		if bc, ok := props["bindingCount"].(float64); ok {
+			bindingCount = int(bc)
+		} else if bc, ok := props["bindingCount"].(int); ok {
+			bindingCount = bc
+		}
+
+		// Check if this chassis hosts active gateways
+		var activeRoles []string
+		for _, conn := range m.portList {
+			if conn.ActiveGateway == hostname || conn.ActiveGateway == nodeName || conn.ActiveGateway == ch.Name {
+				activeRoles = append(activeRoles, fmt.Sprintf("GW: %s", conn.PortName))
+			}
+		}
+		roleText := "(compute node)"
+		if len(activeRoles) > 0 {
+			roleText = m.styles.ActiveGateway.Render(strings.Join(activeRoles, ", "))
+		}
+
+		cursor := "  "
+		if idx == m.selectedIdx {
+			cursor = "► "
+		}
+
+		row := fmt.Sprintf("%s%-28s %-18s %-18s %-12s %-14s %s",
+			cursor,
+			truncate(fmt.Sprintf("%s (%s)", nodeName, ch.Name), 28),
+			truncate(hostname, 18),
+			truncate(ip, 18),
+			truncate(encap, 12),
+			fmt.Sprintf("%d ports", bindingCount),
+			roleText)
+
+		if idx == m.selectedIdx {
+			b.WriteString(m.styles.TableRowSelected.Render(row) + "\n")
+		} else {
+			b.WriteString(m.styles.TableRow.Render(row) + "\n")
+		}
+	}
+
+	return b.String()
 }
 
 func (m model) renderMatrixView() string {
@@ -1447,6 +1875,101 @@ func truncate(s string, maxLen int) string {
 	return s
 }
 
+func formatWorkloadBadge(n api.GraphNode, styles ThemeStyles) string {
+	kind := "Pod"
+	name := n.Name
+	ns := ""
+	if n.K8s != nil {
+		if n.K8s.WorkloadKind != nil && *n.K8s.WorkloadKind != "" {
+			kind = *n.K8s.WorkloadKind
+		}
+		if n.K8s.WorkloadName != nil && *n.K8s.WorkloadName != "" {
+			name = *n.K8s.WorkloadName
+		}
+		if n.K8s.Namespace != nil && *n.K8s.Namespace != "" {
+			ns = *n.K8s.Namespace + "/"
+		}
+	}
+
+	badge := fmt.Sprintf("[%s] %s%s", kind, ns, name)
+	switch kind {
+	case "VirtualMachine":
+		badge = styles.ActiveGateway.Render(badge)
+	case "Node":
+		badge = styles.PortBadge.Render(badge)
+	default:
+		badge = styles.BadgeBound.Render(badge)
+	}
+
+	ipStr := ""
+	if n.Properties != nil {
+		p := *n.Properties
+		if addrs, ok := p["addresses"].([]interface{}); ok && len(addrs) > 0 {
+			if s, ok := addrs[0].(string); ok {
+				ipStr = " (IP: " + s + ")"
+			}
+		}
+		if boundChassis, ok := p["boundChassis"].(string); ok && boundChassis != "" {
+			nodeName := boundChassis
+			if n.K8s != nil && n.K8s.Node != nil {
+				nodeName = *n.K8s.Node
+			}
+			ipStr += " on " + nodeName
+		}
+	}
+
+	return badge + styles.MutedText.Render(ipStr)
+}
+
+func runMachineOutput(daemonURL, fixturePath, viewName, focusID, format string) error {
+	var resp *api.GraphResponse
+	var err error
+
+	if fixturePath != "" {
+		snap := graph.LoadTestSnapshot(nil)
+		resp, err = snap.BuildGraph(viewName, focusID, 1, 1, 100)
+	} else {
+		url := fmt.Sprintf("%s/graph?view=%s", strings.TrimRight(daemonURL, "/"), viewName)
+		if focusID != "" {
+			url += fmt.Sprintf("&focus=%s", focusID)
+		}
+		client := &http.Client{Timeout: 5 * time.Second}
+		r, reqErr := client.Get(url)
+		if reqErr != nil {
+			return fmt.Errorf("failed to reach daemon: %w", reqErr)
+		}
+		defer func() { _ = r.Body.Close() }()
+		if r.StatusCode != http.StatusOK {
+			return fmt.Errorf("daemon returned HTTP %d", r.StatusCode)
+		}
+		var decoded api.GraphResponse
+		if decodeErr := json.NewDecoder(r.Body).Decode(&decoded); decodeErr != nil {
+			return decodeErr
+		}
+		resp = &decoded
+	}
+
+	if err != nil {
+		return err
+	}
+
+	switch strings.ToLower(format) {
+	case "json":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(resp)
+	case "yaml", "yml":
+		yBytes, err := yaml.Marshal(resp)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(yBytes)
+		return err
+	default:
+		return fmt.Errorf("unsupported output format: %s (supported: json, yaml)", format)
+	}
+}
+
 func main() {
 	var daemonURL string
 	var useFixture bool
@@ -1454,6 +1977,9 @@ func main() {
 	var diagMode bool
 	var kubeconfig string
 	var k8sNamespace string
+	var outputFormat string
+	var viewName string
+	var focusID string
 
 	flag.StringVar(&daemonURL, "daemon-url", "http://127.0.0.1:8080/api/v1", "URL of the ovn-topologyd API")
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
@@ -1461,11 +1987,27 @@ func main() {
 	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
 	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
 	flag.StringVar(&k8sNamespace, "k8s-namespace", "kube-system", "Kubernetes namespace containing Kube-OVN/OVS daemon pods")
+	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
+	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
+	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
+
+	// Allow "ovn-topo graph ..." style invocations
+	if len(os.Args) > 1 && os.Args[1] == "graph" {
+		os.Args = append(os.Args[:1], os.Args[2:]...)
+	}
 	flag.Parse()
 
 	fixturePath := ""
 	if useFixture {
 		fixturePath = "dev-fixture"
+	}
+
+	if outputFormat != "" {
+		if err := runMachineOutput(daemonURL, fixturePath, viewName, focusID, outputFormat); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	p := tea.NewProgram(initialModel(daemonURL, fixturePath, themeName, diagMode, kubeconfig, k8sNamespace), tea.WithAltScreen())

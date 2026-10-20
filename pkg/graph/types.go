@@ -36,6 +36,7 @@ type Snapshot struct {
 	Revision   int64
 	Timestamp  time.Time
 	NodeMapper NodeMapper
+	WorkloadResolver WorkloadResolver
 
 	// Northbound entities indexed by UUID
 	LogicalRouters      map[string]*nbmodel.LogicalRouter
@@ -77,6 +78,7 @@ func NewEmptySnapshot(revision int64, mapper NodeMapper) *Snapshot {
 		Revision:             revision,
 		Timestamp:            time.Now(),
 		NodeMapper:           mapper,
+		WorkloadResolver:     &StaticWorkloadResolver{},
 		LogicalRouters:       make(map[string]*nbmodel.LogicalRouter),
 		LogicalRouterPorts:   make(map[string]*nbmodel.LogicalRouterPort),
 		StaticRoutes:         make(map[string]*nbmodel.LogicalRouterStaticRoute),
@@ -107,6 +109,7 @@ func NewEmptySnapshot(revision int64, mapper NodeMapper) *Snapshot {
 // Clone creates a shallow copy of maps for copy-on-write modifications.
 func (s *Snapshot) Clone(newRevision int64) *Snapshot {
 	next := NewEmptySnapshot(newRevision, s.NodeMapper)
+	next.WorkloadResolver = s.WorkloadResolver
 
 	for k, v := range s.LogicalRouters {
 		next.LogicalRouters[k] = v

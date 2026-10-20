@@ -211,6 +211,16 @@ export interface components {
             vpc?: string;
             /** @description Value of vendor tag (e.g. kube-ovn). */
             vendor?: string;
+            /** @description Kind of workload (Pod, VirtualMachine, Deployment, DaemonSet, StatefulSet). */
+            workloadKind?: string;
+            /** @description Name of the owner workload or VM. */
+            workloadName?: string;
+            /** @description Top-level owner reference (e.g. Deployment/coredns). */
+            owner?: string;
+            /** @description VirtualMachineInstance name for KubeVirt VMs. */
+            vmi?: string;
+            /** @description NetworkAttachmentDefinition name for multi-NIC interfaces. */
+            networkAttachment?: string;
         };
         NodeDetail: {
             id: string;
