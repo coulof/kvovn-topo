@@ -13,8 +13,10 @@ COPY cmd/ cmd/
 ARG VERSION=0.1.0-dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s -X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildDate=${BUILD_DATE}" \
     -o /bin/ovn-topologyd ./cmd/ovn-topologyd
 
