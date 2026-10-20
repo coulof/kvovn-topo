@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Determine version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build-binaries:
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Compile multi-arch binaries
+        env:
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+          GIT_COMMIT: ${{ github.sha }}
+        run: |
+          mkdir -p dist
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          LDFLAGS="-w -s -X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildDate=${DATE}"
+
+          for OS in linux darwin; do
+            for ARCH in amd64 arm64; do
+              echo "Building for ${OS}/${ARCH}..."
+              CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topologyd_${OS}_${ARCH} ./cmd/ovn-topologyd
+              CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo_${OS}_${ARCH} ./cmd/ovn-topo
+
+              tar -czf dist/ovn-topology_${VERSION}_${OS}_${ARCH}.tar.gz -C dist ovn-topologyd_${OS}_${ARCH} ovn-topo_${OS}_${ARCH}
+            done
+          done
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/*.tar.gz
+
+  build-and-push-image:
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push daemon image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ovn-topologyd:${{ needs.prepare-version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/ovn-topologyd:latest
+          build-args: |
+            VERSION=${{ needs.prepare-version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+
+  package-and-push-chart:
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package chart
+        env:
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+        run: |
+          mkdir -p chart-dist
+          sed -i "s/^version:.*/version: ${VERSION}/" charts/ovn-topology/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" charts/ovn-topology/Chart.yaml
+          helm package charts/ovn-topology -d chart-dist/
+
+      - name: Push chart to GHCR OCI
+        env:
+          HELM_EXPERIMENTAL_OCI: 1
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+          helm push chart-dist/ovn-topology-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: chart-dist/*.tgz
+
+  build-ui-extension-eci:
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+
+      - name: Install dependencies and build extension
+        run: |
+          yarn install
+          yarn build-pkg ovn-topology
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Extension Catalog Image (ECI)
+        run: |
+          # Build ECI container serving static catalog
+          cat << 'EOF' > Dockerfile.eci
+          FROM nginx:alpine
+          COPY dist-pkg /usr/share/nginx/html
+          EXPOSE 80
+          EOF
+          docker build -f Dockerfile.eci \
+            -t ghcr.io/${{ github.repository_owner }}/ovn-topology-ui:${{ needs.prepare-version.outputs.version }} \
+            -t ghcr.io/${{ github.repository_owner }}/ovn-topology-ui:latest .
+          docker push ghcr.io/${{ github.repository_owner }}/ovn-topology-ui:${{ needs.prepare-version.outputs.version }}
+          docker push ghcr.io/${{ github.repository_owner }}/ovn-topology-ui:latest
+
+  create-release:
+    needs: [prepare-version, build-binaries, build-and-push-image, package-and-push-chart, build-ui-extension-eci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+          merge-multiple: true
+
+      - name: Generate Hauler manifest
+        env:
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          cat << EOF > release-assets/hauler.yaml
+          apiVersion: content.hauler.cattle.io/v1alpha1
+          kind: Content
+          metadata:
+            name: ovn-topology-airgap-bundle
+          spec:
+            images:
+              - name: ghcr.io/${OWNER}/ovn-topologyd:v${VERSION}
+              - name: ghcr.io/${OWNER}/ovn-topology-ui:v${VERSION}
+            charts:
+              - name: ovn-topology
+                repo: oci://ghcr.io/${OWNER}/charts
+                version: ${VERSION}
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.prepare-version.outputs.version }}
+          name: Release v${{ needs.prepare-version.outputs.version }}
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.tgz
+            release-assets/hauler.yaml
+          generate_release_notes: true
