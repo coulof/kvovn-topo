@@ -26,6 +26,27 @@ func TestTUIModelView(t *testing.T) {
 	// Process loaded message
 	m.applyGraph(loaded.resp)
 
+	// Verify exact visual top-to-bottom order of nodeList
+	expectedOrder := []string{
+		"ovn_cluster",     // Router in VPC default
+		"default-subnet",  // Switch in VPC default
+		"custom-vpc",      // Router in VPC custom-vpc
+		"custom-subnet",   // Switch in VPC custom-vpc
+		"external-subnet", // Standalone switch
+		"join",            // Shared Interconnect switch
+		"provider-ext",    // External underlay
+	}
+
+	if len(m.nodeList) != len(expectedOrder) {
+		t.Fatalf("expected %d nodes in navigation list, got %d", len(expectedOrder), len(m.nodeList))
+	}
+
+	for i, expectedName := range expectedOrder {
+		if m.nodeList[i].Name != expectedName {
+			t.Errorf("at index %d: expected %s, got %s", i, expectedName, m.nodeList[i].Name)
+		}
+	}
+
 	// 1. Verify Tree View rendering
 	treeView := m.View()
 	if !strings.Contains(treeView, "OVN Network Topology") {
@@ -39,6 +60,9 @@ func TestTUIModelView(t *testing.T) {
 	}
 	if !strings.Contains(treeView, "VPC: custom-vpc") {
 		t.Errorf("expected VPC: custom-vpc in view, got: %s", treeView)
+	}
+	if !strings.Contains(treeView, "► ") {
+		t.Errorf("expected active cursor glyph ► in view, got: %s", treeView)
 	}
 	if !strings.Contains(treeView, "lrp-default") {
 		t.Errorf("expected port branch lrp-default in view, got: %s", treeView)
