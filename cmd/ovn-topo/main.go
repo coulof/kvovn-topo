@@ -457,7 +457,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
-				return m, m.executeNodeDiag("conntrack", nodeName)
+				return m, m.executeTcpdump("icmp or icmp6", nodeName)
 			case "3":
 				if m.diagRunning {
 					return m, nil
@@ -465,7 +465,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
-				return m, m.executeNodeDiag("ovs-iface", nodeName)
+				return m, m.executeTcpdump("tcp", nodeName)
 			case "4":
 				if m.diagRunning {
 					return m, nil
@@ -473,7 +473,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
-				return m, m.executeNodeDiag("logs", nodeName)
+				targetIP := m.selectedTargetIP()
+				filter := "ip"
+				if targetIP != "" {
+					filter = fmt.Sprintf("host %s", targetIP)
+				}
+				return m, m.executeTcpdump(filter, nodeName)
+			case "5":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				targetIP := m.selectedTargetIP()
+				return m, m.executeNodeDiag("conntrack", nodeName, targetIP)
+			case "6":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("ovs-iface", nodeName, "")
+			case "7":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("logs", nodeName, "")
 			default:
 				return m, nil
 			}
@@ -549,6 +579,23 @@ func (m model) selectedNodeName() string {
 	return ""
 }
 
+func (m model) selectedTargetIP() string {
+	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		conn := m.portList[m.selectedIdx]
+		if len(conn.Networks) > 0 {
+			return strings.Split(conn.Networks[0], "/")[0]
+		}
+	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		node := m.nodeList[m.selectedIdx]
+		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
+			if len(ports[0].Networks) > 0 {
+				return strings.Split(ports[0].Networks[0], "/")[0]
+			}
+		}
+	}
+	return ""
+}
+
 func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 	return func() tea.Msg {
 		if m.diagExecutor == nil || m.diagLocator == nil {
@@ -563,19 +610,28 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 			return diagExecResultMsg{err: fmt.Errorf("failed to locate ovn-central leader pod: %w", err)}
 		}
 
-		datapath := "default-subnet"
-		inport := "test"
+		datapath := "ovn-default"
+		inport := ""
 		srcIP := "10.244.0.1"
 		dstIP := "10.244.0.2"
 		srcMAC := ""
 
 		if conn != nil {
-			datapath = conn.SwitchName
-			inport = conn.PortName
 			srcMAC = conn.MAC
 			if len(conn.Networks) > 0 {
 				srcIP = strings.Split(conn.Networks[0], "/")[0]
 			}
+
+			// In OVN, if tracing into the logical switch, the ingress port must be
+			// the Logical Switch Port (PeerPortName).
+			if conn.PeerPortName != "" {
+				datapath = conn.SwitchName
+				inport = conn.PeerPortName
+			} else {
+				datapath = conn.RouterName
+				inport = conn.PortName
+			}
+
 			for _, peer := range m.switchPorts[conn.SwitchID] {
 				if peer.PortName != conn.PortName && len(peer.Networks) > 0 {
 					dstIP = strings.Split(peer.Networks[0], "/")[0]
@@ -610,14 +666,14 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		traceRes := diag.ParseTraceOutput(string(stdout))
 		return diagExecResultMsg{
 			action:    "trace",
-			title:     fmt.Sprintf("ovn-trace (%s -> %s via %s)", srcIP, dstIP, inport),
+			title:     fmt.Sprintf("ovn-trace on %s (inport: %s, %s -> %s)", datapath, inport, srcIP, dstIP),
 			traceRes:  &traceRes,
 			rawOutput: string(stdout),
 		}
 	}
 }
 
-func (m model) executeNodeDiag(action string, nodeName string) tea.Cmd {
+func (m model) executeNodeDiag(action string, nodeName string, targetIP string) tea.Cmd {
 	return func() tea.Msg {
 		if m.diagExecutor == nil || m.diagLocator == nil {
 			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
@@ -647,10 +703,10 @@ func (m model) executeNodeDiag(action string, nodeName string) tea.Cmd {
 		switch action {
 		case "conntrack":
 			cmd = diag.BuildConntrackDumpCommand(0)
-			title = fmt.Sprintf("Conntrack Table on node %s", nodeName)
+			title = fmt.Sprintf("Conntrack Table on node %s (IP: %s)", nodeName, targetIP)
 		case "ovs-iface":
-			cmd = diag.BuildOvsVsctlListInterfaceCommand()
-			title = fmt.Sprintf("OVS Interfaces on node %s", nodeName)
+			cmd = diag.BuildOvsVsctlShowCommand()
+			title = fmt.Sprintf("OVS Bridges & Interfaces (ovs-vsctl show) on node %s", nodeName)
 		case "logs":
 			cmd = diag.BuildOvnControllerLogTail(50)
 			title = fmt.Sprintf("ovn-controller logs on node %s", nodeName)
@@ -667,10 +723,71 @@ func (m model) executeNodeDiag(action string, nodeName string) tea.Cmd {
 			return diagExecResultMsg{err: fmt.Errorf("%s failed: %s", action, errMsg)}
 		}
 
+		out := string(stdout)
+		if action == "conntrack" {
+			out = diag.FormatConntrackOutput(out, targetIP)
+		}
+
 		return diagExecResultMsg{
 			action:    action,
 			title:     title,
-			rawOutput: string(stdout),
+			rawOutput: out,
+		}
+	}
+}
+
+func (m model) executeTcpdump(filter string, nodeName string) tea.Cmd {
+	return func() tea.Msg {
+		if m.diagExecutor == nil || m.diagLocator == nil {
+			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		if nodeName == "" && m.k8sClient != nil {
+			nodes, err := m.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+			if err == nil && len(nodes.Items) > 0 {
+				nodeName = nodes.Items[0].Name
+			}
+		}
+		if nodeName == "" {
+			nodeName = "cluster-node"
+		}
+
+		pod, err := m.diagLocator.FindNodeCNIPod(ctx, nodeName)
+		if err != nil {
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate kube-ovn-cni pod on node %s: %w", nodeName, err)}
+		}
+
+		req := diag.TcpdumpRequest{
+			Interface: "any",
+			Filter:    filter,
+			Count:     15,
+		}
+		cmd, err := diag.BuildTcpdumpCommand(req)
+		if err != nil {
+			return diagExecResultMsg{err: err}
+		}
+
+		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
+		if err != nil && len(stdout) == 0 {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return diagExecResultMsg{err: fmt.Errorf("tcpdump failed: %s", errMsg)}
+		}
+
+		out := string(stdout)
+		if out == "" && len(stderr) > 0 {
+			out = string(stderr)
+		}
+
+		return diagExecResultMsg{
+			action:    "tcpdump",
+			title:     fmt.Sprintf("Live tcpdump (filter: '%s') on node %s", filter, nodeName),
+			rawOutput: out,
 		}
 	}
 }
@@ -787,26 +904,39 @@ func (m model) renderDiagModal() string {
 					st.Pipeline, st.Table, st.Name, truncate(st.Action, 45))
 			}
 		} else {
-			lines := strings.Split(strings.TrimSpace(m.diagRawOutput), "\n")
-			maxLines := 15
+			rawText := m.diagRawOutput
+			if m.diagRawView {
+				rawText = diag.FormatJsonOutput(rawText)
+			}
+			lines := strings.Split(strings.TrimSpace(rawText), "\n")
+			maxLines := 18
 			if len(lines) > maxLines {
 				lines = lines[:maxLines]
-				lines = append(lines, fmt.Sprintf("... (%d lines truncated, press 'o' to toggle)", len(strings.Split(m.diagRawOutput, "\n"))-maxLines))
+				lines = append(lines, fmt.Sprintf("... (%d lines truncated, press 'o' to toggle pretty JSON)", len(strings.Split(rawText, "\n"))-maxLines))
 			}
 			box.WriteString("  " + strings.Join(lines, "\n  ") + "\n")
 		}
 
-		box.WriteString("\n" + m.styles.MutedText.Render("  [o: toggle raw output | 1-4: run another test | Esc/x: return to topology]"))
+		box.WriteString("\n" + m.styles.MutedText.Render("  [o: toggle pretty JSON/raw | 1-7: run another test | Esc/x: return to topology]"))
 		return m.styles.ModalBox.Render(box.String())
 	}
 
-	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
-	box.WriteString("    [1] ovn-trace (Microflow trace from this port to peer switch/gateway)\n")
-	box.WriteString("    [2] Dump Conntrack Entries (ovs-appctl dpctl/dump-conntrack)\n")
-	box.WriteString("    [3] Physical OVS Interfaces (ovs-vsctl list Interface on node)\n")
-	box.WriteString("    [4] Tail Controller Logs (ovn-controller log tail on node)\n\n")
+	targetIP := m.selectedTargetIP()
+	ipLabel := "(none)"
+	if targetIP != "" {
+		ipLabel = targetIP
+	}
 
-	box.WriteString(m.styles.MutedText.Render("  Press 1, 2, 3, 4 to execute | Esc or x to cancel"))
+	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
+	box.WriteString("    [1] ovn-trace (Microflow trace from active port to peer switch/gateway)\n")
+	box.WriteString("    [2] Live tcpdump: ICMP traffic (Ping / Echo trace on node)\n")
+	box.WriteString("    [3] Live tcpdump: TCP traffic (All TCP connections)\n")
+	fmt.Fprintf(&box, "    [4] Live tcpdump: Port IP traffic (host %s)\n", ipLabel)
+	fmt.Fprintf(&box, "    [5] Filtered Conntrack (Active flows for port IP %s)\n", ipLabel)
+	box.WriteString("    [6] OVS Physical Bridges & Tunnels (ovs-vsctl show)\n")
+	box.WriteString("    [7] Tail ovn-controller Logs (Local node)\n\n")
+
+	box.WriteString(m.styles.MutedText.Render("  Press 1-7 to execute | Esc or x to cancel"))
 
 	return m.styles.ModalBox.Render(box.String())
 }

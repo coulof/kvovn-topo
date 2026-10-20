@@ -216,7 +216,7 @@ func TestBuildTcpdumpCommand(t *testing.T) {
 
 func TestOvsCommands(t *testing.T) {
 	ifaceCmd := BuildOvsVsctlListInterfaceCommand()
-	if len(ifaceCmd) != 4 || ifaceCmd[0] != "ovs-vsctl" {
+	if len(ifaceCmd) != 2 || ifaceCmd[0] != "ovs-vsctl" || ifaceCmd[1] != "show" {
 		t.Errorf("unexpected ifaceCmd: %v", ifaceCmd)
 	}
 
@@ -233,6 +233,24 @@ func TestOvsCommands(t *testing.T) {
 	_, err = BuildOvsOfctlDumpFlows("br-int; rm -rf /")
 	if err == nil {
 		t.Errorf("expected error on bridge injection attempt")
+	}
+
+	// Test conntrack formatter
+	rawCT := "tcp,orig=(src=10.54.0.1,dst=10.54.0.2,sport=1234,dport=80),reply=(src=10.54.0.2,dst=10.54.0.1,sport=80,dport=1234),protoinfo=(state=ESTABLISHED)\n" +
+		"tcp,orig=(src=127.0.0.1,dst=127.0.0.1,sport=2379,dport=3456),reply=(src=127.0.0.1,dst=127.0.0.1,sport=3456,dport=2379)\n"
+	formattedCT := FormatConntrackOutput(rawCT, "10.54.0.1")
+	if !strings.Contains(formattedCT, "10.54.0.1:1234 -> 10.54.0.2:80") {
+		t.Errorf("expected matching flow formatted in conntrack, got: %s", formattedCT)
+	}
+	if strings.Contains(formattedCT, "127.0.0.1") {
+		t.Errorf("expected 127.0.0.1 loopback lines to be omitted from matching output")
+	}
+
+	// Test JSON pretty formatter
+	rawJSON := `{"name":"test","count":42}`
+	formattedJSON := FormatJsonOutput(rawJSON)
+	if !strings.Contains(formattedJSON, "  \"name\": \"test\"") {
+		t.Errorf("expected 2-space indented pretty JSON, got: %s", formattedJSON)
 	}
 }
 
