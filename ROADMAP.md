@@ -132,11 +132,11 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - Daemon access via the Rancher cluster service proxy (`AGENTS.md` §7).
 - **First task: the SSE-through-proxy probe.** Write the layer 4 e2e that applies a new subnet and asserts the UI updates. Record the result in § Open questions. If SSE is buffered, ship polling with `If-None-Match` as the primary mode.
 - L3 view:
-  - Cytoscape.js with compound nodes (VPC) and elkjs layered layout.
+  - D3.js (SVG) with compound nodes (VPC) and elkjs layered layout.
   - Incremental updates; positions persisted per view per cluster in `localStorage` (try/catch).
 - Side panel from `/node/{id}`, with a raw-columns toggle.
 - Empty state when the daemon is missing; API-version mismatch banner.
-- Design system per `AGENTS.md` §7: Storybook components first, shell CSS variables only, Cytoscape styles re-resolved on theme change.
+- Design system per `AGENTS.md` §7: Storybook components first, shell CSS variables only, SVG styles natively inheriting theme variables.
 - Release wiring: extension chart (`gh-pages`) and ECI per `AGENTS.md` §8. Validate the `ui/` subdirectory question.
 
 **Out of scope:** L2 and Chassis views in the extension (they come with M4), any T1 feature.

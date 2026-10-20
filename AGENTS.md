@@ -181,7 +181,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 ### Design system
 
 - Use existing shell / `@rancher/components` components from the Storybook (buttons, banners, loading, tabs, sortable tables, badges, side panels) instead of custom ones. Check Storybook first; only build a custom component when nothing fits, and justify it in the PR.
-- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. This includes Cytoscape styles: resolve CSS variables at runtime and re-apply on theme change.
+- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. Pure SVG elements inherit shell CSS variables directly (`var(--body-bg)`, `var(--primary)`, `var(--border)`, etc.) with native theme awareness.
 - Follow Rancher patterns for empty states, errors, and loading.
 
 ### Behaviour
@@ -190,7 +190,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Call the daemon via the Rancher cluster service proxy:
   `/k8s/clusters/<clusterId>/api/v1/namespaces/<ns>/services/http:ovn-topologyd:8080/proxy/api/v1/...`
 - If the daemon is absent (404/503 on `/version`), show an empty state explaining how to install the `ovn-topology` chart on that cluster. No stack traces.
-- Rendering: **Cytoscape.js** with compound nodes + **elkjs** (layered). Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
+- Rendering: **D3.js (SVG) + elkjs (layered)** with compound nodes (VPC containers) and `d3-zoom` / `d3-drag`. Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
 - Side panel shows `/node/{id}` details; raw columns available behind a "raw" toggle.
 - Types come from generated `openapi` TS types only. No hand-written API types.
 - Bundle all assets (air-gap). No external fonts/CDNs.
@@ -219,7 +219,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Fixtures: OVSDB snapshots in `testdata/` (captured with `ovsdb-client backup` from a dev cluster), loaded into libovsdb's in-process test server (`github.com/ovn-kubernetes/libovsdb/server`) so tests exercise the real monitor path.
 - Golden-file tests for `/graph` responses per view (`-update` flag to regenerate).
 - Required fixture scenarios: default VPC only; custom VPC with distributed FIP; centralized gateway with HA chassis group; underlay/localnet; LS attached to multiple LRs; unbound port; chassis down.
-- UI: component tests for the graph adapter (API → Cytoscape elements); no snapshot tests of rendered canvas.
+- UI: component tests for the graph adapter (API → ELK / D3 SVG elements); no snapshot tests of rendered canvas.
 
 ## 10. Conventions
 

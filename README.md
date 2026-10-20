@@ -6,7 +6,7 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
 
 - **`ovn-topologyd`**: Go daemon that connects to OVN Northbound (NB) and Southbound (SB) databases over OVSDB, monitors updates, maintains a joined in-memory network graph, and serves it over HTTP JSON and SSE.
 - **`ovn-topo`**: Terminal UI (Bubble Tea) that renders an L3 topology tree and an interconnection matrix of router ports directly in your terminal.
-- **`ui/`**: Rancher UI Extension (Vue 3, `@rancher/shell`, Cytoscape.js) that embeds topology views into Rancher's cluster explorer.
+- **`ui/`**: Rancher UI Extension (Vue 3, `@rancher/shell`, D3.js + ELK) that embeds topology views into Rancher's cluster explorer.
 - **`charts/ovn-topology/`**: Helm chart deployed once per downstream cluster.
 
 ## Design and Security Rules
