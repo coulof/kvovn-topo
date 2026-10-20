@@ -18,11 +18,11 @@ Targets: Rancher-managed RKE2 and Rancher-managed Harvester clusters running Kub
 
 ### Hard rules (non-negotiable)
 
-1. **Read-only.** Nothing in this repo writes to OVSDB or to the Kubernetes API. No `Create`, `Update`, `Mutate`, `Delete`, or `Transact` with write ops on any libovsdb client. Enforced by `golangci-lint` (`forbidigo`) — do not disable or work around it.
+1. **Read-only.** Nothing in this repo writes to OVSDB or to the Kubernetes API. The only permitted write is the daemon's own history store (ADR-0002). No `Create`, `Update`, `Mutate`, `Delete`, or `Transact` with write ops on any libovsdb client. Enforced by `golangci-lint` (`forbidigo`) — do not disable or work around it.
 2. **OVSDB is the source of truth for topology.** Do **not** read Kube-OVN CRDs (Vpc, Subnet, IP, Ovn*, Iptables*, SecurityGroup…). Kubernetes identity comes from NB `external_ids`. Allowed Kubernetes reads (get/list/watch only) are exactly: `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, `NetworkAttachmentDefinition`. They are used to enrich graph nodes, never to create them.
 3. **Metrics are optional overlays only**, never a source of topology.
 4. **Air-gap friendly.** No runtime calls to the internet. No CDN assets in the UI. All images and charts must be mirrorable (Hauler).
-5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon must never depend on `pkg/diag` or `remotecommand` — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
+5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon and `pkg/mcp` must never depend on `pkg/diag` or `remotecommand`; MCP exposes T0 tools only — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
 
 ## 2. Repository layout
 
@@ -38,6 +38,8 @@ ovn-topology/
 │   ├── api/                 # generated Go types from openapi.yaml — do not edit
 │   ├── server/              # HTTP + SSE handlers
 │   ├── trace/               # T0 configuration-based path computation (M5)
+│   ├── history/             # T0 recorder, stores (memory/bbolt), reconstructor, summarizer (ADR-0002, M8)
+│   ├── mcp/                 # T0 MCP tools for `ovn-topo mcp` (M9) — never imports pkg/diag
 │   └── diag/                # T1 exec-based diagnostics — TUI only (ADR-0001, M6)
 ├── cmd/
 │   ├── ovn-topologyd/
@@ -181,7 +183,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 ### Design system
 
 - Use existing shell / `@rancher/components` components from the Storybook (buttons, banners, loading, tabs, sortable tables, badges, side panels) instead of custom ones. Check Storybook first; only build a custom component when nothing fits, and justify it in the PR.
-- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. Pure SVG elements inherit shell CSS variables directly (`var(--body-bg)`, `var(--primary)`, `var(--border)`, etc.) with native theme awareness.
+- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. This includes Cytoscape styles: resolve CSS variables at runtime and re-apply on theme change.
 - Follow Rancher patterns for empty states, errors, and loading.
 
 ### Behaviour
@@ -190,7 +192,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Call the daemon via the Rancher cluster service proxy:
   `/k8s/clusters/<clusterId>/api/v1/namespaces/<ns>/services/http:ovn-topologyd:8080/proxy/api/v1/...`
 - If the daemon is absent (404/503 on `/version`), show an empty state explaining how to install the `ovn-topology` chart on that cluster. No stack traces.
-- Rendering: **D3.js (SVG) + elkjs (layered)** with compound nodes (VPC containers) and `d3-zoom` / `d3-drag`. Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
+- Rendering: **Cytoscape.js** with compound nodes + **elkjs** (layered). Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
 - Side panel shows `/node/{id}` details; raw columns available behind a "raw" toggle.
 - Types come from generated `openapi` TS types only. No hand-written API types.
 - Bundle all assets (air-gap). No external fonts/CDNs.
@@ -219,7 +221,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Fixtures: OVSDB snapshots in `testdata/` (captured with `ovsdb-client backup` from a dev cluster), loaded into libovsdb's in-process test server (`github.com/ovn-kubernetes/libovsdb/server`) so tests exercise the real monitor path.
 - Golden-file tests for `/graph` responses per view (`-update` flag to regenerate).
 - Required fixture scenarios: default VPC only; custom VPC with distributed FIP; centralized gateway with HA chassis group; underlay/localnet; LS attached to multiple LRs; unbound port; chassis down.
-- UI: component tests for the graph adapter (API → ELK / D3 SVG elements); no snapshot tests of rendered canvas.
+- UI: component tests for the graph adapter (API → Cytoscape elements); no snapshot tests of rendered canvas.
 
 ## 10. Conventions
 
