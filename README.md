@@ -65,6 +65,7 @@ mise run pf-stop
 ## TUI Controls (`ovn-topo`)
 
 - **`Tab`**: Switch between **Topology Tree View** and **Port Interconnection Matrix**.
+- **`x`**: Open **Tier 1 Diagnostics** menu (when started with `--diag`).
 - **`t`**: Cycle color themes live (**SUSE**, **Dracula**, **Nord**, **Tokyo Night**, **Catppuccin Mocha**, **Default**).
 - **`j` / `k`** or **`↓` / `↑`**: Move selection line-by-line across routers, switches, and ports.
 - **`r`**: Refresh topology from the daemon.
@@ -78,6 +79,26 @@ Launch with a preferred theme:
 ./bin/ovn-topo --theme=tokyonight
 ./bin/ovn-topo --theme=catppuccin
 ```
+
+### Tier 1 Diagnostics Mode (ADR-0001)
+
+Launch `ovn-topo` with `--diag` to enable read-only execution diagnostics in cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`):
+
+```bash
+# Launch with diagnostics enabled
+./bin/ovn-topo --diag --kubeconfig=~/.kube/config
+
+# Or using mise
+mise run tui-diag
+```
+
+Available diagnostic actions from the TUI (`x` key):
+1. **`ovn-trace`**: point-and-click microflow packet trace against `ovn-central` to inspect routing, ACLs, and NAT stage-by-stage.
+2. **Conntrack dump**: dump connection tracking entries on the active chassis node.
+3. **OVS interfaces**: inspect physical interfaces and port bindings via `ovs-vsctl`.
+4. **Controller logs**: tail `ovn-controller` logs on the target node.
+
+If RBAC denies `pods/exec`, the TUI displays a `DIAG DEGRADED` badge and falls back to passive mode without crashing.
 
 ## Rancher and Harvester UI Extension
 
