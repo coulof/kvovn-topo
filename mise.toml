@@ -183,4 +183,19 @@ run = "cd ui && yarn serve-pkgs"
 description = "Launch Rancher UI extension dev server against Rancher Manager"
 run = "cd ui && NODE_TLS_REJECT_UNAUTHORIZED=0 API=\"$RANCHER_API\" yarn dev"
 
+[tasks.deploy-cluster]
+description = "Deploy or upgrade ovn-topology daemon Helm chart in cluster with latest tag and Always pull"
+run = """
+helm upgrade --install ovn-topology ./charts/ovn-topology \
+  --kubeconfig "$KUBECONFIG" \
+  --namespace kube-system \
+  --set image.tag="latest" \
+  --set image.pullPolicy="Always"
+"""
+
+[tasks.undeploy-cluster]
+description = "Uninstall ovn-topology daemon Helm chart from cluster"
+run = "helm uninstall ovn-topology --kubeconfig \"$KUBECONFIG\" --namespace kube-system --ignore-not-found"
+
+
 

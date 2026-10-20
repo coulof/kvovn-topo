@@ -1,5 +1,7 @@
+product:
+  ovn-topology: "OVN Topology"
 ovnTopology:
-  title: "Network Topology"
+  title: "OVN Topology"
   nav:
     topology: "Topology"
   status:
