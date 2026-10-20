@@ -69,6 +69,45 @@ mise run pf-stop
 - **`r`**: Refresh topology from the daemon.
 - **`q`**: Quit.
 
+## Rancher and Harvester UI Extension
+
+The extension integrates into two places:
+- **Cluster Explorer**: Navigate to your cluster ➡️ in the left navigation sidebar, select **OVN Topology** ➡️ **Topology** (`/c/:cluster/ovn-topology/topology`).
+- **Harvester Virtualization Management**: Navigate to your Harvester cluster ➡️ in the left sidebar under **Networks**, select **OVN Topology** (`/c/:cluster/harvester/ovn-topology`).
+
+To test the extension with a running Rancher Manager:
+
+```bash
+# Serve the built package locally for Developer Load (port 4500)
+mise run ui-serve
+
+# Or run the development server with live reload
+mise run ui-dev
+```
+
+## Release Artifacts
+
+Every version tag (`vX.Y.Z`) publishes:
+
+| Artifact | Registry Path | Description |
+|---|---|---|
+| **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:vX.Y.Z` | Multi-arch (`linux/amd64`, `linux/arm64`) distroless daemon |
+| **Daemon Chart** | `oci://ghcr.io/coulof/charts/ovn-topology:X.Y.Z` | OCI Helm chart for downstream clusters |
+| **Extension Catalog Image (ECI)** | `ghcr.io/coulof/ovn-topology-ui:vX.Y.Z` | Rancher Extension Catalog container |
+| **Binaries** | GitHub Releases | Static `ovn-topologyd` and `ovn-topo` archives for Linux/macOS |
+
+### Air-Gapped Environments (Hauler)
+
+Each release includes a `hauler.yaml` manifest bundling the daemon image, Helm chart, and Extension Catalog Image:
+
+```bash
+# Sync release artifacts into a local Hauler store
+hauler store sync -f hauler.yaml
+
+# Copy artifacts to an internal air-gapped registry
+hauler store copy registry://registry.internal.example.com
+```
+
 ## Development
 
 Prerequisites: Go 1.24+, `golangci-lint`, `make`.

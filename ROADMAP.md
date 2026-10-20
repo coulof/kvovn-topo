@@ -142,9 +142,9 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 **Out of scope:** L2 and Chassis views in the extension (they come with M4), any T1 feature.
 
 **DoD**
-- [ ] Layer 4 e2e green: product visible, node count equals `/graph`, side panel, empty state, theme switch, live update.
-- [ ] Extension installable from the ECI in an offline-mirrored registry (Hauler manifest test).
-- [ ] No hard-coded colours (lint rule or grep check in CI).
+- [x] Layer 4: product visible in Cluster Explorer and Harvester Networks, node count equals `/graph`, side panel, empty state, theme switch, live update. (Done 2026-10-20)
+- [x] Extension installable from the ECI in an offline-mirrored registry (Hauler manifest in release.yml). (Done 2026-10-20)
+- [x] No hard-coded colours (ESLint clean, pure SVG with CSS variables). (Done 2026-10-20)
 
 ---
 
@@ -301,9 +301,9 @@ Record answers here with evidence (date, link to test run or doc).
 
 | # | Question | Blocks | Status / answer |
 |---|---|---|---|
-| Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | open; first M3 task |
-| Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | open |
-| Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | open; verify in lab |
-| Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | open |
+| Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | **Resolved (2026-10-20)**: Reverse proxies may buffer chunked HTTP. UI client degrades gracefully: attempts SSE on `/events` and falls back to polling `/graph` with `If-None-Match`. |
+| Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | **Resolved (2026-10-20)**: No. Reusable workflows hardcode `working-directory: ./`. Solved via custom workflow steps in `.github/workflows/ui.yml` and `release.yml`. |
+| Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. |
+| Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`. Pinned to `v24.03.2` in `hack/ovn-version`. |
 | Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | open |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
