@@ -13,7 +13,8 @@
           }
         ],
         "hostname": "node-1",
-        "nodeName": "node-1"
+        "nodeName": "node-1",
+        "uuid": "chassis-node-1-uuid"
       },
       "type": "Chassis"
     },
@@ -29,7 +30,8 @@
           }
         ],
         "hostname": "node-2",
-        "nodeName": "node-2"
+        "nodeName": "node-2",
+        "uuid": "chassis-node-2-uuid"
       },
       "type": "Chassis"
     },
@@ -45,7 +47,8 @@
           }
         ],
         "hostname": "node-3",
-        "nodeName": "node-3"
+        "nodeName": "node-3",
+        "uuid": "chassis-node-3-uuid"
       },
       "type": "Chassis"
     }

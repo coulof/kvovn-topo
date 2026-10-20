@@ -529,6 +529,7 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 			"nodeName":     nodeName,
 			"bindingCount": bindingCount,
 			"encaps":       encapList,
+			"uuid":         ch.UUID,
 		}
 
 		nodes = append(nodes, api.GraphNode{
