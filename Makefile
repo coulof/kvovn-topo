@@ -19,8 +19,8 @@ lint:
 	golangci-lint run ./...
 	@echo "==> Running ADR-0001 dependency check..."
 	./hack/check-deps.sh
-	@if [ -d "ui" ] && [ -f "ui/package.json" ]; then \
-		echo "==> Running eslint..."; \
+	@if [ -d "ui/node_modules" ] && grep -q '"lint"' ui/package.json; then \
+		echo "==> Running eslint in ui..."; \
 		(cd ui && yarn lint); \
 	fi
 
