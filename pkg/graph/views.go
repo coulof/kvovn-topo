@@ -81,7 +81,7 @@ func (s *Snapshot) BuildL3View(focus string, depth int) *api.GraphResponse {
 			}
 			activeChassis := ""
 			if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-				activeChassis = *crPB.Chassis
+				activeChassis = s.resolveChassisName(*crPB.Chassis)
 			}
 
 			if len(lrp.GatewayChassis) > 0 || lrp.HaChassisGroup != nil {
@@ -238,7 +238,9 @@ func (s *Snapshot) BuildL3View(focus string, depth int) *api.GraphResponse {
 				}
 
 				if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-					props["activeGateway"] = *crPB.Chassis
+					resolvedGW := s.resolveChassisName(*crPB.Chassis)
+					props["activeGateway"] = resolvedGW
+					props["isGateway"] = true
 				}
 
 				edges[edgeID] = api.GraphEdge{
@@ -678,11 +680,12 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 
 		if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
 			chassisID := PrefixChassis + *crPB.Chassis
+			gwName := s.resolveChassisName(*crPB.Chassis)
 			related = append(related, api.RelatedObject{
 				Id:           chassisID,
 				Type:         "Chassis",
 				Relationship: "active-gateway",
-				Name:         crPB.Chassis,
+				Name:         &gwName,
 			})
 		}
 
@@ -772,8 +775,10 @@ func (s *Snapshot) GetChassisList() *api.ChassisList {
 					continue
 				}
 				isActive := false
-				if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil && *crPB.Chassis == ch.Name {
-					isActive = true
+				if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
+					if *crPB.Chassis == ch.Name || *crPB.Chassis == ch.UUID {
+						isActive = true
+					}
 				}
 				routerName := ""
 				for lrUUID, ports := range s.LRPsByRouter {
@@ -830,6 +835,29 @@ func (s *Snapshot) GetChassisList() *api.ChassisList {
 	return &api.ChassisList{
 		Items: items,
 	}
+}
+
+func (s *Snapshot) resolveChassisName(chassisID string) string {
+	if chassisID == "" {
+		return ""
+	}
+	name := chassisID
+	if ch, ok := s.Chassis[chassisID]; ok {
+		name = ch.Hostname
+	} else {
+		for _, ch := range s.Chassis {
+			if ch.UUID == chassisID {
+				name = ch.Hostname
+				break
+			}
+		}
+	}
+	if s.NodeMapper != nil {
+		if node := s.NodeMapper.NodeForChassis(name, chassisID); node != "" {
+			return node
+		}
+	}
+	return name
 }
 
 func toMap(v interface{}) map[string]interface{} {
