@@ -13,6 +13,7 @@ import (
 // FullDatabaseModel returns the DatabaseModel object to be used in libovsdb
 func FullDatabaseModel() (model.ClientDBModel, error) {
 	return model.NewClientDBModel("OVN_Southbound", map[string]model.Model{
+		"BFD":              &BFD{},
 		"Chassis":          &Chassis{},
 		"Datapath_Binding": &DatapathBinding{},
 		"Encap":            &Encap{},
@@ -25,6 +26,89 @@ var schema = `{
   "name": "OVN_Southbound",
   "version": "20.33.0",
   "tables": {
+    "BFD": {
+      "columns": {
+        "chassis_name": {
+          "type": "string"
+        },
+        "detect_mult": {
+          "type": "integer"
+        },
+        "disc": {
+          "type": "integer"
+        },
+        "dst_ip": {
+          "type": "string"
+        },
+        "external_ids": {
+          "type": {
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "min": 0,
+            "max": "unlimited"
+          }
+        },
+        "logical_port": {
+          "type": "string"
+        },
+        "min_rx": {
+          "type": "integer"
+        },
+        "min_tx": {
+          "type": "integer"
+        },
+        "options": {
+          "type": {
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "min": 0,
+            "max": "unlimited"
+          }
+        },
+        "src_port": {
+          "type": {
+            "key": {
+              "type": "integer",
+              "minInteger": 49152,
+              "maxInteger": 65535
+            }
+          }
+        },
+        "status": {
+          "type": {
+            "key": {
+              "type": "string",
+              "enum": [
+                "set",
+                [
+                  "down",
+                  "init",
+                  "up",
+                  "admin_down"
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "indexes": [
+        [
+          "logical_port",
+          "dst_ip",
+          "src_port",
+          "disc"
+        ]
+      ],
+      "isRoot": true
+    },
     "Chassis": {
       "columns": {
         "encaps": {

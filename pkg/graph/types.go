@@ -53,8 +53,9 @@ type Snapshot struct {
 	// Southbound entities indexed by UUID / name
 	Chassis         map[string]*sbmodel.Chassis
 	Encaps          map[string]*sbmodel.Encap
-	PortBindings    map[string]*sbmodel.PortBinding     // Keyed by UUID
+	PortBindings     map[string]*sbmodel.PortBinding     // Keyed by UUID
 	DatapathBindings map[string]*sbmodel.DatapathBinding // Keyed by UUID
+	BFDs             map[string]*sbmodel.BFD             // Keyed by UUID
 
 	// Secondary indices for O(1) joins
 	LRPByName            map[string]*nbmodel.LogicalRouterPort
@@ -91,6 +92,7 @@ func NewEmptySnapshot(revision int64, mapper NodeMapper) *Snapshot {
 		Encaps:               make(map[string]*sbmodel.Encap),
 		PortBindings:         make(map[string]*sbmodel.PortBinding),
 		DatapathBindings:     make(map[string]*sbmodel.DatapathBinding),
+		BFDs:                 make(map[string]*sbmodel.BFD),
 		LRPByName:            make(map[string]*nbmodel.LogicalRouterPort),
 		LSPByName:            make(map[string]*nbmodel.LogicalSwitchPort),
 		PortBindingByPort:    make(map[string]*sbmodel.PortBinding),
@@ -150,6 +152,9 @@ func (s *Snapshot) Clone(newRevision int64) *Snapshot {
 	}
 	for k, v := range s.DatapathBindings {
 		next.DatapathBindings[k] = v
+	}
+	for k, v := range s.BFDs {
+		next.BFDs[k] = v
 	}
 
 	return next

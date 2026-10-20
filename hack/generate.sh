@@ -46,7 +46,7 @@ with open(sys.argv[3]) as f:
     sb = json.load(f)
 
 used_sb = {
-    "Chassis", "Encap", "Port_Binding", "Datapath_Binding", "SB_Global"
+    "Chassis", "Encap", "Port_Binding", "Datapath_Binding", "BFD", "SB_Global"
 }
 sb["tables"] = {k: v for k, v in sb["tables"].items() if k in used_sb}
 

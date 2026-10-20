@@ -9,6 +9,7 @@ linters:
     - unused
     - ineffassign
     - forbidigo
+    - depguard
   settings:
     forbidigo:
       forbid:
@@ -22,6 +23,19 @@ linters:
           msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
         - pattern: '.*\.Transact'
           msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+    depguard:
+      rules:
+        daemon-no-diag:
+          files:
+            - "**/cmd/ovn-topologyd/**"
+            - "**/pkg/graph/**"
+            - "**/pkg/server/**"
+            - "**/pkg/ovsdb/**"
+          deny:
+            - pkg: "github.com/coulof/ovn-topology/pkg/diag"
+              desc: "ADR-0001: pkg/diag is strictly restricted to cmd/ovn-topo and must not be imported by the daemon"
+            - pkg: "k8s.io/client-go/tools/remotecommand"
+              desc: "ADR-0001: remotecommand is strictly restricted to cmd/ovn-topo and must not be imported by the daemon"
   exclusions:
     paths:
       - ui

@@ -2,6 +2,10 @@
 
 Instructions for coding agents working in this repository. Read fully before making changes.
 
+Companion documents, to read before starting work:
+- `ROADMAP.md` — milestones, scope, Definition of Done, testing strategy, open questions. Work only on the current milestone.
+- `docs/adr/` — architecture decisions. ADR-0001 (privilege tiers) governs what code may live where.
+
 ## 1. What this project is
 
 A **read-only network topology visualizer for OVN as deployed by Kube-OVN**, made of:
@@ -15,9 +19,10 @@ Targets: Rancher-managed RKE2 and Rancher-managed Harvester clusters running Kub
 ### Hard rules (non-negotiable)
 
 1. **Read-only.** Nothing in this repo writes to OVSDB or to the Kubernetes API. No `Create`, `Update`, `Mutate`, `Delete`, or `Transact` with write ops on any libovsdb client. Enforced by `golangci-lint` (`forbidigo`) — do not disable or work around it.
-2. **OVSDB is the source of truth.** Do **not** read Kube-OVN CRDs (Vpc, Subnet, IP, Ovn*, Iptables*, SecurityGroup…). Kubernetes identity comes from NB `external_ids`. The only Kubernetes read allowed is `Node` (to map chassis ↔ node).
+2. **OVSDB is the source of truth for topology.** Do **not** read Kube-OVN CRDs (Vpc, Subnet, IP, Ovn*, Iptables*, SecurityGroup…). Kubernetes identity comes from NB `external_ids`. Allowed Kubernetes reads (get/list/watch only) are exactly: `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, `NetworkAttachmentDefinition`. They are used to enrich graph nodes, never to create them.
 3. **Metrics are optional overlays only**, never a source of topology.
 4. **Air-gap friendly.** No runtime calls to the internet. No CDN assets in the UI. All images and charts must be mirrorable (Hauler).
+5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon must never depend on `pkg/diag` or `remotecommand` — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
 
 ## 2. Repository layout
 
@@ -32,7 +37,8 @@ ovn-topology/
 │   ├── graph/               # node/edge model, NB↔SB joins, views, aggregation
 │   ├── api/                 # generated Go types from openapi.yaml — do not edit
 │   ├── server/              # HTTP + SSE handlers
-│   └── trace/               # phase 2: logical path computation
+│   ├── trace/               # T0 configuration-based path computation (M5)
+│   └── diag/                # T1 exec-based diagnostics — TUI only (ADR-0001, M6)
 ├── cmd/
 │   ├── ovn-topologyd/
 │   └── ovn-topo/
@@ -41,8 +47,11 @@ ovn-topology/
 │   ├── package.json         # dev app name: ovn-topology-ui (MUST differ from the pkg name)
 │   └── pkg/ovn-topology/    # the extension package itself
 ├── testdata/                # OVSDB snapshots used as fixtures
-├── hack/                    # codegen scripts, dev cluster setup
-└── .github/workflows/       # path-filtered: go.yml, ui.yml, release.yml
+├── test/                    # e2e (Go, tag e2e), ovn/ (raw OVSDB), ui/ (Playwright) — see ROADMAP testing strategy
+├── hack/                    # codegen, check-deps.sh, capture-fixtures.sh, kind/, harvester/
+├── docs/adr/                # architecture decision records
+├── ROADMAP.md
+└── .github/workflows/       # path-filtered: go.yml, ui.yml, e2e-pr.yml, e2e-nightly.yml, release.yml
 ```
 
 Generated code lives in dedicated directories and is regenerated with `make generate`. Never hand-edit it.
@@ -106,10 +115,10 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 ## 5. Data model
 
 ### NB tables used
-`Logical_Router`, `Logical_Router_Port`, `Logical_Router_Static_Route`, `Logical_Router_Policy`, `NAT`, `Gateway_Chassis`, `HA_Chassis_Group`, `HA_Chassis`, `Logical_Switch`, `Logical_Switch_Port`, `Load_Balancer`. Phase 2: `ACL`, `Port_Group`, `Address_Set`.
+`Logical_Router`, `Logical_Router_Port`, `Logical_Router_Static_Route`, `Logical_Router_Policy`, `NAT`, `Gateway_Chassis`, `HA_Chassis_Group`, `HA_Chassis`, `Logical_Switch`, `Logical_Switch_Port`, `Load_Balancer`, `ACL`, `Port_Group`, `Address_Set` (the last three are consumed from M4).
 
 ### SB tables used
-`Chassis`, `Encap`, `Port_Binding`, `Datapath_Binding`.
+`Chassis`, `Encap`, `Port_Binding`, `Datapath_Binding`, `BFD` (M4).
 
 ### Joins
 - LSP(type=`router`).`options:router-port` → LRP name → **`router-peer`** edge.
@@ -121,6 +130,9 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 
 ### Node types
 `LR, LS, LRP, LSP, Chassis, NAT, Route, Policy, LB, HAChassisGroup, External`
+From M2/M4: `Workload` (Pod / VM, with owner), `Node`, `Service`, `ACL`, `PortGroup`, `AddressSet`.
+
+Additional edge types introduced by later milestones (`attached-to` LSP→Workload, `runs-on` Chassis→Node, `member-of` LSP→PortGroup, `applies-to` ACL→PortGroup/LS, `references` ACL→AddressSet, `backend` LB→LSP, `exposes` Service→LB, `resolves-to` IP→owner) are specified in `ROADMAP.md` per milestone. Add them to `api/openapi.yaml` and to this table in the same PR.
 
 ### Edge types
 | Type | From → To | Source |
@@ -142,7 +154,7 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 1. **L3 (default)**: LR and LS nodes; VPC = compound node around an LR and its attached LSs; edges = `router-peer` labelled with LRP networks; NAT/route/policy/LB as counts on LR; localnet to External; gateway LRPs show chassis + priority, active one highlighted.
 2. **L2** (focus on an LS): LSPs grouped by namespace or by chassis; type, MAC/IP, binding badge (bound on X / **unbound**).
 3. **Chassis**: chassis with encap IP/type, binding counts, gateway roles and HA group priorities.
-4. **Path trace** (phase 2, `pkg/trace`): src LSP → dst LSP/IP, computed from NB routes/policies/NAT; later optionally `ovn-trace` against SB (read-only).
+4. **Path** (M5, `pkg/trace`, T0): src LSP → dst LSP/IP/VIP, computed from NB configuration and always labelled "approximate". Real `ovn-trace` packet traces are T1 and TUI-only (M6, `pkg/diag`).
 
 ## 7. UI extension (`ui/`)
 
@@ -216,11 +228,6 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 - Commits: Conventional Commits. Keep Go and UI changes for the same feature in one PR when they share an API change.
 - Don't add dependencies without a reason stated in the PR description.
 
-## 11. Delivery phases
+## 11. Delivery
 
-1. Daemon: NB+SB monitors, graph model, `/graph?view=l3`, `/node`, `/version`, chart. TUI L3 view.
-2. Extension: L3 view + side panel + daemon-missing state.
-3. Chassis view, L2 view, SSE live updates.
-4. Path trace; ACL/Port_Group views; optional Prometheus overlay (chassis up, OVS interface rx/tx on LSP edges).
-
-Do not start a phase before the previous one passes `make lint test` and has fixtures for its views.
+Milestones, scope and Definition of Done live in `ROADMAP.md`. Do not start a milestone before the previous one meets its DoD. Do not implement backlog items without an explicit task. Record answers to open questions in `ROADMAP.md` with evidence.

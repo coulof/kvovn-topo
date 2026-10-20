@@ -255,6 +255,7 @@ func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
 		draft.Encaps = make(map[string]*sbmodel.Encap)
 		draft.PortBindings = make(map[string]*sbmodel.PortBinding)
 		draft.DatapathBindings = make(map[string]*sbmodel.DatapathBinding)
+		draft.BFDs = make(map[string]*sbmodel.BFD)
 
 		// Populate from NB cache
 		var lrs []nbmodel.LogicalRouter
@@ -347,6 +348,12 @@ func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
 		if err := s.sbClient.List(ctx, &dps); err == nil {
 			for i := range dps {
 				draft.DatapathBindings[dps[i].UUID] = &dps[i]
+			}
+		}
+		var bfds []sbmodel.BFD
+		if err := s.sbClient.List(ctx, &bfds); err == nil {
+			for i := range bfds {
+				draft.BFDs[bfds[i].UUID] = &bfds[i]
 			}
 		}
 
