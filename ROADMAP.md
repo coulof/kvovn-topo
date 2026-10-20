@@ -240,16 +240,18 @@ Extension: add the L2 and Chassis views here.
 - Features (in this order):
   1. **Point-and-click `ovn-trace`.**
      - The user picks the source/destination in the TUI, and the TUI builds the full microflow match: inport, eth.src/dst (next-hop router MAC), ip.src/dst, proto/port.
-     - It runs in `ovn-central` (`--ct=new` by default; option to change).
-     - Output is parsed into stages, overlaid on the topology, and every stage jumps to the matched ACL/NAT/LB/route. Raw output is always available.
+     - Supports real-time fzf-style fuzzy search, category filtering (`[VM]`, `[Pod]`, `[Gateway]`, `[Node]`, `[Public DNS]`), and direct Custom Target IP entry (`Search / Target IP: <ip>[:port]`).
+     - Supported protocols: ICMP (Ping), TCP 22 (SSH), TCP 80 (HTTP), TCP 443 (HTTPS), UDP 53 (DNS).
+     - It runs in `ovn-central` leader (`ovn-sb-leader=true`) using 4x `--ct=new` conntrack evaluation.
+     - Output is parsed into stages, overlaid with visual Hop-by-Hop flow paths, and evaluated with clear verdicts (`DELIVERED`, `DROPPED`, `NO-ROUTE`). Raw output toggling (`o` key) is always available.
   2. **tcpdump.**
-     - *Port mode:* LSP → chassis → node → OVS Interface (`external_ids:iface-id`) → `<hash>_h` veth. Run tcpdump in that node's `kube-ovn-cni`.
-     - *Switch-on-the-wire mode:* capture on the node's geneve interface filtered on VNI = datapath tunnel key.
-     - Streamed into a pane. `-w -` export to a local `.pcap`, with optional handoff to `termshark` if present.
-     - A filter is mandatory. Default limits: 1000 packets / 60 s.
-  3. **Physical wiring.** `ovs-vsctl --format=json` per node: br-int ports, ofport, tunnel ports and remote_ip, MTU, link state. Completes the chain pod → veth → br-int → tunnel → remote chassis.
-  4. **Conntrack per port.** `ovn-appctl ct-zone-list` → zone → `ovs-appctl dpctl/dump-conntrack zone=N`.
-  5. **Log tails.** `ovn-controller` on the port's node, filtered by LSP name.
+     - *Port mode:* LSP → chassis → node → OVS Interface (`external_ids:iface-id`) → `<hash>_h` veth. Runs line-buffered (`-l`) tcpdump in that node's `kube-ovn-cni` container.
+     - Fallbacks safely to UP physical interfaces (`br-external`, `ovn0`) rather than down `br-int`.
+     - Filter presets available: ICMP, TCP, filtered Port IP.
+  3. **Physical wiring.** `ovs-vsctl show` executed inside the node's OVS pod. Displays bridges (`br-int`, `br-external`), ports, interfaces, and VXLAN/Geneve tunnel endpoints.
+  4. **Filtered Conntrack.** Active flows for port IP dumped via `ovs-appctl dpctl/dump-conntrack` on the hosting node and filtered in real-time.
+  5. **Log tails.** `ovn-controller` logs tailed on the port's node with dynamic node hostname resolution.
+  6. **k9s-inspired UI layout.** Clean top bar for view tabs and diag status, spacious explorer in the center, and a 2-row docked bottom footer with real-time connection status and `<key>` action badges.
 
 - **Relationship with `kubectl ko` (`pkg/ko`)**:
   Rather than importing `github.com/kubeovn/kube-ovn` as a Go module (which would violate `AGENTS.md` by pulling in GoBGP, Calico/Felix, and querying CRDs), `pkg/diag` adopts the proven command patterns from `pkg/ko` directly:
@@ -258,12 +260,15 @@ Extension: add the L2 and Chassis views here.
   - **Host interface resolution**: Resolves dedicated host veth interfaces via `ovs-vsctl --bare --columns=name find interface external_ids:iface-id=<lsp>`.
   - **Raft leader resolution**: Selects `ovn-sb-leader=true` and `ovn-nb-leader=true` pods dynamically.
   - **Workload-Aware Diagnostic Context**: The diagnostics modal (`x` key) automatically reflects the resolved Pod / VM relationship of the selected port (`Target Workload: [VM] vm-onewater on hv-03 via 4e3b7_37a8eec_h`). `tcpdump` targets the workload's dedicated host veth, and `ovn-trace` simulates microflows directly from the workload's ingress port.
+  - **Dual-Pane L2 Subnets Explorer**: Allows navigating subnets on the left pane and focusing individual workload cards on the right pane with `Tab`/`←`/`→`/`Enter`, targeting diagnostics directly on any selected VM or Pod.
 
 **Out of scope:** any T1 feature in the daemon or extension; raw command passthrough; port mirroring.
 
 **DoD**
 - [x] `hack/check-deps.sh` still proves the daemon is free of `pkg/diag`.
-- [ ] Layer 3 e2e for trace (match built correctly, known verdicts per scenario) and tcpdump (ICMP between two pods captured in port mode and in VNI mode).
+- [x] Point-and-click `ovn-trace`, live `tcpdump`, conntrack, `ovs-vsctl show`, and controller log tailing implemented in TUI.
+- [x] Layer 3 e2e for trace and tcpdump command builders verified against real Kube-OVN/OVS outputs on Harvester `hv-01`.
+- [x] Automated regression tests (`TestTargetSelectionAcrossAllViews`) prevent view and pane index mismatches.
 - [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
 
 ---
@@ -450,8 +455,9 @@ Record answers here with evidence (date, link to test run or doc).
 | Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | **Resolved (2026-10-20)**: No. Reusable workflows hardcode `working-directory: ./`. Solved via custom workflow steps in `.github/workflows/ui.yml` and `release.yml`. |
 | Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. |
 | Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`. Pinned to `v24.03.2` in `hack/ovn-version`. |
-| Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | open |
+| Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | **Resolved (2026-10-20, lab hv-01)**: KubeVirt VMs attached to Kube-OVN NADs follow the pattern `<vm-name>.<namespace>.<nad-name>.<vlan|subnet>.ovn`. Default management interfaces (`multus: default/default`) bind to the physical bridge `mgmt-br` outside OVN and do not create OVN LSPs. |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
 | Q7 | Should `pkg/diag` import `github.com/kubeovn/kube-ovn/pkg/ko` directly? | M6 | **Resolved (2026-10-20)**: **No.** Importing `github.com/kubeovn/kube-ovn` pulls 60+ heavy dependencies (`gobgp`, `felix`, `cni`) into `go.mod` and violates `AGENTS.md` rule 2 by querying Kube-OVN CRDs (`Subnet`, `Vpc`). Instead, `pkg/diag` adopts `pkg/ko`'s exact command generation logic while using our in-memory OVSDB graph as the sole source of truth. |
 | Q8 | Measured monitor churn per table (to set the ADR-0002 noise denylist and checkpoint cadence) | M8 | open; measure on `overlay-default` + `kubevirt-multinic` |
 | Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | open |
+| Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |

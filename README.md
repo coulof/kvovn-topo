@@ -64,12 +64,19 @@ mise run pf-stop
 
 ## TUI Controls (`ovn-topo`)
 
-- **`Tab`**: Switch between **Topology Tree View** and **Port Interconnection Matrix**.
-- **`x`**: Open **Tier 1 Diagnostics** menu (when started with `--diag`).
+- **`1` - `4`**: Switch operational views (**`1. L3 Tree`**, **`2. L2 Subnets`**, **`3. Chassis`**, **`4. Port Matrix`**).
+- **`Space` / `Enter`**: Expand/collapse workload Pods and VMs on logical switches (in L3 Tree) or toggle pane focus (in L2 Subnets).
+- **`Tab` / `←` / `→`**: Switch between Subnets list and individual Workload cards (in L2 Subnets view).
+- **`x`**: Open **Tier 1 Diagnostics** modal (interactive `ovn-trace` with fzf search & custom IP, live `tcpdump`, conntrack, `ovs-vsctl show`, controller logs).
 - **`t`**: Cycle color themes live (**SUSE**, **Dracula**, **Nord**, **Tokyo Night**, **Catppuccin Mocha**, **Default**).
-- **`j` / `k`** or **`↓` / `↑`**: Move selection line-by-line across routers, switches, and ports.
+- **`j` / `k`** or **`↓` / `↑`**: Move selection across routers, subnets, and workloads.
 - **`r`**: Refresh topology from the daemon.
 - **`q`**: Quit.
+
+Launch with Tier 1 diagnostics enabled:
+```bash
+mise run tui-diag
+```
 
 Launch with a preferred theme:
 ```bash

@@ -347,3 +347,107 @@ func TestMachineOutput(t *testing.T) {
 		t.Errorf("expected machine output yaml to succeed, got: %v", err)
 	}
 }
+
+func TestTargetSelectionAcrossAllViews(t *testing.T) {
+	snap := graph.LoadTestSnapshot(nil)
+	l3Resp, _ := snap.BuildGraph("l3", "", 1, 1, 100)
+	l2Resp, _ := snap.BuildGraph("l2", "ls:ls-default-uuid", 1, 1, 100)
+	chassisResp, _ := snap.BuildGraph("chassis", "", 1, 1, 100)
+
+	m := model{
+		mode:             viewTree,
+		nodeMap:          make(map[string]api.GraphNode),
+		routerPorts:      make(map[string][]RouterPortConnection),
+		switchPorts:      make(map[string][]RouterPortConnection),
+		expandedSwitches: make(map[string]bool),
+		switchWorkloads:  make(map[string][]api.GraphNode),
+	}
+	m.applyGraph(l3Resp)
+	m.l2Resp = l2Resp
+	for _, n := range l2Resp.Nodes {
+		if n.Type == api.GraphNodeTypeLSP {
+			m.l2Nodes = append(m.l2Nodes, n)
+		}
+	}
+	m.switchWorkloads["ls:ls-default-uuid"] = m.l2Nodes
+	m.focusedLS = "ls:ls-default-uuid"
+	m.focusedLSName = "default-subnet"
+	m.chassisResp = chassisResp
+	m.chassisNodes = chassisResp.Nodes
+
+	// 1. Test L3 Tree View target selection
+	m.mode = viewTree
+	m.selectedIdx = 0
+	node, conn := m.currentSelectedTarget()
+	if node == nil && conn == nil {
+		t.Fatalf("expected non-nil target in tree view")
+	}
+
+	// 2. Test L2 Subnets View - Subnets Pane (l2PaneActive = 0)
+	// Crucial check: verify that selecting a subnet returns THAT subnet, not a mismatched index into nodeList!
+	m.mode = viewL2
+	m.l2PaneActive = 0
+	switches := m.switchList()
+	if len(switches) == 0 {
+		t.Fatalf("expected non-empty switches in L2 view")
+	}
+	for i, sw := range switches {
+		m.selectedIdx = i
+		m.focusedLS = sw.Id
+		m.focusedLSName = sw.Name
+		targetNode, _ := m.currentSelectedTarget()
+		if targetNode == nil {
+			t.Fatalf("expected non-nil target for switch index %d", i)
+		}
+		if targetNode.Id != sw.Id {
+			t.Errorf("L2 subnets pane index mismatch! expected switch ID %s, got %s (node name: %s)",
+				sw.Id, targetNode.Id, targetNode.Name)
+		}
+	}
+
+	// 3. Test L2 Subnets View - Workloads Pane (l2PaneActive = 1)
+	m.mode = viewL2
+	m.l2PaneActive = 1
+	if len(m.l2Nodes) == 0 {
+		t.Fatalf("expected non-empty l2Nodes in L2 view")
+	}
+	for i, wl := range m.l2Nodes {
+		m.l2PortIdx = i
+		targetNode, _ := m.currentSelectedTarget()
+		if targetNode == nil {
+			t.Fatalf("expected non-nil target for workload index %d", i)
+		}
+		if targetNode.Id != wl.Id {
+			t.Errorf("L2 workloads pane index mismatch! expected workload ID %s, got %s", wl.Id, targetNode.Id)
+		}
+	}
+
+	// 4. Test Chassis View target selection
+	m.mode = viewChassis
+	for i, ch := range m.chassisNodes {
+		m.selectedIdx = i
+		targetNode, _ := m.currentSelectedTarget()
+		if targetNode == nil || targetNode.Id != ch.Id {
+			t.Errorf("Chassis view index mismatch! expected chassis ID %s, got %v", ch.Id, targetNode)
+		}
+	}
+
+	// 5. Test Port Matrix View target selection
+	m.mode = viewMatrix
+	for i, p := range m.portList {
+		m.selectedIdx = i
+		_, targetConn := m.currentSelectedTarget()
+		if targetConn == nil || targetConn.PortName != p.PortName {
+			t.Errorf("Port Matrix index mismatch! expected port %s, got %v", p.PortName, targetConn)
+		}
+	}
+
+	// 6. Test Out-of-Bounds Resilience
+	m.mode = viewL2
+	m.l2PaneActive = 0
+	m.selectedIdx = 999 // Intentionally out-of-bounds
+	targetNode, _ := m.currentSelectedTarget()
+	if targetNode == nil {
+		t.Errorf("expected out-of-bounds index to gracefully resolve in L2 view, got nil")
+	}
+}
