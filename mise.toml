@@ -167,4 +167,14 @@ echo "==> All live tests passed!"
 [tasks.clean]
 description = "Stop port-forwards and clean build artifacts"
 depends = ["pf-stop"]
-run = "rm -rf bin/"
+run = "rm -rf bin/ ui/dist-pkg/"
+
+[tasks.ui-build]
+description = "Build Rancher UI extension package (dist-pkg/)"
+run = "cd ui && yarn build-pkg ovn-topology"
+
+[tasks.ui-serve]
+description = "Serve Rancher UI extension packages on port 4500 for Developer load testing"
+depends = ["ui-build"]
+run = "cd ui && yarn serve-pkgs"
+
