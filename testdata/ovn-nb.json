@@ -1,0 +1,205 @@
+{
+  "_date": 1729418400,
+  "OVN_Northbound": {
+    "Logical_Router": {
+      "lr-default-uuid": {
+        "name": "ovn_cluster",
+        "enabled": true,
+        "ports": ["set", [["uuid", "lrp-default-uuid"], ["uuid", "lrp-join-def-uuid"], ["uuid", "lrp-gw-uuid"]]],
+        "static_routes": ["set", [["uuid", "route-default-uuid"]]],
+        "policies": ["set", [["uuid", "policy-default-uuid"]]],
+        "nat": ["set", []],
+        "load_balancer": ["set", [["uuid", "lb-default-uuid"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["vpc", "default"]]]
+      },
+      "lr-custom-uuid": {
+        "name": "custom-vpc",
+        "enabled": true,
+        "ports": ["set", [["uuid", "lrp-custom-uuid"], ["uuid", "lrp-join-cust-uuid"]]],
+        "static_routes": ["set", []],
+        "policies": ["set", []],
+        "nat": ["set", [["uuid", "nat-fip-uuid"]]],
+        "load_balancer": ["set", []],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["vpc", "custom-vpc"]]]
+      }
+    },
+    "Logical_Router_Port": {
+      "lrp-default-uuid": {
+        "name": "lrp-default",
+        "mac": "00:00:00:11:22:33",
+        "networks": ["set", ["10.244.0.1/24"]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lrp-join-def-uuid": {
+        "name": "lrp-join-def",
+        "mac": "00:00:00:44:55:66",
+        "networks": ["set", ["100.64.0.1/16"]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lrp-gw-uuid": {
+        "name": "lrp-gw",
+        "mac": "00:00:00:77:88:99",
+        "networks": ["set", ["172.16.0.1/24"]],
+        "gateway_chassis": ["set", [["uuid", "gw-chassis-1-uuid"], ["uuid", "gw-chassis-2-uuid"]]],
+        "ha_chassis_group": ["uuid", "ha-group-uuid"],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lrp-custom-uuid": {
+        "name": "lrp-custom",
+        "mac": "00:00:00:22:33:44",
+        "networks": ["set", ["10.100.0.1/24"]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["vpc", "custom-vpc"]]]
+      },
+      "lrp-join-cust-uuid": {
+        "name": "lrp-join-cust",
+        "mac": "00:00:00:55:66:77",
+        "networks": ["set", ["100.64.0.2/16"]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["vpc", "custom-vpc"]]]
+      }
+    },
+    "Logical_Switch": {
+      "ls-default-uuid": {
+        "name": "default-subnet",
+        "ports": ["set", [["uuid", "lsp-def-router-uuid"], ["uuid", "lsp-pod1-uuid"], ["uuid", "lsp-pod2-uuid"], ["uuid", "lsp-unbound-uuid"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["subnet", "default-subnet"]]]
+      },
+      "ls-custom-uuid": {
+        "name": "custom-subnet",
+        "ports": ["set", [["uuid", "lsp-cust-router-uuid"], ["uuid", "lsp-cust-pod-uuid"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["subnet", "custom-subnet"], ["vpc", "custom-vpc"]]]
+      },
+      "ls-join-uuid": {
+        "name": "join",
+        "ports": ["set", [["uuid", "lsp-join-def-uuid"], ["uuid", "lsp-join-cust-uuid"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["subnet", "join"]]]
+      },
+      "ls-ext-uuid": {
+        "name": "external-subnet",
+        "ports": ["set", [["uuid", "lsp-localnet-uuid"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"], ["subnet", "external-subnet"]]]
+      }
+    },
+    "Logical_Switch_Port": {
+      "lsp-def-router-uuid": {
+        "name": "lsp-def-router",
+        "type": "router",
+        "options": ["map", [["router-port", "lrp-default"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lsp-pod1-uuid": {
+        "name": "app-pod-1.default",
+        "type": "",
+        "addresses": ["set", ["00:00:00:aa:bb:01 10.244.0.10"]],
+        "external_ids": ["map", [["pod", "app-pod-1"], ["namespace", "default"], ["vendor", "kube-ovn"]]]
+      },
+      "lsp-pod2-uuid": {
+        "name": "app-pod-2.default",
+        "type": "",
+        "addresses": ["set", ["00:00:00:aa:bb:02 10.244.0.11"]],
+        "external_ids": ["map", [["pod", "app-pod-2"], ["namespace", "default"], ["vendor", "kube-ovn"]]]
+      },
+      "lsp-unbound-uuid": {
+        "name": "pending-pod.default",
+        "type": "",
+        "addresses": ["set", ["00:00:00:aa:bb:03 10.244.0.12"]],
+        "external_ids": ["map", [["pod", "pending-pod"], ["namespace", "default"], ["vendor", "kube-ovn"]]]
+      },
+      "lsp-cust-router-uuid": {
+        "name": "lsp-cust-router",
+        "type": "router",
+        "options": ["map", [["router-port", "lrp-custom"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lsp-cust-pod-uuid": {
+        "name": "custom-worker.tenant-a",
+        "type": "",
+        "addresses": ["set", ["00:00:00:cc:dd:01 10.100.0.10"]],
+        "external_ids": ["map", [["pod", "custom-worker"], ["namespace", "tenant-a"], ["vendor", "kube-ovn"]]]
+      },
+      "lsp-join-def-uuid": {
+        "name": "lsp-join-def",
+        "type": "router",
+        "options": ["map", [["router-port", "lrp-join-def"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lsp-join-cust-uuid": {
+        "name": "lsp-join-cust",
+        "type": "router",
+        "options": ["map", [["router-port", "lrp-join-cust"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      },
+      "lsp-localnet-uuid": {
+        "name": "lsp-localnet",
+        "type": "localnet",
+        "options": ["map", [["network_name", "provider-ext"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      }
+    },
+    "NAT": {
+      "nat-fip-uuid": {
+        "type": "dnat_and_snat",
+        "external_ip": "172.16.1.100",
+        "logical_ip": "10.100.0.10",
+        "logical_port": "custom-worker.tenant-a",
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      }
+    },
+    "Gateway_Chassis": {
+      "gw-chassis-1-uuid": {
+        "name": "lrp-gw-node-1",
+        "chassis_name": "chassis-node-1",
+        "priority": 100,
+        "external_ids": ["map", []]
+      },
+      "gw-chassis-2-uuid": {
+        "name": "lrp-gw-node-2",
+        "chassis_name": "chassis-node-2",
+        "priority": 50,
+        "external_ids": ["map", []]
+      }
+    },
+    "HA_Chassis_Group": {
+      "ha-group-uuid": {
+        "name": "ha-gateway-group",
+        "ha_chassis": ["set", [["uuid", "ha-chassis-1-uuid"], ["uuid", "ha-chassis-2-uuid"]]],
+        "external_ids": ["map", []]
+      }
+    },
+    "HA_Chassis": {
+      "ha-chassis-1-uuid": {
+        "chassis_name": "chassis-node-1",
+        "priority": 100,
+        "external_ids": ["map", []]
+      },
+      "ha-chassis-2-uuid": {
+        "chassis_name": "chassis-node-2",
+        "priority": 50,
+        "external_ids": ["map", []]
+      }
+    },
+    "Logical_Router_Static_Route": {
+      "route-default-uuid": {
+        "ip_prefix": "0.0.0.0/0",
+        "nexthop": "10.244.0.254",
+        "external_ids": ["map", []]
+      }
+    },
+    "Logical_Router_Policy": {
+      "policy-default-uuid": {
+        "priority": 100,
+        "match": "ip4.dst == 0.0.0.0/0",
+        "action": "reroute",
+        "nexthop": "10.244.0.254",
+        "external_ids": ["map", []]
+      }
+    },
+    "Load_Balancer": {
+      "lb-default-uuid": {
+        "name": "cluster-lb",
+        "protocol": "tcp",
+        "vips": ["map", [["10.96.0.1:443", "192.168.1.11:6443"]]],
+        "external_ids": ["map", [["vendor", "kube-ovn"]]]
+      }
+    }
+  }
+}

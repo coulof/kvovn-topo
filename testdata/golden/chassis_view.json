@@ -1,0 +1,55 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "id": "chassis:chassis-node-1",
+      "name": "node-1",
+      "properties": {
+        "bindingCount": 3,
+        "encaps": [
+          {
+            "ip": "192.168.1.11",
+            "type": "geneve"
+          }
+        ],
+        "hostname": "node-1",
+        "nodeName": "node-1"
+      },
+      "type": "Chassis"
+    },
+    {
+      "id": "chassis:chassis-node-2",
+      "name": "node-2",
+      "properties": {
+        "bindingCount": 1,
+        "encaps": [
+          {
+            "ip": "192.168.1.12",
+            "type": "geneve"
+          }
+        ],
+        "hostname": "node-2",
+        "nodeName": "node-2"
+      },
+      "type": "Chassis"
+    },
+    {
+      "id": "chassis:chassis-node-3",
+      "name": "node-3",
+      "properties": {
+        "bindingCount": 0,
+        "encaps": [
+          {
+            "ip": "192.168.1.13",
+            "type": "geneve"
+          }
+        ],
+        "hostname": "node-3",
+        "nodeName": "node-3"
+      },
+      "type": "Chassis"
+    }
+  ],
+  "revision": 1,
+  "view": "chassis"
+}

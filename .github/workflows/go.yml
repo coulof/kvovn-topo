@@ -1,0 +1,58 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'api/**'
+      - 'hack/**'
+      - 'Makefile'
+      - '.golangci.yml'
+      - '.github/workflows/go.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'api/**'
+      - 'hack/**'
+      - 'Makefile'
+      - '.golangci.yml'
+      - '.github/workflows/go.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.15.0
+          skip-cache: true
+
+      - name: Verify codegen
+        run: |
+          make generate
+          git diff --exit-code
+
+      - name: Run Linters
+        run: make lint
+
+      - name: Run Tests
+        run: make test
+
+      - name: Build Binaries
+        run: make build

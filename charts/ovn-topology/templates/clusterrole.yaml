@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ovn-topology.fullname" . }}
+  labels:
+    {{- include "ovn-topology.labels" . | nindent 4 }}
+rules:
+  # Strictly read-only access to nodes to map chassis <-> k8s node
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  {{- if and .Values.ovn.tls.enabled .Values.ovn.tls.secretName }}
+  # Read-only access to OVN TLS secret only
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ .Values.ovn.tls.secretName | quote }}]
+    verbs: ["get"]
+  {{- end }}

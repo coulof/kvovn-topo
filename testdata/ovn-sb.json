@@ -1,0 +1,86 @@
+{
+  "_date": 1729418400,
+  "OVN_Southbound": {
+    "Chassis": {
+      "chassis-node-1-uuid": {
+        "name": "chassis-node-1",
+        "hostname": "node-1",
+        "encaps": ["set", [["uuid", "encap-node-1-uuid"]]],
+        "other_config": ["map", [["ovn-cms-options", "enable-chassis-as-gw"]]],
+        "external_ids": ["map", [["ovn.kubernetes.io/chassis", "node-1"]]]
+      },
+      "chassis-node-2-uuid": {
+        "name": "chassis-node-2",
+        "hostname": "node-2",
+        "encaps": ["set", [["uuid", "encap-node-2-uuid"]]],
+        "other_config": ["map", [["ovn-cms-options", "enable-chassis-as-gw"]]],
+        "external_ids": ["map", [["ovn.kubernetes.io/chassis", "node-2"]]]
+      },
+      "chassis-node-3-uuid": {
+        "name": "chassis-node-3",
+        "hostname": "node-3",
+        "encaps": ["set", [["uuid", "encap-node-3-uuid"]]],
+        "other_config": ["map", []],
+        "external_ids": ["map", [["ovn.kubernetes.io/chassis", "node-3"]]]
+      }
+    },
+    "Encap": {
+      "encap-node-1-uuid": {
+        "chassis_name": "chassis-node-1",
+        "ip": "192.168.1.11",
+        "type": "geneve",
+        "options": ["map", []]
+      },
+      "encap-node-2-uuid": {
+        "chassis_name": "chassis-node-2",
+        "ip": "192.168.1.12",
+        "type": "geneve",
+        "options": ["map", []]
+      },
+      "encap-node-3-uuid": {
+        "chassis_name": "chassis-node-3",
+        "ip": "192.168.1.13",
+        "type": "geneve",
+        "options": ["map", []]
+      }
+    },
+    "Port_Binding": {
+      "pb-pod1-uuid": {
+        "logical_port": "app-pod-1.default",
+        "type": "",
+        "chassis": ["uuid", "chassis-node-1-uuid"],
+        "options": ["map", []],
+        "external_ids": ["map", []]
+      },
+      "pb-pod2-uuid": {
+        "logical_port": "app-pod-2.default",
+        "type": "",
+        "chassis": ["uuid", "chassis-node-2-uuid"],
+        "options": ["map", []],
+        "external_ids": ["map", []]
+      },
+      "pb-cust-pod-uuid": {
+        "logical_port": "custom-worker.tenant-a",
+        "type": "",
+        "chassis": ["uuid", "chassis-node-1-uuid"],
+        "options": ["map", []],
+        "external_ids": ["map", []]
+      },
+      "pb-cr-gw-uuid": {
+        "logical_port": "cr-lrp-gw",
+        "type": "chassisredirect",
+        "chassis": ["uuid", "chassis-node-1-uuid"],
+        "options": ["map", []],
+        "external_ids": ["map", []]
+      }
+    },
+    "Datapath_Binding": {
+      "dp-default-ls-uuid": {
+        "external_ids": ["map", [["logical-switch", "ls-default-uuid"]]]
+      },
+      "dp-default-lr-uuid": {
+        "external_ids": ["map", [["logical-router", "lr-default-uuid"]]]
+      }
+    }
+  }
+}
