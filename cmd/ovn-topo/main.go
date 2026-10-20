@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -686,7 +687,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				portName := m.selectedPortName()
 				targetIP := m.selectedTargetIP()
 				filter := "ip"
-				if targetIP != "" {
+				if targetIP != "" && net.ParseIP(targetIP) != nil {
 					filter = fmt.Sprintf("host %s", targetIP)
 				}
 				return m, m.executeTcpdump(filter, nodeName, portName, targetIP)
@@ -861,6 +862,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func extractCleanIP(raw string) string {
+	parts := strings.Fields(raw)
+	for _, part := range parts {
+		if part == "router" || part == "unknown" || part == "dynamic" {
+			continue
+		}
+		if parsed := net.ParseIP(part); parsed != nil {
+			return parsed.String()
+		}
+		if strings.Contains(part, "/") {
+			ipPart := strings.Split(part, "/")[0]
+			if parsed := net.ParseIP(ipPart); parsed != nil {
+				return parsed.String()
+			}
+		}
+	}
+	return ""
+}
+
+func extractCleanMAC(raw string) string {
+	parts := strings.Fields(raw)
+	for _, part := range parts {
+		if _, err := net.ParseMAC(part); err == nil {
+			return part
+		}
+	}
+	return ""
+}
+
 func (m model) selectedNodeName() string {
 	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
 		conn := m.portList[m.selectedIdx]
@@ -874,6 +904,17 @@ func (m model) selectedNodeName() string {
 		}
 		if node.Type == api.GraphNodeTypeLS {
 			workloads := m.switchWorkloads[node.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType == "router" {
+						continue
+					}
+				}
+				if w.K8s != nil && w.K8s.Node != nil && *w.K8s.Node != "" {
+					return *w.K8s.Node
+				}
+			}
 			if len(workloads) > 0 && workloads[0].K8s != nil && workloads[0].K8s.Node != nil && *workloads[0].K8s.Node != "" {
 				return *workloads[0].K8s.Node
 			}
@@ -891,32 +932,45 @@ func (m model) selectedTargetIP() string {
 	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
 		conn := m.portList[m.selectedIdx]
 		if len(conn.Networks) > 0 {
-			return strings.Split(conn.Networks[0], "/")[0]
+			return extractCleanIP(conn.Networks[0])
 		}
 	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 		node := m.nodeList[m.selectedIdx]
 		if node.Type == api.GraphNodeTypeLSP && node.Properties != nil {
 			p := *node.Properties
-			if addrs, ok := p["addresses"].([]interface{}); ok && len(addrs) > 0 {
-				if s, ok := addrs[0].(string); ok {
-					return s
+			if addrs, ok := p["addresses"].([]interface{}); ok {
+				for _, a := range addrs {
+					if s, ok := a.(string); ok {
+						if ip := extractCleanIP(s); ip != "" {
+							return ip
+						}
+					}
 				}
 			}
 		}
 		if node.Type == api.GraphNodeTypeLS {
 			workloads := m.switchWorkloads[node.Id]
-			if len(workloads) > 0 && workloads[0].Properties != nil {
-				p := *workloads[0].Properties
-				if addrs, ok := p["addresses"].([]interface{}); ok && len(addrs) > 0 {
-					if s, ok := addrs[0].(string); ok {
-						return s
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType == "router" {
+						continue
+					}
+					if addrs, ok := p["addresses"].([]interface{}); ok {
+						for _, a := range addrs {
+							if s, ok := a.(string); ok {
+								if ip := extractCleanIP(s); ip != "" {
+									return ip
+								}
+							}
+						}
 					}
 				}
 			}
 		}
 		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
 			if len(ports[0].Networks) > 0 {
-				return strings.Split(ports[0].Networks[0], "/")[0]
+				return extractCleanIP(ports[0].Networks[0])
 			}
 		}
 	}
@@ -937,6 +991,14 @@ func (m model) selectedPortName() string {
 		}
 		if node.Type == api.GraphNodeTypeLS {
 			workloads := m.switchWorkloads[node.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType != "router" {
+						return w.Name
+					}
+				}
+			}
 			if len(workloads) > 0 {
 				return workloads[0].Name
 			}
@@ -1002,9 +1064,9 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		srcMAC := ""
 
 		if conn != nil {
-			srcMAC = conn.MAC
+			srcMAC = extractCleanMAC(conn.MAC)
 			if len(conn.Networks) > 0 {
-				srcIP = strings.Split(conn.Networks[0], "/")[0]
+				srcIP = extractCleanIP(conn.Networks[0])
 			}
 
 			// In OVN, if tracing into the logical switch, the ingress port must be
@@ -1392,17 +1454,17 @@ func (m model) renderDiagModal() string {
 	}
 
 	targetIP := m.selectedTargetIP()
-	ipLabel := "(none)"
-	if targetIP != "" {
-		ipLabel = targetIP
+	ipFilterLabel := "host " + targetIP
+	if targetIP == "" || net.ParseIP(targetIP) == nil {
+		ipFilterLabel = "ip"
 	}
 
 	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
 	box.WriteString("    [1] ovn-trace (Microflow trace from active port to peer switch/gateway)\n")
 	box.WriteString("    [2] Live tcpdump: ICMP traffic (Ping / Echo trace on node)\n")
 	box.WriteString("    [3] Live tcpdump: TCP traffic (All TCP connections)\n")
-	fmt.Fprintf(&box, "    [4] Live tcpdump: Port IP traffic (host %s)\n", ipLabel)
-	fmt.Fprintf(&box, "    [5] Filtered Conntrack (Active flows for port IP %s)\n", ipLabel)
+	fmt.Fprintf(&box, "    [4] Live tcpdump: Port IP traffic (%s)\n", ipFilterLabel)
+	fmt.Fprintf(&box, "    [5] Filtered Conntrack (Active flows for port IP %s)\n", targetIP)
 	box.WriteString("    [6] OVS Physical Bridges & Tunnels (ovs-vsctl show)\n")
 	box.WriteString("    [7] Tail ovn-controller Logs (Local node)\n\n")
 
