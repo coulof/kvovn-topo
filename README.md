@@ -65,9 +65,18 @@ mise run pf-stop
 ## TUI Controls (`ovn-topo`)
 
 - **`Tab`**: Switch between **Topology Tree View** and **Port Interconnection Matrix**.
+- **`t`**: Cycle color themes live (**Dracula**, **Nord**, **Tokyo Night**, **Catppuccin Mocha**, **Default**).
 - **`j` / `k`** or **`↓` / `↑`**: Move selection line-by-line across routers, switches, and ports.
 - **`r`**: Refresh topology from the daemon.
 - **`q`**: Quit.
+
+Launch with a preferred theme:
+```bash
+./bin/ovn-topo --theme=dracula
+./bin/ovn-topo --theme=nord
+./bin/ovn-topo --theme=tokyonight
+./bin/ovn-topo --theme=catppuccin
+```
 
 ## Rancher and Harvester UI Extension
 
