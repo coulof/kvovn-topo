@@ -273,6 +273,10 @@ func (m model) probeDiagCmd() tea.Cmd {
 			}
 		}
 
+		if allowed && m.diagLocator != nil && m.diagExecutor != nil {
+			m.diagLocator.PopulateChassisUUIDs(ctx, m.diagExecutor)
+		}
+
 		return diagProbeMsg{
 			available:  allowed,
 			reason:     reason,
@@ -1135,6 +1139,11 @@ func (m model) resolveNodeName(candidate string) string {
 	if candidate == "" {
 		return ""
 	}
+	if m.diagLocator != nil {
+		if host := m.diagLocator.ResolveChassisUUID(candidate); host != "" {
+			return host
+		}
+	}
 	// Check if candidate matches any chassis hostname or nodeName in chassisNodes
 	for _, ch := range m.chassisNodes {
 		if ch.Id == candidate || ch.Name == candidate || strings.TrimPrefix(ch.Id, graph.PrefixChassis) == candidate {
@@ -1148,6 +1157,15 @@ func (m model) resolveNodeName(candidate string) string {
 				}
 			}
 			return ch.Name
+		}
+		if ch.Properties != nil {
+			p := *ch.Properties
+			if u, ok := p["uuid"].(string); ok && u == candidate {
+				if nodeName, ok := p["nodeName"].(string); ok && nodeName != "" {
+					return nodeName
+				}
+				return ch.Name
+			}
 		}
 	}
 	// Check if candidate matches nodeName in nodeList
@@ -1575,22 +1593,18 @@ func (m model) resolveTraceEndpoints(targetDstIP string, proto string, dstPort i
 		DstPort:  dstPort,
 	}
 
-	var conn *RouterPortConnection
+	selectedNode, conn := m.currentSelectedTarget()
 	var selectedWorkload *api.GraphNode
 	var switchID string
 	var switchName string
 
-	// 1. Identify what is selected in the current view
-	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-		conn = &m.portList[m.selectedIdx]
-	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		node := m.nodeList[m.selectedIdx]
-		if node.Type == api.GraphNodeTypeLSP {
-			selectedWorkload = &node
+	if selectedNode != nil {
+		if selectedNode.Type == api.GraphNodeTypeLSP {
+			selectedWorkload = selectedNode
 			// Find which switch this workload is on
 			for lsID, workloads := range m.switchWorkloads {
 				for _, w := range workloads {
-					if w.Id == node.Id || w.Name == node.Name {
+					if w.Id == selectedNode.Id || w.Name == selectedNode.Name {
 						switchID = lsID
 						if sn, ok := m.nodeMap[lsID]; ok {
 							switchName = sn.Name
@@ -1602,13 +1616,13 @@ func (m model) resolveTraceEndpoints(targetDstIP string, proto string, dstPort i
 					break
 				}
 			}
-			if switchID != "" && len(m.switchPorts[switchID]) > 0 {
+			if switchID != "" && len(m.switchPorts[switchID]) > 0 && conn == nil {
 				conn = &m.switchPorts[switchID][0]
 			}
-		} else if node.Type == api.GraphNodeTypeLS {
-			switchID = node.Id
-			switchName = node.Name
-			workloads := m.switchWorkloads[node.Id]
+		} else if selectedNode.Type == api.GraphNodeTypeLS {
+			switchID = selectedNode.Id
+			switchName = selectedNode.Name
+			workloads := m.switchWorkloads[selectedNode.Id]
 			for _, w := range workloads {
 				if w.Properties != nil {
 					p := *w.Properties
@@ -1618,16 +1632,33 @@ func (m model) resolveTraceEndpoints(targetDstIP string, proto string, dstPort i
 					}
 				}
 			}
-			if len(m.switchPorts[node.Id]) > 0 {
-				conn = &m.switchPorts[node.Id][0]
+			if len(m.switchPorts[selectedNode.Id]) > 0 && conn == nil {
+				conn = &m.switchPorts[selectedNode.Id][0]
 			}
-		} else if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
-			conn = &ports[0]
 		}
 	}
 
 	if conn == nil && len(m.portList) > 0 {
 		conn = &m.portList[0]
+	}
+
+	if switchName == "" && conn != nil {
+		switchName = conn.SwitchName
+	}
+	if switchID == "" && conn != nil {
+		switchID = conn.SwitchID
+	}
+
+	if selectedWorkload == nil && switchID != "" {
+		for _, w := range m.switchWorkloads[switchID] {
+			if w.Properties != nil {
+				p := *w.Properties
+				if portType, _ := p["type"].(string); portType != "router" {
+					selectedWorkload = &w
+					break
+				}
+			}
+		}
 	}
 
 	// 2. Resolve Gateway MAC from conn

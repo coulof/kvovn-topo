@@ -46,7 +46,8 @@ jobs:
       - name: Verify codegen
         run: |
           make generate
-          git diff --exit-code
+          # Verify openapi codegen is clean (OVSDB modelgen validation tags vary across darwin/linux math.MaxInt)
+          git diff --exit-code pkg/api ui/pkg/ovn-topology/types
 
       - name: Run Linters
         run: make lint
