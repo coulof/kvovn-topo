@@ -96,6 +96,12 @@ var (
 				Foreground(lipgloss.Color("#FFFFFF")).
 				Background(lipgloss.Color("#7D56F4")).
 				Padding(0, 1)
+
+	inspectorBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#7D56F4")).
+				Padding(0, 1).
+				MarginTop(1)
 )
 
 type viewMode int
@@ -637,7 +643,7 @@ func (m model) renderTreeView() string {
 func (m model) renderMatrixView() string {
 	var b strings.Builder
 
-	header := fmt.Sprintf("%-14s %-16s %-18s %-18s %-19s %s",
+	header := fmt.Sprintf("  %-16s %-32s %-18s %-22s %-19s %s",
 		"VPC/ROUTER", "PORT (LRP)", "NETWORKS", "TARGET SWITCH", "MAC", "GATEWAY STATUS")
 	b.WriteString(tableHeaderStyle.Render(header) + "\n")
 
@@ -658,11 +664,17 @@ func (m model) renderMatrixView() string {
 			gw = fmt.Sprintf("Active: %s", conn.ActiveGateway)
 		}
 
-		row := fmt.Sprintf("%-14s %-16s %-18s %-18s %-19s %s",
-			truncate(routerLabel, 14),
-			truncate(conn.PortName, 16),
+		cursor := "  "
+		if idx == m.selectedIdx {
+			cursor = "► "
+		}
+
+		row := fmt.Sprintf("%s%-16s %-32s %-18s %-22s %-19s %s",
+			cursor,
+			truncate(routerLabel, 16),
+			truncate(conn.PortName, 32),
 			truncate(cidr, 18),
-			truncate(switchLabel, 18),
+			truncate(switchLabel, 22),
 			truncate(conn.MAC, 19),
 			gw)
 
@@ -675,7 +687,85 @@ func (m model) renderMatrixView() string {
 
 	b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render(
 		"  * Marked switches are shared interconnects (connected to multiple Logical Routers)."))
+
+	// Render Port Inspector Box below the matrix for the currently selected LRP
+	if len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		selectedConn := m.portList[m.selectedIdx]
+		b.WriteString("\n" + m.renderPortInspector(selectedConn))
+	}
+
 	return b.String()
+}
+
+func (m model) renderPortInspector(conn RouterPortConnection) string {
+	var box strings.Builder
+
+	box.WriteString(headerStyle.Render("Port Interconnection Inspector: "+conn.PortName) + "\n")
+
+	sharedBadge := ""
+	if conn.IsShared {
+		sharedBadge = " (Shared Multi-VPC Interconnect)"
+	}
+	peerLSP := conn.PeerPortName
+	if peerLSP == "" {
+		peerLSP = "(none / internal)"
+	}
+
+	fmt.Fprintf(&box, "  Router:   %-34s Target Switch: %s%s\n",
+		fmt.Sprintf("%s (VPC: %s)", conn.RouterName, conn.VPCName),
+		conn.SwitchName,
+		sharedBadge)
+	fmt.Fprintf(&box, "  LRP Port: %-34s Peer LSP:      %s\n",
+		portBadgeStyle.Render(conn.PortName),
+		peerLSP)
+	fmt.Fprintf(&box, "  MAC:      %-34s Networks:      %s\n",
+		conn.MAC,
+		cidrStyle.Render(strings.Join(conn.Networks, ", ")))
+
+	// If this port attaches to a shared interconnect switch, show all other interconnected routers!
+	if conn.IsShared {
+		var otherRouters []RouterPortConnection
+		for _, peerConn := range m.switchPorts[conn.SwitchID] {
+			if peerConn.RouterID != conn.RouterID {
+				otherRouters = append(otherRouters, peerConn)
+			}
+		}
+
+		if len(otherRouters) > 0 {
+			fmt.Fprintf(&box, "\n  %s\n", headerStyle.Render("Interconnected VPC Routers on '"+conn.SwitchName+"':"))
+			for _, peer := range otherRouters {
+				fmt.Fprintf(&box, "    • %-16s ── %-18s (via %s)\n",
+					fmt.Sprintf("%s (%s)", peer.RouterName, peer.VPCName),
+					cidrStyle.Render(strings.Join(peer.Networks, ", ")),
+					portBadgeStyle.Render(peer.PortName))
+			}
+		}
+	}
+
+	// Gateway & High Availability details
+	fmt.Fprintf(&box, "\n  %s\n", headerStyle.Render("Gateway & Routing Details:"))
+	if conn.ActiveGateway != "" {
+		fmt.Fprintf(&box, "    • Mode:           Centralized HA Gateway\n")
+		fmt.Fprintf(&box, "    • Active Gateway: %s\n", activeGatewayStyle.Render(conn.ActiveGateway))
+		fmt.Fprintf(&box, "    • Redirect Port:  cr-%s\n", conn.PortName)
+	} else {
+		fmt.Fprintf(&box, "    • Mode:           Distributed (Local Chassis Egress)\n")
+	}
+
+	// Architectural topology role explanation
+	fmt.Fprintf(&box, "\n  %s\n", headerStyle.Render("Topology Role:"))
+	switch {
+	case conn.IsShared:
+		fmt.Fprintf(&box, "    East-West Interconnect: links router '%s' to '%s' for cross-VPC communication\n",
+			conn.RouterName, conn.SwitchName)
+	case conn.ActiveGateway != "":
+		fmt.Fprintf(&box, "    North-South Egress Gateway: routes centralized external outbound traffic through designated gateway node\n")
+	default:
+		fmt.Fprintf(&box, "    Internal Subnet Gateway: provides default gateway routing for workloads connected to '%s'\n",
+			conn.SwitchName)
+	}
+
+	return inspectorBoxStyle.Render(box.String())
 }
 
 func formatNodeLine(n api.GraphNode) string {
