@@ -42,18 +42,8 @@ func TestTUIModelView(t *testing.T) {
 		t.Fatalf("expected graphLoadedMsg with non-nil resp, err: %v", loaded.err)
 	}
 
-	// Process loaded message (expanded by default in M2)
+	// Process loaded message (collapsed by default)
 	m.applyGraph(loaded.resp)
-
-	if len(m.nodeList) != 16 {
-		t.Fatalf("expected 16 nodes in expanded navigation list (including LSPs), got %d", len(m.nodeList))
-	}
-
-	// Collapse switches to test top-level router and switch order
-	for k := range m.expandedSwitches {
-		m.expandedSwitches[k] = false
-	}
-	m.rebuildNodeList()
 
 	expectedOrder := []string{
 		"ovn_cluster",     // Router in VPC default
@@ -66,7 +56,7 @@ func TestTUIModelView(t *testing.T) {
 	}
 
 	if len(m.nodeList) != len(expectedOrder) {
-		t.Fatalf("expected %d nodes in collapsed navigation list, got %d", len(expectedOrder), len(m.nodeList))
+		t.Fatalf("expected %d nodes in navigation list, got %d", len(expectedOrder), len(m.nodeList))
 	}
 
 	for i, expectedName := range expectedOrder {
@@ -75,12 +65,6 @@ func TestTUIModelView(t *testing.T) {
 		}
 	}
 
-	// Re-expand switches for view rendering
-	for k := range m.expandedSwitches {
-		m.expandedSwitches[k] = true
-	}
-	m.rebuildNodeList()
-
 	// 1. Verify Tree View rendering
 	treeView := m.View()
 	if !strings.Contains(treeView, "OVN Network Topology") {
@@ -88,6 +72,16 @@ func TestTUIModelView(t *testing.T) {
 	}
 	if !strings.Contains(treeView, "1. L3 Tree") {
 		t.Errorf("expected tab 1, got: %s", treeView)
+	}
+	if !strings.Contains(treeView, "press space to expand") {
+		t.Errorf("expected press space to expand hint, got: %s", treeView)
+	}
+
+	// Expand switch default-subnet with space key
+	m.expandedSwitches["ls:ls-default-uuid"] = true
+	expandedTree := m.View()
+	if !strings.Contains(expandedTree, "press space to collapse") {
+		t.Errorf("expected press space to collapse in expanded tree, got: %s", expandedTree)
 	}
 	if !strings.Contains(treeView, "VPC: default") {
 		t.Errorf("expected VPC: default in view, got: %s", treeView)
