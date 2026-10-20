@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,7 +14,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/ovn-topology/pkg/diag"
 	"github.com/coulof/ovn-topology/pkg/graph"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type viewMode int
@@ -60,6 +66,24 @@ type model struct {
 	status        string
 	width         int
 	height        int
+
+	// Tier 1 Diagnostics (ADR-0001)
+	diagMode       bool
+	diagAvailable  bool
+	diagReason     string
+	k8sNamespace   string
+	k8sClient      kubernetes.Interface
+	diagExecutor   diag.Executor
+	diagLocator    *diag.PodLocator
+	diagCentralPod diag.PodRef
+	diagModal      bool
+	diagRunning    bool
+	diagAction     string
+	diagTitle      string
+	diagTraceRes   *diag.TraceResult
+	diagRawOutput  string
+	diagRawView    bool
+	diagError      error
 }
 
 type graphLoadedMsg struct {
@@ -67,24 +91,108 @@ type graphLoadedMsg struct {
 	err  error
 }
 
-func initialModel(daemonURL, fixturePath, themeName string) model {
+type diagProbeMsg struct {
+	available  bool
+	reason     string
+	centralPod diag.PodRef
+}
+
+type diagExecResultMsg struct {
+	action    string
+	title     string
+	traceRes  *diag.TraceResult
+	rawOutput string
+	err       error
+}
+
+func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubeconfigPath, k8sNamespace string) model {
 	theme, idx := GetThemeByName(themeName)
-	return model{
-		daemonURL:   daemonURL,
-		fixturePath: fixturePath,
-		status:      "Connecting...",
-		mode:        viewTree,
-		themeIndex:  idx,
-		theme:       theme,
-		styles:      CompileStyles(theme),
-		nodeMap:     make(map[string]api.GraphNode),
-		routerPorts: make(map[string][]RouterPortConnection),
-		switchPorts: make(map[string][]RouterPortConnection),
+	if k8sNamespace == "" {
+		k8sNamespace = "kube-system"
 	}
+
+	m := model{
+		daemonURL:    daemonURL,
+		fixturePath:  fixturePath,
+		status:       "Connecting...",
+		mode:         viewTree,
+		themeIndex:   idx,
+		theme:        theme,
+		styles:       CompileStyles(theme),
+		diagMode:     diagMode,
+		k8sNamespace: k8sNamespace,
+		nodeMap:      make(map[string]api.GraphNode),
+		routerPorts:  make(map[string][]RouterPortConnection),
+		switchPorts:  make(map[string][]RouterPortConnection),
+	}
+
+	if diagMode {
+		var k8sConfig *rest.Config
+		var err error
+		if kubeconfigPath != "" {
+			k8sConfig, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		} else {
+			loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+			configOverrides := &clientcmd.ConfigOverrides{}
+			kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+			k8sConfig, err = kubeConfig.ClientConfig()
+		}
+
+		if err != nil {
+			m.diagAvailable = false
+			m.diagReason = fmt.Sprintf("Failed to load kubeconfig: %v", err)
+		} else {
+			clientset, err := kubernetes.NewForConfig(k8sConfig)
+			if err != nil {
+				m.diagAvailable = false
+				m.diagReason = fmt.Sprintf("Failed to create k8s client: %v", err)
+			} else {
+				m.k8sClient = clientset
+				m.diagExecutor = diag.NewKubeExecutor(clientset, k8sConfig)
+				m.diagLocator = diag.NewPodLocator(clientset, k8sNamespace)
+				m.diagReason = "Probing RBAC..."
+			}
+		}
+	}
+
+	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return m.fetchGraphCmd()
+	cmds := []tea.Cmd{m.fetchGraphCmd()}
+	if m.diagMode && m.diagExecutor != nil && m.diagLocator != nil {
+		cmds = append(cmds, m.probeDiagCmd())
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m model) probeDiagCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		if err != nil {
+			return diagProbeMsg{
+				available: false,
+				reason:    fmt.Sprintf("ovn-central pod not found: %v", err),
+			}
+		}
+
+		allowed, reason, err := diag.CheckExecAccess(ctx, m.diagExecutor, centralPod)
+		if err != nil {
+			return diagProbeMsg{
+				available: false,
+				reason:    fmt.Sprintf("probe error: %v", err),
+			}
+		}
+
+		return diagProbeMsg{
+			available:  allowed,
+			reason:     reason,
+			centralPod: centralPod,
+		}
+	}
 }
 
 func (m model) fetchGraphCmd() tea.Cmd {
@@ -291,10 +399,105 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyGraph(msg.resp)
 		return m, nil
 
+	case diagProbeMsg:
+		m.diagAvailable = msg.available
+		m.diagReason = msg.reason
+		m.diagCentralPod = msg.centralPod
+		if msg.available {
+			m.status = "Diag Ready: " + msg.reason
+		} else {
+			m.status = "Diag Degraded: " + msg.reason
+		}
+		return m, nil
+
+	case diagExecResultMsg:
+		m.diagRunning = false
+		m.diagAction = msg.action
+		m.diagTitle = msg.title
+		m.diagTraceRes = msg.traceRes
+		m.diagRawOutput = msg.rawOutput
+		m.diagError = msg.err
+		return m, nil
+
 	case tea.KeyMsg:
+		if m.diagModal {
+			switch msg.String() {
+			case "esc", "x", "ctrl+c":
+				m.diagModal = false
+				m.diagRawOutput = ""
+				m.diagTraceRes = nil
+				m.diagError = nil
+				m.diagRunning = false
+				return m, nil
+			case "o":
+				m.diagRawView = !m.diagRawView
+				return m, nil
+			case "1":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				var conn *RouterPortConnection
+				if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+					conn = &m.portList[m.selectedIdx]
+				} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+					node := m.nodeList[m.selectedIdx]
+					if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
+						conn = &ports[0]
+					} else if ports, ok := m.switchPorts[node.Id]; ok && len(ports) > 0 {
+						conn = &ports[0]
+					}
+				}
+				return m, m.executeTrace(conn)
+			case "2":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("conntrack", nodeName)
+			case "3":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("ovs-iface", nodeName)
+			case "4":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagError = nil
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("logs", nodeName)
+			default:
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "x":
+			if !m.diagMode {
+				m.status = "Run with --diag to enable Tier 1 diagnostics (ADR-0001)"
+				return m, nil
+			}
+			if !m.diagAvailable {
+				m.status = fmt.Sprintf("Diag unavailable: %s", m.diagReason)
+				return m, nil
+			}
+			m.diagModal = true
+			m.diagRawOutput = ""
+			m.diagTraceRes = nil
+			m.diagError = nil
+			m.diagRunning = false
+			m.diagRawView = false
+			return m, nil
 		case "t":
 			m.themeIndex = (m.themeIndex + 1) % len(AvailableThemes)
 			m.theme = AvailableThemes[m.themeIndex]
@@ -331,11 +534,165 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) selectedNodeName() string {
+	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		conn := m.portList[m.selectedIdx]
+		if conn.ActiveGateway != "" {
+			return conn.ActiveGateway
+		}
+	}
+	for _, conn := range m.portList {
+		if conn.ActiveGateway != "" {
+			return conn.ActiveGateway
+		}
+	}
+	return ""
+}
+
+func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
+	return func() tea.Msg {
+		if m.diagExecutor == nil || m.diagLocator == nil {
+			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		centralPod := m.diagCentralPod
+		if centralPod.Name == "" {
+			pod, err := m.diagLocator.FindOvnCentralPod(ctx)
+			if err != nil {
+				return diagExecResultMsg{err: err}
+			}
+			centralPod = pod
+		}
+
+		datapath := "default-subnet"
+		inport := "test"
+		srcIP := "10.244.0.1"
+		dstIP := "10.244.0.2"
+		srcMAC := ""
+
+		if conn != nil {
+			datapath = conn.SwitchName
+			inport = conn.PortName
+			srcMAC = conn.MAC
+			if len(conn.Networks) > 0 {
+				srcIP = strings.Split(conn.Networks[0], "/")[0]
+			}
+			for _, peer := range m.switchPorts[conn.SwitchID] {
+				if peer.PortName != conn.PortName && len(peer.Networks) > 0 {
+					dstIP = strings.Split(peer.Networks[0], "/")[0]
+					break
+				}
+			}
+		}
+
+		req := diag.TraceRequest{
+			Datapath: datapath,
+			Inport:   inport,
+			SrcMAC:   srcMAC,
+			SrcIP:    srcIP,
+			DstIP:    dstIP,
+			Protocol: "icmp",
+		}
+
+		cmd, err := diag.BuildTraceCommand(req)
+		if err != nil {
+			return diagExecResultMsg{err: err}
+		}
+
+		stdout, stderr, err := m.diagExecutor.Exec(ctx, centralPod, cmd)
+		if err != nil {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return diagExecResultMsg{err: fmt.Errorf("ovn-trace failed: %s", errMsg)}
+		}
+
+		traceRes := diag.ParseTraceOutput(string(stdout))
+		return diagExecResultMsg{
+			action:    "trace",
+			title:     fmt.Sprintf("ovn-trace (%s -> %s via %s)", srcIP, dstIP, inport),
+			traceRes:  &traceRes,
+			rawOutput: string(stdout),
+		}
+	}
+}
+
+func (m model) executeNodeDiag(action string, nodeName string) tea.Cmd {
+	return func() tea.Msg {
+		if m.diagExecutor == nil || m.diagLocator == nil {
+			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if nodeName == "" && m.k8sClient != nil {
+			nodes, err := m.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+			if err == nil && len(nodes.Items) > 0 {
+				nodeName = nodes.Items[0].Name
+			}
+		}
+		if nodeName == "" {
+			nodeName = "cluster-node"
+		}
+
+		pod, err := m.diagLocator.FindNodeOVSPod(ctx, nodeName)
+		if err != nil {
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate OVS pod on node %s: %w", nodeName, err)}
+		}
+
+		var cmd []string
+		var title string
+
+		switch action {
+		case "conntrack":
+			cmd = diag.BuildConntrackDumpCommand(0)
+			title = fmt.Sprintf("Conntrack Table on node %s", nodeName)
+		case "ovs-iface":
+			cmd = diag.BuildOvsVsctlListInterfaceCommand()
+			title = fmt.Sprintf("OVS Interfaces on node %s", nodeName)
+		case "logs":
+			cmd = diag.BuildOvnControllerLogTail(50)
+			title = fmt.Sprintf("ovn-controller logs on node %s", nodeName)
+		default:
+			return diagExecResultMsg{err: fmt.Errorf("unknown diagnostic action: %s", action)}
+		}
+
+		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
+		if err != nil {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return diagExecResultMsg{err: fmt.Errorf("%s failed: %s", action, errMsg)}
+		}
+
+		return diagExecResultMsg{
+			action:    action,
+			title:     title,
+			rawOutput: string(stdout),
+		}
+	}
+}
+
 func (m model) View() string {
 	var b strings.Builder
 
 	// Top Title and View Tabs
 	header := m.styles.Title.Render(" OVN Network Topology ")
+
+	diagBadge := ""
+	if m.diagMode {
+		if m.diagAvailable {
+			diagBadge = m.styles.DiagBadgeActive.Render(" DIAG ACTIVE ") + " "
+		} else {
+			diagBadge = m.styles.DiagBadgeDisabled.Render(" DIAG DEGRADED ") + " "
+		}
+	}
 
 	treeTab := m.styles.TabInactive.Render("1. Topology Tree")
 	matrixTab := m.styles.TabInactive.Render("2. Port Interconnection Matrix")
@@ -346,10 +703,20 @@ func (m model) View() string {
 	}
 
 	tabs := fmt.Sprintf("%s%s", treeTab, matrixTab)
-	statusText := m.styles.MutedText.Render(
-		fmt.Sprintf(" %s [%s]  [Tab: view | t: theme | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name))
+	diagShortcut := ""
+	if m.diagAvailable {
+		diagShortcut = " | x: diag"
+	}
 
-	b.WriteString(header + " " + tabs + statusText + "\n\n")
+	statusText := m.styles.MutedText.Render(
+		fmt.Sprintf(" %s [%s]  [Tab: view | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
+
+	b.WriteString(header + " " + diagBadge + tabs + statusText + "\n\n")
+
+	if m.diagModal {
+		b.WriteString(m.renderDiagModal())
+		return b.String()
+	}
 
 	if m.err != nil {
 		b.WriteString(m.styles.BadgeUnbound.Render(fmt.Sprintf("Error: %v\n", m.err)))
@@ -370,6 +737,82 @@ func (m model) View() string {
 	// Tree View
 	b.WriteString(m.renderTreeView())
 	return b.String()
+}
+
+func (m model) renderDiagModal() string {
+	var box strings.Builder
+
+	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS - ADR-0001]") + "\n")
+	box.WriteString(m.styles.MutedText.Render("Executed inside privileged cluster pods using operator credentials") + "\n\n")
+
+	// Target context
+	targetDesc := "Cluster Core"
+	var currentConn *RouterPortConnection
+	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		currentConn = &m.portList[m.selectedIdx]
+		targetDesc = fmt.Sprintf("Port: %s (Router: %s, Switch: %s, IP: %s)",
+			currentConn.PortName, currentConn.RouterName, currentConn.SwitchName, strings.Join(currentConn.Networks, ", "))
+	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		node := m.nodeList[m.selectedIdx]
+		targetDesc = fmt.Sprintf("Node: %s (Type: %s)", node.Name, node.Type)
+	}
+
+	fmt.Fprintf(&box, "  Target: %s\n\n", m.styles.PortBadge.Render(targetDesc))
+
+	if m.diagRunning {
+		box.WriteString(m.styles.ActiveGateway.Render("  ⏳ Executing diagnostic command inside pod...") + "\n")
+		box.WriteString(m.styles.MutedText.Render("  Please wait while stream completes...") + "\n\n")
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	if m.diagError != nil {
+		box.WriteString(m.styles.BadgeUnbound.Render(fmt.Sprintf("  ❌ Diagnostic Error: %v", m.diagError)) + "\n\n")
+	}
+
+	if m.diagRawOutput != "" || m.diagTraceRes != nil {
+		box.WriteString(m.styles.Header.Render(fmt.Sprintf("  Result: %s", m.diagTitle)) + "\n\n")
+
+		if m.diagAction == "trace" && m.diagTraceRes != nil && !m.diagRawView {
+			tr := m.diagTraceRes
+			verdictStyle := m.styles.BadgeBound
+			if tr.Verdict != "delivered" {
+				verdictStyle = m.styles.BadgeUnbound
+			}
+			fmt.Fprintf(&box, "  Verdict: %s\n", verdictStyle.Render(strings.ToUpper(tr.Verdict)))
+			fmt.Fprintf(&box, "  Summary: %s\n\n", tr.Summary)
+
+			box.WriteString(m.styles.Header.Render("  Pipeline Stages Evaluated:") + "\n")
+			for i, st := range tr.Stages {
+				if i >= 12 {
+					fmt.Fprintf(&box, "    ... (%d more stages, press 'o' for raw)\n", len(tr.Stages)-12)
+					break
+				}
+				fmt.Fprintf(&box, "    • [%s table %d] %-22s ➔ %s\n",
+					st.Pipeline, st.Table, st.Name, truncate(st.Action, 45))
+			}
+		} else {
+			lines := strings.Split(strings.TrimSpace(m.diagRawOutput), "\n")
+			maxLines := 15
+			if len(lines) > maxLines {
+				lines = lines[:maxLines]
+				lines = append(lines, fmt.Sprintf("... (%d lines truncated, press 'o' to toggle)", len(strings.Split(m.diagRawOutput, "\n"))-maxLines))
+			}
+			box.WriteString("  " + strings.Join(lines, "\n  ") + "\n")
+		}
+
+		box.WriteString("\n" + m.styles.MutedText.Render("  [o: toggle raw output | 1-4: run another test | Esc/x: return to topology]"))
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
+	box.WriteString("    [1] ovn-trace (Microflow trace from this port to peer switch/gateway)\n")
+	box.WriteString("    [2] Dump Conntrack Entries (ovs-appctl dpctl/dump-conntrack)\n")
+	box.WriteString("    [3] Physical OVS Interfaces (ovs-vsctl list Interface on node)\n")
+	box.WriteString("    [4] Tail Controller Logs (ovn-controller log tail on node)\n\n")
+
+	box.WriteString(m.styles.MutedText.Render("  Press 1, 2, 3, 4 to execute | Esc or x to cancel"))
+
+	return m.styles.ModalBox.Render(box.String())
 }
 
 func (m model) renderTreeView() string {
@@ -769,10 +1212,16 @@ func main() {
 	var daemonURL string
 	var useFixture bool
 	var themeName string
+	var diagMode bool
+	var kubeconfig string
+	var k8sNamespace string
 
 	flag.StringVar(&daemonURL, "daemon-url", "http://127.0.0.1:8080/api/v1", "URL of the ovn-topologyd API")
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
 	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
+	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
+	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
+	flag.StringVar(&k8sNamespace, "k8s-namespace", "kube-system", "Kubernetes namespace containing Kube-OVN/OVS daemon pods")
 	flag.Parse()
 
 	fixturePath := ""
@@ -780,7 +1229,7 @@ func main() {
 		fixturePath = "dev-fixture"
 	}
 
-	p := tea.NewProgram(initialModel(daemonURL, fixturePath, themeName), tea.WithAltScreen())
+	p := tea.NewProgram(initialModel(daemonURL, fixturePath, themeName, diagMode, kubeconfig, k8sNamespace), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		os.Exit(1)

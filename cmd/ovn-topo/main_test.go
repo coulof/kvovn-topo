@@ -3,10 +3,17 @@ package main
 import (
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/coulof/ovn-topology/pkg/diag"
+	"github.com/coulof/ovn-topology/pkg/graph"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestTUIModelView(t *testing.T) {
-	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "default")
+	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "default", false, "", "")
 
 	// Trigger initial command to load fixture graph
 	cmd := m.Init()
@@ -15,12 +22,23 @@ func TestTUIModelView(t *testing.T) {
 	}
 
 	msg := cmd()
-	loaded, ok := msg.(graphLoadedMsg)
-	if !ok {
-		t.Fatalf("expected graphLoadedMsg")
+	batch, ok := msg.(tea.BatchMsg)
+	var loaded graphLoadedMsg
+	if ok {
+		for _, bcmd := range batch {
+			if bcmd != nil {
+				if l, isLoaded := bcmd().(graphLoadedMsg); isLoaded {
+					loaded = l
+					break
+				}
+			}
+		}
+	} else if l, isLoaded := msg.(graphLoadedMsg); isLoaded {
+		loaded = l
 	}
-	if loaded.err != nil {
-		t.Fatalf("unexpected error loading fixture: %v", loaded.err)
+
+	if loaded.resp == nil {
+		t.Fatalf("expected graphLoadedMsg with non-nil resp, err: %v", loaded.err)
 	}
 
 	// Process loaded message
@@ -128,8 +146,120 @@ func TestThemes(t *testing.T) {
 	}
 
 	// Verify cycle
-	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "dracula")
+	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "dracula", false, "", "")
 	if m.theme.Name != "Dracula" {
 		t.Errorf("expected Dracula, got %s", m.theme.Name)
+	}
+}
+
+func TestDiagnosticsMode(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ovn-central-0",
+				Namespace: "kube-system",
+				Labels:    map[string]string{"app": "ovn-central"},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ovs-ovn-node1",
+				Namespace: "kube-system",
+				Labels:    map[string]string{"app": "ovs-ovn"},
+			},
+			Spec:   corev1.PodSpec{NodeName: "node1"},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+	)
+
+	mockExec := diag.NewMockExecutor()
+	mockExec.StdoutMap["true"] = []byte("")
+	mockExec.StdoutMap["ovn-trace"] = []byte("output(\"target-port\");\n")
+	mockExec.StdoutMap["ovs-appctl"] = []byte("tcp,orig=(src=10.244.0.5,dst=10.244.0.1)\n")
+
+	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "default", true, "", "kube-system")
+	m.k8sClient = fakeClient
+	m.diagExecutor = mockExec
+	m.diagLocator = diag.NewPodLocator(fakeClient, "kube-system")
+
+	// Trigger probe
+	probeCmd := m.probeDiagCmd()
+	if probeCmd == nil {
+		t.Fatalf("expected non-nil probeDiagCmd")
+	}
+	probeMsg := probeCmd()
+	diagMsg, ok := probeMsg.(diagProbeMsg)
+	if !ok {
+		t.Fatalf("expected diagProbeMsg, got %T", probeMsg)
+	}
+	if !diagMsg.available {
+		t.Fatalf("expected diag to be available: %s", diagMsg.reason)
+	}
+
+	// Update model with probe result
+	m.diagAvailable = diagMsg.available
+	m.diagReason = diagMsg.reason
+	m.diagCentralPod = diagMsg.centralPod
+
+	// Apply graph fixture
+	snap := graph.LoadTestSnapshot(nil)
+	resp, _ := snap.BuildGraph("l3", "", 1, 1, 100)
+	m.applyGraph(resp)
+
+	// Verify DIAG ACTIVE badge in view
+	view := m.View()
+	if !strings.Contains(view, "DIAG ACTIVE") {
+		t.Errorf("expected DIAG ACTIVE badge in view, got: %s", view)
+	}
+	if !strings.Contains(view, "| x: diag") {
+		t.Errorf("expected | x: diag shortcut in view, got: %s", view)
+	}
+
+	// Open diagnostics modal
+	m.diagModal = true
+
+	modalView := m.View()
+	if !strings.Contains(modalView, "TIER 1 DIAGNOSTICS") {
+		t.Errorf("expected TIER 1 DIAGNOSTICS header in modal, got: %s", modalView)
+	}
+	if !strings.Contains(modalView, "[1] ovn-trace") {
+		t.Errorf("expected option [1] ovn-trace in modal, got: %s", modalView)
+	}
+
+	// Execute trace
+	var conn *RouterPortConnection
+	if len(m.portList) > 0 {
+		conn = &m.portList[0]
+	}
+	traceCmd := m.executeTrace(conn)
+	if traceCmd == nil {
+		t.Fatalf("expected non-nil traceCmd")
+	}
+	traceResMsg := traceCmd()
+	execMsg, ok := traceResMsg.(diagExecResultMsg)
+	if !ok {
+		t.Fatalf("expected diagExecResultMsg, got %T", traceResMsg)
+	}
+	if execMsg.err != nil {
+		t.Fatalf("unexpected trace error: %v", execMsg.err)
+	}
+
+	// Apply result
+	m.diagRunning = false
+	m.diagAction = execMsg.action
+	m.diagTitle = execMsg.title
+	m.diagTraceRes = execMsg.traceRes
+	m.diagRawOutput = execMsg.rawOutput
+
+	resultView := m.View()
+	if !strings.Contains(resultView, "DELIVERED") {
+		t.Errorf("expected DELIVERED verdict in trace result view, got: %s", resultView)
+	}
+
+	// Close modal
+	m.diagModal = false
+	if m.diagModal {
+		t.Errorf("expected diagModal to be closed")
 	}
 }

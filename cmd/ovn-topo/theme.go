@@ -45,6 +45,9 @@ type ThemeStyles struct {
 	TableRow         lipgloss.Style
 	TableRowSelected lipgloss.Style
 	MutedText        lipgloss.Style
+	DiagBadgeActive  lipgloss.Style
+	DiagBadgeDisabled lipgloss.Style
+	ModalBox         lipgloss.Style
 }
 
 // Built-in color themes
@@ -264,5 +267,21 @@ func CompileStyles(t Theme) ThemeStyles {
 
 		MutedText: lipgloss.NewStyle().
 			Foreground(t.Muted),
+
+		DiagBadgeActive: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(t.Warning). // Persimmon
+			Padding(0, 1),
+
+		DiagBadgeDisabled: lipgloss.NewStyle().
+			Foreground(t.Muted).
+			Background(t.BoxBg).
+			Padding(0, 1),
+
+		ModalBox: lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(t.Warning).
+			Padding(1, 2),
 	}
 }

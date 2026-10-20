@@ -130,8 +130,17 @@ kubectl --kubeconfig "$KUBECONFIG" port-forward -n kube-system svc/ovn-topologyd
 PF_PID=$!
 trap 'kill $PF_PID 2>/dev/null || true' EXIT INT TERM
 sleep 1
-./bin/ovn-topo --daemon-url="$DAEMON_URL"
+DIAG_FLAG=""
+if [ "${DIAG:-false}" = "true" ] || [ "${DIAG:-0}" = "1" ]; then
+  DIAG_FLAG="--diag --kubeconfig=$KUBECONFIG"
+fi
+./bin/ovn-topo --daemon-url="$DAEMON_URL" $DIAG_FLAG
 """
+
+[tasks.tui-diag]
+description = "Launch interactive TUI with Tier 1 exec-based diagnostics enabled (--diag)"
+depends = ["build"]
+run = "DIAG=true mise run tui"
 
 [tasks.tui-local]
 description = "Launch TUI against locally running daemon"

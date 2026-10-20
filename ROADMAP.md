@@ -230,9 +230,9 @@ Extension: add the L2 and Chassis views here.
 **Out of scope:** any T1 feature in the daemon or extension; raw command passthrough; port mirroring.
 
 **DoD**
-- [ ] `hack/check-deps.sh` still proves the daemon is free of `pkg/diag`.
+- [x] `hack/check-deps.sh` still proves the daemon is free of `pkg/diag`.
 - [ ] Layer 3 e2e for trace (match built correctly, known verdicts per scenario) and tcpdump (ICMP between two pods captured in port mode and in VNI mode).
-- [ ] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
+- [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
 
 ---
 
