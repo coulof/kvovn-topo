@@ -3,4 +3,168 @@ go = "1.27"
 node = "24"
 yarn = "1.22.22"
 golangci-lint = "2.15.0"
-task = "3.54.0"
+
+[env]
+KUBECONFIG = "~/.kube/hv-01.yaml"
+NB_PORT = "6641"
+SB_PORT = "6642"
+DAEMON_PORT = "8080"
+DAEMON_URL = "http://127.0.0.1:8080/api/v1"
+PROXY_POD = "ovn-topology-proxy"
+PROXY_NAMESPACE = "kube-system"
+
+[tasks.build]
+description = "Build ovn-topologyd and ovn-topo binaries"
+run = "make build"
+
+[tasks.pf-proxy-deploy]
+description = "Deploy the lightweight OVN port-forwarding bridge pod into kube-system"
+run = """
+if ! kubectl --kubeconfig "$KUBECONFIG" get pod -n "$PROXY_NAMESPACE" "$PROXY_POD" > /dev/null 2>&1; then
+  echo "Deploying $PROXY_POD in $PROXY_NAMESPACE..."
+  cat << 'EOF' | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ovn-topology-proxy
+  namespace: kube-system
+  labels:
+    app: ovn-topology-proxy
+spec:
+  containers:
+    - name: proxy
+      image: docker.io/kubeovn/kube-ovn:v1.16.2
+      imagePullPolicy: IfNotPresent
+      command:
+        - python3
+        - -c
+        - |
+          import asyncio
+
+          async def pipe(reader, writer):
+              try:
+                  while True:
+                      data = await reader.read(65536)
+                      if not data:
+                          break
+                      writer.write(data)
+                      await writer.drain()
+              except Exception:
+                  pass
+              finally:
+                  writer.close()
+
+          async def handle_nb(reader, writer):
+              r, w = await asyncio.open_connection("ovn-nb.kube-system.svc.cluster.local", 6641)
+              asyncio.create_task(pipe(reader, w))
+              asyncio.create_task(pipe(r, writer))
+
+          async def handle_sb(reader, writer):
+              r, w = await asyncio.open_connection("ovn-sb.kube-system.svc.cluster.local", 6642)
+              asyncio.create_task(pipe(reader, w))
+              asyncio.create_task(pipe(r, writer))
+
+          async def main():
+              s1 = await asyncio.start_server(handle_nb, "0.0.0.0", 6641)
+              s2 = await asyncio.start_server(handle_sb, "0.0.0.0", 6642)
+              async with s1, s2:
+                  await asyncio.gather(s1.serve_forever(), s2.serve_forever())
+
+          asyncio.run(main())
+      ports:
+        - containerPort: 6641
+        - containerPort: 6642
+EOF
+  kubectl --kubeconfig "$KUBECONFIG" wait --for=condition=Ready pod/"$PROXY_POD" -n "$PROXY_NAMESPACE" --timeout=30s
+fi
+"""
+
+[tasks.pf-proxy-remove]
+description = "Delete the OVN port-forwarding bridge pod from kube-system"
+depends = ["pf-stop"]
+run = "kubectl --kubeconfig \"$KUBECONFIG\" delete pod -n \"$PROXY_NAMESPACE\" \"$PROXY_POD\" --ignore-not-found"
+
+[tasks.pf]
+alias = "port-forward"
+description = "Start background port-forwarding for ovn-nb (6641) and ovn-sb (6642)"
+depends = ["pf-proxy-deploy"]
+run = """
+pkill -f "kubectl.*port-forward.*$PROXY_POD" || true
+pkill -f "kubectl.*port-forward.*6641" || true
+pkill -f "kubectl.*port-forward.*6642" || true
+echo "Starting background port-forward to $PROXY_POD..."
+nohup kubectl --kubeconfig "$KUBECONFIG" port-forward -n "$PROXY_NAMESPACE" pod/"$PROXY_POD" "$NB_PORT":6641 "$SB_PORT":6642 > /tmp/ovn-pf.log 2>&1 &
+sleep 2
+echo "Port-forward active on 127.0.0.1:$NB_PORT (NB) and 127.0.0.1:$SB_PORT (SB)"
+"""
+
+[tasks.pf-stop]
+alias = "port-forward-stop"
+description = "Stop active port-forwards on OVN ports"
+run = """
+pkill -f "kubectl.*port-forward.*$PROXY_POD" || true
+pkill -f "kubectl.*port-forward.*6641" || true
+pkill -f "kubectl.*port-forward.*6642" || true
+echo "Port-forwards stopped."
+"""
+
+[tasks.daemon]
+description = "Run ovn-topologyd locally against live cluster OVN databases"
+depends = ["build"]
+run = """
+./bin/ovn-topologyd \
+  --kubeconfig="$KUBECONFIG" \
+  --nb-endpoints="tcp:127.0.0.1:$NB_PORT" \
+  --sb-endpoints="tcp:127.0.0.1:$SB_PORT" \
+  --listen-addr=":$DAEMON_PORT" \
+  --log-level=info
+"""
+
+[tasks.tui]
+description = "Launch interactive Bubble Tea TUI against the running daemon"
+depends = ["build"]
+run = "./bin/ovn-topo --daemon-url=$DAEMON_URL"
+
+[tasks.tui-offline]
+description = "Launch TUI in offline mode using bundled dev fixtures"
+depends = ["build"]
+run = "./bin/ovn-topo --fixture"
+
+[tasks.curl-ready]
+description = "Check daemon readiness"
+run = "curl -s \"http://127.0.0.1:$DAEMON_PORT/readyz\" | jq ."
+
+[tasks.curl-version]
+description = "Query daemon and OVN schema versions"
+run = "curl -s \"http://127.0.0.1:$DAEMON_PORT/version\" | jq ."
+
+[tasks.curl-graph]
+description = "Fetch aggregated L3 graph"
+run = "curl -s \"$DAEMON_URL/graph?view=l3\" | jq ."
+
+[tasks.curl-chassis]
+description = "Fetch chassis status list"
+run = "curl -s \"$DAEMON_URL/chassis\" | jq ."
+
+[tasks.curl-events]
+description = "Stream live SSE events"
+run = "curl -N -s \"$DAEMON_URL/events\""
+
+[tasks.test-live]
+description = "Run end-to-end verification against the running daemon"
+run = """
+echo "==> Checking /readyz..."
+curl -fsS "http://127.0.0.1:$DAEMON_PORT/readyz" | jq .
+echo "==> Checking /version..."
+curl -fsS "http://127.0.0.1:$DAEMON_PORT/version" | jq .
+echo "==> Checking /graph?view=l3..."
+curl -fsS "$DAEMON_URL/graph?view=l3" | jq '{revision: .revision, nodes: (.nodes | length), edges: (.edges | length), vpcs: [.nodes[] | select(.type=="VPC") | .name]}'
+echo "==> Checking /chassis..."
+curl -fsS "$DAEMON_URL/chassis" | jq '{total_chassis: (.items | length), hostnames: [.items[].hostname]}'
+echo "==> All live tests passed!"
+"""
+
+[tasks.clean]
+description = "Stop port-forwards and clean build artifacts"
+depends = ["pf-stop"]
+run = "rm -rf bin/"

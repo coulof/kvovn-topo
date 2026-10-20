@@ -46,20 +46,20 @@ To test against an existing cluster (for example `export KUBECONFIG=~/.kube/hv-0
 
 ```bash
 # 1. Forward OVN database ports to localhost
-task port-forward
+mise run pf
 
 # 2. Run the daemon locally (terminal 1)
-task daemon
+mise run daemon
 
 # 3. Test the API or launch the TUI (terminal 2)
-task test-live
-task tui
+mise run test-live
+mise run tui
 ```
 
 When finished, stop the port-forwarding:
 
 ```bash
-task port-forward-stop
+mise run pf-stop
 ```
 
 ## TUI Controls (`ovn-topo`)
