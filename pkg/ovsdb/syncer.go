@@ -330,6 +330,7 @@ func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
 		if err := s.sbClient.List(ctx, &chassisList); err == nil {
 			for i := range chassisList {
 				draft.Chassis[chassisList[i].Name] = &chassisList[i]
+				draft.Chassis[chassisList[i].UUID] = &chassisList[i]
 			}
 		}
 		var encaps []sbmodel.Encap
@@ -410,8 +411,10 @@ func applyEventToDraft(draft *graph.Snapshot, ev dbEvent) []string {
 	case *sbmodel.Chassis:
 		if ev.eventType == eventDelete {
 			delete(draft.Chassis, val.Name)
+			delete(draft.Chassis, val.UUID)
 		} else {
 			draft.Chassis[val.Name] = val
+			draft.Chassis[val.UUID] = val
 		}
 		changed = append(changed, graph.PrefixChassis+val.Name)
 

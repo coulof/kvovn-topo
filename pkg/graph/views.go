@@ -364,7 +364,11 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 
 		k8sMeta := ExtractK8sMetadata(lsp.ExternalIDs)
 		if boundChassis != "" && k8sMeta != nil && k8sMeta.Node == nil {
-			mappedNode := s.NodeMapper.NodeForChassis("", boundChassis)
+			hostname := ""
+			if ch, ok := s.Chassis[boundChassis]; ok {
+				hostname = ch.Hostname
+			}
+			mappedNode := s.NodeMapper.NodeForChassis(hostname, boundChassis)
 			if mappedNode != "" {
 				k8sMeta.Node = &mappedNode
 			}
@@ -485,14 +489,20 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse {
 	nodes := make([]api.GraphNode, 0, len(s.Chassis))
 
+	seenChassis := make(map[string]struct{})
 	for _, ch := range s.Chassis {
+		if _, seen := seenChassis[ch.Name]; seen {
+			continue
+		}
+		seenChassis[ch.Name] = struct{}{}
+
 		chassisID := PrefixChassis + ch.Name
 		nodeName := s.NodeMapper.NodeForChassis(ch.Hostname, ch.Name)
 
 		// Count bindings
 		bindingCount := 0
 		for _, pb := range s.PortBindings {
-			if pb.Chassis != nil && *pb.Chassis == ch.Name {
+			if pb.Chassis != nil && (*pb.Chassis == ch.Name || *pb.Chassis == ch.UUID) {
 				bindingCount++
 			}
 		}
