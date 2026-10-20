@@ -1,0 +1,27 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: '.*\.Create'
+          msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+        - pattern: '.*\.Update'
+          msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+        - pattern: '.*\.Mutate'
+          msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+        - pattern: '.*\.Delete'
+          msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+        - pattern: '.*\.Transact'
+          msg: "write operations to OVSDB or Kubernetes are forbidden: repo is read-only"
+  exclusions:
+    paths:
+      - ui

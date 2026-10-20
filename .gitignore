@@ -1,0 +1,32 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+/private/var/
+
+# Dependency directories
+vendor/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# UI build artifacts
+ui/node_modules/
+ui/dist/
+ui/dist-pkg/
+ui/.yarn/cache/
+ui/.yarn/unplugged/
+ui/.pnp.*

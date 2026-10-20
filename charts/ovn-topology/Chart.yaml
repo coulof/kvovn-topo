@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ovn-topology
+description: Read-only network topology daemon for OVN / Kube-OVN
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - networking
+  - ovn
+  - kube-ovn
+  - topology
+  - rancher
+home: https://github.com/coulof/ovn-topology
+sources:
+  - https://github.com/coulof/ovn-topology
+maintainers:
+  - name: coulof

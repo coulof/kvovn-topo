@@ -1,0 +1,510 @@
+openapi: 3.0.3
+info:
+  title: ovn-topology API
+  version: 1.0.0
+  description: Read-only network topology API for OVN as deployed by Kube-OVN.
+servers:
+  - url: /api/v1
+    description: Base API path
+
+paths:
+  /graph:
+    get:
+      summary: Get aggregated graph
+      description: Returns an aggregated network topology graph for the specified view.
+      operationId: getGraph
+      parameters:
+        - name: view
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [l3, l2, chassis]
+            default: l3
+          description: Graph view type (defaults to l3).
+        - name: focus
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Focus node ID to center on or drill into (e.g. ls:<uuid> in L2 view).
+        - name: depth
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: Hop depth for focus node exploration.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: Page number for paginated nodes (e.g. LSPs in L2 view).
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Page size for paginated nodes (max 200).
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Revision entity tag. Returns 304 if graph has not changed.
+      responses:
+        '200':
+          description: Topology graph snapshot.
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Current graph revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphResponse'
+        '304':
+          description: Not Modified. Graph has not changed since the specified revision.
+        '400':
+          description: Invalid request parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Daemon is initializing or database monitors not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /node/{id}:
+    get:
+      summary: Get detailed node info
+      description: Returns full details, raw columns, external_ids, and related objects for a single node.
+      operationId: getNode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Typed node ID (e.g. lr:<uuid>, ls:<uuid>, chassis:<name>).
+      responses:
+        '200':
+          description: Node detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDetail'
+        '404':
+          description: Node not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Daemon not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /chassis:
+    get:
+      summary: List chassis
+      description: Returns all chassis with encaps, binding counts, and gateway roles.
+      operationId: getChassis
+      responses:
+        '200':
+          description: List of chassis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChassisList'
+        '503':
+          description: Daemon not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events:
+    get:
+      summary: SSE event stream
+      description: Server-Sent Events stream delivering graph revision changes and affected node IDs.
+      operationId: getEvents
+      responses:
+        '200':
+          description: Event stream.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/GraphEvent'
+
+  /healthz:
+    get:
+      summary: Health check
+      description: Returns 200 if daemon process is healthy.
+      operationId: getHealthz
+      responses:
+        '200':
+          description: Healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /readyz:
+    get:
+      summary: Readiness check
+      description: Returns 200 only after initial NB and SB snapshots have been synchronized into the graph.
+      operationId: getReadyz
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '503':
+          description: Not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /version:
+    get:
+      summary: Version info
+      description: Returns daemon version, API version, and OVN schema versions.
+      operationId: getVersion
+      responses:
+        '200':
+          description: Version information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionInfo'
+
+components:
+  schemas:
+    GraphResponse:
+      type: object
+      required:
+        - revision
+        - view
+        - nodes
+        - edges
+      properties:
+        revision:
+          type: integer
+          description: Monotonically increasing graph revision.
+        view:
+          type: string
+          enum: [l3, l2, chassis]
+          description: View type of the returned graph.
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    GraphNode:
+      type: object
+      required:
+        - id
+        - type
+        - name
+      properties:
+        id:
+          type: string
+          description: Typed node ID (e.g. lr:<uuid>, ls:<uuid>, lsp:<uuid>, ext:<name>).
+        type:
+          type: string
+          enum: [LR, LS, LRP, LSP, Chassis, NAT, Route, Policy, LB, HAChassisGroup, External, VPC]
+          description: Node type.
+        name:
+          type: string
+          description: Name of the node object.
+        parent:
+          type: string
+          description: Optional parent node ID for compound/nested node layout.
+        properties:
+          type: object
+          additionalProperties: true
+          description: Aggregated or specific node properties (e.g. port counts, IP/MAC, active chassis).
+        k8s:
+          $ref: '#/components/schemas/K8sMetadata'
+
+    GraphEdge:
+      type: object
+      required:
+        - id
+        - source
+        - target
+        - type
+      properties:
+        id:
+          type: string
+          description: Edge identifier.
+        source:
+          type: string
+          description: Source node ID.
+        target:
+          type: string
+          description: Target node ID.
+        type:
+          type: string
+          enum: [contains, router-peer, bound-on, gateway, nat-target, localnet]
+          description: Edge relationship type.
+        label:
+          type: string
+          description: Optional human-readable label (e.g. LRP IP prefix / network).
+        properties:
+          type: object
+          additionalProperties: true
+          description: Edge properties (e.g. priority, active status).
+
+    PaginationInfo:
+      type: object
+      required:
+        - page
+        - pageSize
+        - totalItems
+        - totalPages
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        totalPages:
+          type: integer
+
+    K8sMetadata:
+      type: object
+      properties:
+        namespace:
+          type: string
+        pod:
+          type: string
+        node:
+          type: string
+        subnet:
+          type: string
+        vpc:
+          type: string
+        vendor:
+          type: string
+          description: Value of vendor tag (e.g. kube-ovn).
+
+    NodeDetail:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - raw
+        - externalIds
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        raw:
+          type: object
+          additionalProperties: true
+          description: Raw columns from OVSDB.
+        externalIds:
+          type: object
+          additionalProperties:
+            type: string
+        k8s:
+          $ref: '#/components/schemas/K8sMetadata'
+        related:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelatedObject'
+
+    RelatedObject:
+      type: object
+      required:
+        - id
+        - type
+        - relationship
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        relationship:
+          type: string
+        name:
+          type: string
+
+    ChassisList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChassisDetail'
+
+    ChassisDetail:
+      type: object
+      required:
+        - name
+        - hostname
+        - encaps
+        - bindingCount
+        - gatewayRoles
+        - haGroups
+      properties:
+        name:
+          type: string
+          description: Chassis UUID or name.
+        hostname:
+          type: string
+        nodeName:
+          type: string
+        encaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/EncapDetail'
+        bindingCount:
+          type: integer
+        boundPorts:
+          type: array
+          items:
+            type: string
+        gatewayRoles:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayRole'
+        haGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/HAGroupRole'
+        otherConfig:
+          type: object
+          additionalProperties:
+            type: string
+        externalIds:
+          type: object
+          additionalProperties:
+            type: string
+
+    EncapDetail:
+      type: object
+      required:
+        - type
+        - ip
+      properties:
+        type:
+          type: string
+        ip:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+
+    GatewayRole:
+      type: object
+      required:
+        - lrpName
+        - routerName
+        - priority
+        - active
+      properties:
+        lrpName:
+          type: string
+        routerName:
+          type: string
+        priority:
+          type: integer
+        active:
+          type: boolean
+
+    HAGroupRole:
+      type: object
+      required:
+        - groupName
+        - priority
+      properties:
+        groupName:
+          type: string
+        priority:
+          type: integer
+
+    GraphEvent:
+      type: object
+      required:
+        - revision
+        - changed
+      properties:
+        revision:
+          type: integer
+        changed:
+          type: array
+          items:
+            type: string
+
+    StatusResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+
+    VersionInfo:
+      type: object
+      required:
+        - version
+        - apiVersion
+        - ovnNbSchemaVersion
+        - ovnSbSchemaVersion
+        - gitCommit
+        - buildDate
+      properties:
+        version:
+          type: string
+        apiVersion:
+          type: string
+        ovnNbSchemaVersion:
+          type: string
+        ovnSbSchemaVersion:
+          type: string
+        gitCommit:
+          type: string
+        buildDate:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string

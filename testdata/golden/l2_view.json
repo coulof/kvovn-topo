@@ -1,0 +1,160 @@
+{
+  "edges": [
+    {
+      "id": "edge:ls:ls-default-uuid-lsp:lsp-def-router-uuid-contains",
+      "source": "ls:ls-default-uuid",
+      "target": "lsp:lsp-def-router-uuid",
+      "type": "contains"
+    },
+    {
+      "id": "edge:ls:ls-default-uuid-lsp:lsp-pod1-uuid-contains",
+      "source": "ls:ls-default-uuid",
+      "target": "lsp:lsp-pod1-uuid",
+      "type": "contains"
+    },
+    {
+      "id": "edge:lsp:lsp-pod1-uuid-chassis:chassis-node-1-bound-on",
+      "source": "lsp:lsp-pod1-uuid",
+      "target": "chassis:chassis-node-1",
+      "type": "bound-on"
+    },
+    {
+      "id": "edge:ls:ls-default-uuid-lsp:lsp-pod2-uuid-contains",
+      "source": "ls:ls-default-uuid",
+      "target": "lsp:lsp-pod2-uuid",
+      "type": "contains"
+    },
+    {
+      "id": "edge:lsp:lsp-pod2-uuid-chassis:chassis-node-2-bound-on",
+      "source": "lsp:lsp-pod2-uuid",
+      "target": "chassis:chassis-node-2",
+      "type": "bound-on"
+    },
+    {
+      "id": "edge:ls:ls-default-uuid-lsp:lsp-unbound-uuid-contains",
+      "source": "ls:ls-default-uuid",
+      "target": "lsp:lsp-unbound-uuid",
+      "type": "contains"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ls:ls-default-uuid",
+      "k8s": {
+        "subnet": "default-subnet",
+        "vendor": "kube-ovn"
+      },
+      "name": "default-subnet",
+      "properties": {
+        "portCount": 4
+      },
+      "type": "LS"
+    },
+    {
+      "id": "lsp:lsp-def-router-uuid",
+      "k8s": {
+        "vendor": "kube-ovn"
+      },
+      "name": "lsp-def-router",
+      "properties": {
+        "addresses": null,
+        "boundChassis": "",
+        "boundState": "unbound",
+        "enabled": true,
+        "type": "router",
+        "up": false
+      },
+      "type": "LSP"
+    },
+    {
+      "id": "lsp:lsp-pod1-uuid",
+      "k8s": {
+        "namespace": "default",
+        "node": "node-1",
+        "pod": "app-pod-1",
+        "vendor": "kube-ovn"
+      },
+      "name": "app-pod-1.default",
+      "properties": {
+        "addresses": [
+          "00:00:00:aa:bb:01 10.244.0.10"
+        ],
+        "boundChassis": "chassis-node-1",
+        "boundState": "bound",
+        "enabled": true,
+        "type": "",
+        "up": false
+      },
+      "type": "LSP"
+    },
+    {
+      "id": "lsp:lsp-pod2-uuid",
+      "k8s": {
+        "namespace": "default",
+        "node": "node-2",
+        "pod": "app-pod-2",
+        "vendor": "kube-ovn"
+      },
+      "name": "app-pod-2.default",
+      "properties": {
+        "addresses": [
+          "00:00:00:aa:bb:02 10.244.0.11"
+        ],
+        "boundChassis": "chassis-node-2",
+        "boundState": "bound",
+        "enabled": true,
+        "type": "",
+        "up": false
+      },
+      "type": "LSP"
+    },
+    {
+      "id": "lsp:lsp-unbound-uuid",
+      "k8s": {
+        "namespace": "default",
+        "pod": "pending-pod",
+        "vendor": "kube-ovn"
+      },
+      "name": "pending-pod.default",
+      "properties": {
+        "addresses": [
+          "00:00:00:aa:bb:03 10.244.0.12"
+        ],
+        "boundChassis": "",
+        "boundState": "unbound",
+        "enabled": true,
+        "type": "",
+        "up": false
+      },
+      "type": "LSP"
+    },
+    {
+      "id": "chassis:chassis-node-1",
+      "name": "node-1",
+      "properties": {
+        "chassis": "chassis-node-1",
+        "hostname": "node-1",
+        "nodeName": "node-1"
+      },
+      "type": "Chassis"
+    },
+    {
+      "id": "chassis:chassis-node-2",
+      "name": "node-2",
+      "properties": {
+        "chassis": "chassis-node-2",
+        "hostname": "node-2",
+        "nodeName": "node-2"
+      },
+      "type": "Chassis"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 50,
+    "totalItems": 4,
+    "totalPages": 1
+  },
+  "revision": 1,
+  "view": "l2"
+}
