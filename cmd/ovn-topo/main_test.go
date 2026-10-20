@@ -42,10 +42,19 @@ func TestTUIModelView(t *testing.T) {
 		t.Fatalf("expected graphLoadedMsg with non-nil resp, err: %v", loaded.err)
 	}
 
-	// Process loaded message
+	// Process loaded message (expanded by default in M2)
 	m.applyGraph(loaded.resp)
 
-	// Verify exact visual top-to-bottom order of nodeList
+	if len(m.nodeList) != 16 {
+		t.Fatalf("expected 16 nodes in expanded navigation list (including LSPs), got %d", len(m.nodeList))
+	}
+
+	// Collapse switches to test top-level router and switch order
+	for k := range m.expandedSwitches {
+		m.expandedSwitches[k] = false
+	}
+	m.rebuildNodeList()
+
 	expectedOrder := []string{
 		"ovn_cluster",     // Router in VPC default
 		"default-subnet",  // Switch in VPC default
@@ -57,7 +66,7 @@ func TestTUIModelView(t *testing.T) {
 	}
 
 	if len(m.nodeList) != len(expectedOrder) {
-		t.Fatalf("expected %d nodes in navigation list, got %d", len(expectedOrder), len(m.nodeList))
+		t.Fatalf("expected %d nodes in collapsed navigation list, got %d", len(expectedOrder), len(m.nodeList))
 	}
 
 	for i, expectedName := range expectedOrder {
@@ -65,6 +74,12 @@ func TestTUIModelView(t *testing.T) {
 			t.Errorf("at index %d: expected %s, got %s", i, expectedName, m.nodeList[i].Name)
 		}
 	}
+
+	// Re-expand switches for view rendering
+	for k := range m.expandedSwitches {
+		m.expandedSwitches[k] = true
+	}
+	m.rebuildNodeList()
 
 	// 1. Verify Tree View rendering
 	treeView := m.View()
@@ -108,11 +123,11 @@ func TestTUIModelView(t *testing.T) {
 		m.l2Nodes = lsps
 	}
 	l2View := m.View()
-	if !strings.Contains(l2View, "Subnet:") {
-		t.Errorf("expected Subnet header in L2 view, got: %s", l2View)
+	if !strings.Contains(l2View, "Subnets (Broadcast Domains)") {
+		t.Errorf("expected Subnets header in L2 view, got: %s", l2View)
 	}
-	if !strings.Contains(l2View, "WORKLOAD IDENTITY") {
-		t.Errorf("expected WORKLOAD IDENTITY column in L2 view, got: %s", l2View)
+	if !strings.Contains(l2View, "Workloads in default-subnet") {
+		t.Errorf("expected Workloads in default-subnet in L2 view, got: %s", l2View)
 	}
 
 	// 3. Switch to Chassis View
@@ -124,11 +139,11 @@ func TestTUIModelView(t *testing.T) {
 		m.chassisNodes = chassisMsg.resp.Nodes
 	}
 	chassisView := m.View()
-	if !strings.Contains(chassisView, "Cluster Chassis & Nodes") {
-		t.Errorf("expected Cluster Chassis & Nodes in Chassis view, got: %s", chassisView)
+	if !strings.Contains(chassisView, "Cluster Nodes") {
+		t.Errorf("expected Cluster Nodes in Chassis view, got: %s", chassisView)
 	}
-	if !strings.Contains(chassisView, "node-1") {
-		t.Errorf("expected node-1 in Chassis view, got: %s", chassisView)
+	if !strings.Contains(chassisView, "Node Details: node-1") {
+		t.Errorf("expected Node Details: node-1 in Chassis view, got: %s", chassisView)
 	}
 
 	// 4. Switch to Matrix View and verify table rendering
