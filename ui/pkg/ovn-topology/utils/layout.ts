@@ -39,10 +39,10 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       const vpcContainer: ElkNode = {
         'id':            n.id,
         'layoutOptions': {
-          'elk.padding':          '[top=45,left=25,bottom=25,right=25]',
+          'elk.padding':          '[top=55,left=35,bottom=35,right=35]',
           'elk.algorithm':        'layered',
           'elk.direction':        'DOWN',
-          'elk.spacing.nodeNode': '30',
+          'elk.spacing.nodeNode': '50',
         },
         'children': [],
       };
@@ -57,8 +57,8 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       continue;
     }
 
-    const w = n.type === 'LR' ? 180 : 160;
-    const h = n.type === 'LR' ? 65 : 55;
+    const w = n.type === 'LR' ? 220 : n.type === 'External' ? 180 : 200;
+    const h = n.type === 'LR' ? 75 : n.type === 'External' ? 55 : 65;
 
     const elkChild: ElkNode = {
       'id':     n.id,
@@ -92,9 +92,9 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       'elk.algorithm':                             'layered',
       'elk.direction':                             'DOWN',
       'elk.hierarchyHandling':                     'INCLUDE_CHILDREN',
-      'elk.spacing.nodeNode':                      '45',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '60',
-      'elk.padding':                               '[top=30,left=30,bottom=30,right=30]',
+      'elk.spacing.nodeNode':                      '65',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '110',
+      'elk.padding':                               '[top=40,left=40,bottom=40,right=40]',
     },
     'children': rootChildren,
     'edges':    elkEdges,
@@ -123,12 +123,15 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       const original = nodeMap.get(child.id);
 
       if (original) {
+        const defW = original.type === 'LR' ? 220 : original.type === 'External' ? 180 : 200;
+        const defH = original.type === 'LR' ? 75 : original.type === 'External' ? 55 : 65;
+
         positionedNodes.push({
           ...original,
           'x':          absX,
           'y':          absY,
-          'width':      child.width || 160,
-          'height':     child.height || 60,
+          'width':      child.children && child.children.length > 0 ? (child.width || 250) : defW,
+          'height':     child.children && child.children.length > 0 ? (child.height || 180) : defH,
           'isCompound': child.children && child.children.length > 0,
         });
       }
@@ -151,9 +154,9 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
     const tgtNode = nodeMap.get(e.target);
 
     if (srcCoords && tgtCoords && srcNode && tgtNode) {
-      const srcW = srcNode.type === 'LR' ? 180 : 160;
-      const srcH = srcNode.type === 'LR' ? 65 : 55;
-      const tgtW = tgtNode.type === 'LR' ? 180 : 160;
+      const srcW = srcNode.type === 'LR' ? 220 : srcNode.type === 'External' ? 180 : 200;
+      const srcH = srcNode.type === 'LR' ? 75 : srcNode.type === 'External' ? 55 : 65;
+      const tgtW = tgtNode.type === 'LR' ? 220 : tgtNode.type === 'External' ? 180 : 200;
 
       const startX = srcCoords.x + srcW / 2;
       const startY = srcCoords.y + srcH;

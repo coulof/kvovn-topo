@@ -96,7 +96,12 @@ export default defineComponent({
           v-if="graphData"
           class="header-badges"
         >
-          <span class="badge revision">Rev {{ graphData.revision }}</span>
+          <span
+            class="badge synced"
+            :title="'Snapshot Revision ' + graphData.revision"
+          >
+            <span class="dot">●</span> Synced
+          </span>
           <span class="badge stat">{{ graphData.nodes.length }} Nodes</span>
           <span class="badge stat">{{ graphData.edges.length }} Edges</span>
         </div>
@@ -187,9 +192,18 @@ export default defineComponent({
           font-size: 11px;
           font-weight: 600;
 
-          &.revision {
-            background-color: var(--primary);
-            color: #ffffff;
+          &.synced {
+            background-color: var(--body-bg);
+            border: 1px solid var(--border);
+            color: var(--body-text);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+
+            .dot {
+              color: var(--success);
+              font-size: 10px;
+            }
           }
 
           &.stat {
