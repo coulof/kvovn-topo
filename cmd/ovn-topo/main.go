@@ -457,7 +457,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
-				return m, m.executeTcpdump("icmp or icmp6", nodeName)
+				portName := m.selectedPortName()
+				targetIP := m.selectedTargetIP()
+				return m, m.executeTcpdump("icmp or icmp6", nodeName, portName, targetIP)
 			case "3":
 				if m.diagRunning {
 					return m, nil
@@ -465,7 +467,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
-				return m, m.executeTcpdump("tcp", nodeName)
+				portName := m.selectedPortName()
+				targetIP := m.selectedTargetIP()
+				return m, m.executeTcpdump("tcp", nodeName, portName, targetIP)
 			case "4":
 				if m.diagRunning {
 					return m, nil
@@ -473,12 +477,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagError = nil
 				nodeName := m.selectedNodeName()
+				portName := m.selectedPortName()
 				targetIP := m.selectedTargetIP()
 				filter := "ip"
 				if targetIP != "" {
 					filter = fmt.Sprintf("host %s", targetIP)
 				}
-				return m, m.executeTcpdump(filter, nodeName)
+				return m, m.executeTcpdump(filter, nodeName, portName, targetIP)
 			case "5":
 				if m.diagRunning {
 					return m, nil
@@ -591,6 +596,30 @@ func (m model) selectedTargetIP() string {
 			if len(ports[0].Networks) > 0 {
 				return strings.Split(ports[0].Networks[0], "/")[0]
 			}
+		}
+	}
+	return ""
+}
+
+func (m model) selectedPortName() string {
+	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		conn := m.portList[m.selectedIdx]
+		if conn.PeerPortName != "" {
+			return conn.PeerPortName
+		}
+		return conn.PortName
+	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		node := m.nodeList[m.selectedIdx]
+		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
+			if ports[0].PeerPortName != "" {
+				return ports[0].PeerPortName
+			}
+			return ports[0].PortName
+		} else if ports, ok := m.switchPorts[node.Id]; ok && len(ports) > 0 {
+			if ports[0].PeerPortName != "" {
+				return ports[0].PeerPortName
+			}
+			return ports[0].PortName
 		}
 	}
 	return ""
@@ -736,23 +765,31 @@ func (m model) executeNodeDiag(action string, nodeName string, targetIP string) 
 	}
 }
 
-func (m model) executeTcpdump(filter string, nodeName string) tea.Cmd {
+func (m model) executeTcpdump(filter string, hintNode string, portName string, portIP string) tea.Cmd {
 	return func() tea.Msg {
 		if m.diagExecutor == nil || m.diagLocator == nil {
 			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if nodeName == "" && m.k8sClient != nil {
-			nodes, err := m.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
-			if err == nil && len(nodes.Items) > 0 {
-				nodeName = nodes.Items[0].Name
+		nodeName, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, hintNode, portName)
+		if err != nil || nodeName == "" {
+			if hintNode != "" {
+				nodeName = hintNode
+			} else {
+				nodeName = "cluster-node"
+			}
+			if iface == "" {
+				iface = "br-int"
 			}
 		}
-		if nodeName == "" {
-			nodeName = "cluster-node"
+
+		// If capturing on br-int, scope the capture to the port's IP
+		effectiveFilter := filter
+		if iface == "br-int" && portIP != "" && !strings.Contains(filter, "host") {
+			effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, portIP)
 		}
 
 		pod, err := m.diagLocator.FindNodeCNIPod(ctx, nodeName)
@@ -761,8 +798,8 @@ func (m model) executeTcpdump(filter string, nodeName string) tea.Cmd {
 		}
 
 		req := diag.TcpdumpRequest{
-			Interface: "any",
-			Filter:    filter,
+			Interface: iface,
+			Filter:    effectiveFilter,
 			Count:     15,
 		}
 		cmd, err := diag.BuildTcpdumpCommand(req)
@@ -771,23 +808,33 @@ func (m model) executeTcpdump(filter string, nodeName string) tea.Cmd {
 		}
 
 		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
-		if err != nil && len(stdout) == 0 {
-			errMsg := string(stderr)
-			if errMsg == "" {
-				errMsg = err.Error()
-			}
-			return diagExecResultMsg{err: fmt.Errorf("tcpdump failed: %s", errMsg)}
+
+		raw := string(stdout)
+		if raw == "" && len(stderr) > 0 {
+			raw = string(stderr)
 		}
 
-		out := string(stdout)
-		if out == "" && len(stderr) > 0 {
-			out = string(stderr)
+		// Format output and handle 0 packets captured within timeout
+		if strings.Contains(raw, "0 packets captured") || (err != nil && strings.Contains(err.Error(), "124")) {
+			raw = fmt.Sprintf("Listening on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n0 packets captured within 5s (Interface is currently quiet).",
+				iface, portName, nodeName, effectiveFilter)
+		} else {
+			lines := strings.Split(raw, "\n")
+			var filteredLines []string
+			for _, line := range lines {
+				if strings.Contains(line, "listening on") || strings.Contains(line, "verbose output") {
+					continue
+				}
+				filteredLines = append(filteredLines, line)
+			}
+			raw = fmt.Sprintf("Captured on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n%s",
+				iface, portName, nodeName, effectiveFilter, strings.TrimSpace(strings.Join(filteredLines, "\n")))
 		}
 
 		return diagExecResultMsg{
 			action:    "tcpdump",
-			title:     fmt.Sprintf("Live tcpdump (filter: '%s') on node %s", filter, nodeName),
-			rawOutput: out,
+			title:     fmt.Sprintf("Live tcpdump on %s (%s)", iface, portName),
+			rawOutput: raw,
 		}
 	}
 }

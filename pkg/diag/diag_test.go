@@ -173,7 +173,7 @@ func TestBuildTcpdumpCommand(t *testing.T) {
 				Count:     50,
 			},
 			wantErr: false,
-			wantCmd: []string{"tcpdump", "-i", "test_h", "-nn", "-c", "50", "tcp port 80"},
+			wantCmd: []string{"timeout", "5", "tcpdump", "-i", "test_h", "-nn", "-c", "50", "tcp port 80"},
 		},
 		{
 			name: "packet count capped at max",
@@ -182,7 +182,7 @@ func TestBuildTcpdumpCommand(t *testing.T) {
 				Count:     5000,
 			},
 			wantErr: false,
-			wantCmd: []string{"tcpdump", "-i", "geneve0", "-nn", "-c", "1000", "ip"},
+			wantCmd: []string{"timeout", "5", "tcpdump", "-i", "geneve0", "-nn", "-c", "1000", "ip"},
 		},
 		{
 			name: "injection in filter",
