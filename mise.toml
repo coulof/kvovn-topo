@@ -122,7 +122,19 @@ run = """
 """
 
 [tasks.tui]
-description = "Launch interactive Bubble Tea TUI against the running daemon"
+description = "Launch interactive Bubble Tea TUI connected directly to in-cluster pod"
+depends = ["build"]
+run = """
+pkill -f "kubectl.*port-forward.*ovn-topologyd" || true
+kubectl --kubeconfig "$KUBECONFIG" port-forward -n kube-system svc/ovn-topologyd "$DAEMON_PORT":8080 > /dev/null 2>&1 &
+PF_PID=$!
+trap 'kill $PF_PID 2>/dev/null || true' EXIT INT TERM
+sleep 1
+./bin/ovn-topo --daemon-url="$DAEMON_URL"
+"""
+
+[tasks.tui-local]
+description = "Launch TUI against locally running daemon"
 depends = ["build"]
 run = "./bin/ovn-topo --daemon-url=$DAEMON_URL"
 

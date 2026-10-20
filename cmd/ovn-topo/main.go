@@ -79,7 +79,7 @@ var (
 			Foreground(lipgloss.Color("#FF453A"))
 
 	activeGatewayStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFD60A")).
+				Foreground(lipgloss.Color("#fe7c3f")).
 				Bold(true)
 
 	tableHeaderStyle = lipgloss.NewStyle().

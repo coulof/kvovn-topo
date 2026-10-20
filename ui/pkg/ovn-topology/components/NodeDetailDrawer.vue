@@ -390,8 +390,8 @@ export default defineComponent({
         font-size: 12px;
 
         .gw-badge {
-          background-color: var(--warning);
-          color: #000000;
+          background-color: #fe7c3f;
+          color: #ffffff;
           padding: 1px 6px;
           border-radius: 3px;
           font-size: 10px;
@@ -405,7 +405,7 @@ export default defineComponent({
         }
 
         .gw-status.active {
-          color: var(--warning, #FFD60A);
+          color: #fe7c3f;
           font-weight: 600;
           font-size: 11px;
         }

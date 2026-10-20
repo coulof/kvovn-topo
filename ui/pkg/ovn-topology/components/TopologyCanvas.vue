@@ -323,7 +323,7 @@ export default defineComponent({
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 
     &.gateway-label {
-      stroke: var(--warning, #FFD60A);
+      stroke: #fe7c3f;
       stroke-width: 1.5px;
     }
   }
@@ -336,7 +336,7 @@ export default defineComponent({
     font-family: monospace;
 
     &.gateway-text {
-      fill: var(--warning, #FFD60A);
+      fill: #fe7c3f;
       font-weight: 700;
     }
   }
