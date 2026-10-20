@@ -84,6 +84,7 @@ func BuildTraceCommand(req TraceRequest) ([]string, error) {
 		matchParts = append(matchParts, fmt.Sprintf("eth.dst == %s", req.DstMAC))
 	}
 
+	matchParts = append(matchParts, "ip.ttl == 255")
 	matchParts = append(matchParts, fmt.Sprintf("ip4.src == %s", req.SrcIP))
 	matchParts = append(matchParts, fmt.Sprintf("ip4.dst == %s", req.DstIP))
 
@@ -117,7 +118,10 @@ func BuildTraceCommand(req TraceRequest) ([]string, error) {
 	matchStr := strings.Join(matchParts, " && ")
 	return []string{
 		"ovn-trace",
-		fmt.Sprintf("--ct=%s", ct),
+		"--ct=new",
+		"--ct=new",
+		"--ct=new",
+		"--ct=new",
 		req.Datapath,
 		matchStr,
 	}, nil
