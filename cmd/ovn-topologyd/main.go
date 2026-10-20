@@ -81,11 +81,11 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Initialize Kubernetes NodeMapper (read-only for node mapping per hard rule 2)
-	nodeMapper := setupNodeMapper(ctx, kubeconfig, logger)
+	// Initialize Kubernetes NodeMapper and WorkloadResolver (read-only per hard rule 2)
+	nodeMapper, workloadResolver := setupKubeMappers(ctx, kubeconfig, logger)
 
 	// Create thread-safe in-memory graph store
-	store := graph.NewStore(nodeMapper)
+	store := graph.NewStore(nodeMapper, workloadResolver)
 
 	// Parse endpoints
 	nbList := splitEndpoints(nbEndpoints)
@@ -169,7 +169,7 @@ func run() error {
 	return httpServer.Shutdown(shutdownCtx)
 }
 
-func setupNodeMapper(ctx context.Context, kubeconfig string, logger *slog.Logger) graph.NodeMapper {
+func setupKubeMappers(ctx context.Context, kubeconfig string, logger *slog.Logger) (graph.NodeMapper, graph.WorkloadResolver) {
 	var k8sConfig *rest.Config
 	var err error
 
@@ -181,13 +181,13 @@ func setupNodeMapper(ctx context.Context, kubeconfig string, logger *slog.Logger
 
 	if err != nil {
 		logger.Info("not running inside kubernetes or kubeconfig not provided; using static hostname mapping")
-		return &graph.StaticNodeMapper{}
+		return &graph.StaticNodeMapper{}, &graph.StaticWorkloadResolver{}
 	}
 
 	clientset, err := kubernetes.NewForConfig(k8sConfig)
 	if err != nil {
 		logger.Warn("failed to initialize kubernetes client", "error", err)
-		return &graph.StaticNodeMapper{}
+		return &graph.StaticNodeMapper{}, &graph.StaticWorkloadResolver{}
 	}
 
 	mapper := graph.NewKubeNodeMapper(clientset, logger)
@@ -195,7 +195,12 @@ func setupNodeMapper(ctx context.Context, kubeconfig string, logger *slog.Logger
 		logger.Warn("initial kubernetes node sync failed (will retry dynamically)", "error", err)
 	}
 
-	return mapper
+	workloadResolver := graph.NewKubeWorkloadResolver(clientset, logger)
+	if err := workloadResolver.Sync(ctx); err != nil {
+		logger.Warn("initial kubernetes pod sync failed (will retry dynamically)", "error", err)
+	}
+
+	return mapper, workloadResolver
 }
 
 func splitEndpoints(s string) []string {

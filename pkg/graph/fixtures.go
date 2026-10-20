@@ -88,6 +88,25 @@ func LoadTestSnapshot(t testing.TB) *Snapshot {
 		return nil
 	}
 
+	mockWorkloads := NewStaticWorkloadResolver()
+	mockWorkloads.Add(WorkloadInfo{
+		Kind:         "VirtualMachine",
+		WorkloadName: "vm-custom",
+		PodName:      "lsp-custom-workload",
+		Namespace:    "custom-ns",
+		Owner:        "VirtualMachine/vm-custom",
+		VMI:          "vm-custom",
+		Node:         "node-2",
+	})
+	mockWorkloads.Add(WorkloadInfo{
+		Kind:         "Deployment",
+		WorkloadName: "coredns",
+		PodName:      "lsp-default-workload",
+		Namespace:    "default",
+		Owner:        "Deployment/coredns",
+		Node:         "node-1",
+	})
+
 	snap := NewEmptySnapshot(1, &StaticNodeMapper{
 		Overrides: map[string]string{
 			"chassis-node-1": "node-1",
@@ -95,6 +114,7 @@ func LoadTestSnapshot(t testing.TB) *Snapshot {
 			"chassis-node-3": "node-3",
 		},
 	})
+	snap.WorkloadResolver = mockWorkloads
 
 	// Helper to extract ovsdb map [["k", "v"], ...]
 	parseMap := func(v interface{}) map[string]string {

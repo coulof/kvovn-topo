@@ -14,21 +14,28 @@ type Store struct {
 	current atomic.Pointer[Snapshot]
 	ready   atomic.Bool
 
-	subMu       sync.Mutex
-	subscribers map[chan api.GraphEvent]struct{}
-	nodeMapper  NodeMapper
+	subMu            sync.Mutex
+	subscribers      map[chan api.GraphEvent]struct{}
+	nodeMapper       NodeMapper
+	workloadResolver WorkloadResolver
 }
 
 // NewStore initializes an empty Store with revision 0.
-func NewStore(mapper NodeMapper) *Store {
+func NewStore(mapper NodeMapper, resolver ...WorkloadResolver) *Store {
 	if mapper == nil {
 		mapper = &StaticNodeMapper{}
 	}
+	var res WorkloadResolver = &StaticWorkloadResolver{}
+	if len(resolver) > 0 && resolver[0] != nil {
+		res = resolver[0]
+	}
 	s := &Store{
-		subscribers: make(map[chan api.GraphEvent]struct{}),
-		nodeMapper:  mapper,
+		subscribers:      make(map[chan api.GraphEvent]struct{}),
+		nodeMapper:       mapper,
+		workloadResolver: res,
 	}
 	initial := NewEmptySnapshot(0, mapper)
+	initial.WorkloadResolver = res
 	s.current.Store(initial)
 	return s
 }

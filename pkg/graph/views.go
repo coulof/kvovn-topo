@@ -370,6 +370,53 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 			}
 		}
 
+		// Node join port resolution (node-<hostname>)
+		if strings.HasPrefix(lsp.Name, "node-") {
+			if k8sMeta == nil {
+				k8sMeta = &api.K8sMetadata{}
+			}
+			nodeName := strings.TrimPrefix(lsp.Name, "node-")
+			k8sMeta.Node = &nodeName
+			kind := "Node"
+			k8sMeta.WorkloadKind = &kind
+			k8sMeta.WorkloadName = &nodeName
+			owner := "Node/" + nodeName
+			k8sMeta.Owner = &owner
+		} else if s.WorkloadResolver != nil && k8sMeta != nil {
+			ns := ""
+			if k8sMeta.Namespace != nil {
+				ns = *k8sMeta.Namespace
+			}
+			pod := ""
+			if k8sMeta.Pod != nil {
+				pod = *k8sMeta.Pod
+			} else {
+				pod = lsp.Name
+			}
+			if strings.Contains(pod, "/") {
+				parts := strings.SplitN(pod, "/", 2)
+				if ns == "" {
+					ns = parts[0]
+				}
+				pod = parts[1]
+			}
+
+			if wl := s.WorkloadResolver.Resolve(ns, pod); wl != nil {
+				k8sMeta.WorkloadKind = &wl.Kind
+				k8sMeta.WorkloadName = &wl.WorkloadName
+				k8sMeta.Owner = &wl.Owner
+				if wl.VMI != "" {
+					k8sMeta.Vmi = &wl.VMI
+				}
+				if wl.NetworkAttachment != "" {
+					k8sMeta.NetworkAttachment = &wl.NetworkAttachment
+				}
+				if wl.Node != "" && k8sMeta.Node == nil {
+					k8sMeta.Node = &wl.Node
+				}
+			}
+		}
+
 		nodes = append(nodes, api.GraphNode{
 			Id:         lspID,
 			Type:       api.GraphNodeTypeLSP,

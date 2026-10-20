@@ -242,13 +242,28 @@ type HAGroupRole struct {
 // K8sMetadata defines model for K8sMetadata.
 type K8sMetadata struct {
 	Namespace *string `json:"namespace,omitempty"`
-	Node      *string `json:"node,omitempty"`
-	Pod       *string `json:"pod,omitempty"`
-	Subnet    *string `json:"subnet,omitempty"`
+
+	// NetworkAttachment NetworkAttachmentDefinition name for multi-NIC interfaces.
+	NetworkAttachment *string `json:"networkAttachment,omitempty"`
+	Node              *string `json:"node,omitempty"`
+
+	// Owner Top-level owner reference (e.g. Deployment/coredns).
+	Owner  *string `json:"owner,omitempty"`
+	Pod    *string `json:"pod,omitempty"`
+	Subnet *string `json:"subnet,omitempty"`
 
 	// Vendor Value of vendor tag (e.g. kube-ovn).
 	Vendor *string `json:"vendor,omitempty"`
-	Vpc    *string `json:"vpc,omitempty"`
+
+	// Vmi VirtualMachineInstance name for KubeVirt VMs.
+	Vmi *string `json:"vmi,omitempty"`
+	Vpc *string `json:"vpc,omitempty"`
+
+	// WorkloadKind Kind of workload (Pod, VirtualMachine, Deployment, DaemonSet, StatefulSet).
+	WorkloadKind *string `json:"workloadKind,omitempty"`
+
+	// WorkloadName Name of the owner workload or VM.
+	WorkloadName *string `json:"workloadName,omitempty"`
 }
 
 // NodeDetail defines model for NodeDetail.

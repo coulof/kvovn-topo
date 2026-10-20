@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/coulof/ovn-topology/pkg/api"
 	"github.com/coulof/ovn-topology/pkg/diag"
 	"github.com/coulof/ovn-topology/pkg/graph"
 	corev1 "k8s.io/api/core/v1"
@@ -70,7 +71,7 @@ func TestTUIModelView(t *testing.T) {
 	if !strings.Contains(treeView, "OVN Network Topology") {
 		t.Errorf("expected view header, got: %s", treeView)
 	}
-	if !strings.Contains(treeView, "1. Topology Tree") {
+	if !strings.Contains(treeView, "1. L3 Tree") {
 		t.Errorf("expected tab 1, got: %s", treeView)
 	}
 	if !strings.Contains(treeView, "VPC: default") {
@@ -92,7 +93,45 @@ func TestTUIModelView(t *testing.T) {
 		t.Errorf("expected Interconnects in view, got: %s", treeView)
 	}
 
-	// 2. Switch to Matrix View and verify table rendering
+	// 2. Switch to L2 Subnet View
+	m.mode = viewL2
+	l2Cmd := m.fetchL2Cmd(m.focusedLS)
+	if l2Cmd != nil {
+		l2Msg := l2Cmd().(l2LoadedMsg)
+		m.l2Resp = l2Msg.resp
+		var lsps []api.GraphNode
+		for _, n := range l2Msg.resp.Nodes {
+			if n.Type == api.GraphNodeTypeLSP {
+				lsps = append(lsps, n)
+			}
+		}
+		m.l2Nodes = lsps
+	}
+	l2View := m.View()
+	if !strings.Contains(l2View, "Subnet:") {
+		t.Errorf("expected Subnet header in L2 view, got: %s", l2View)
+	}
+	if !strings.Contains(l2View, "WORKLOAD IDENTITY") {
+		t.Errorf("expected WORKLOAD IDENTITY column in L2 view, got: %s", l2View)
+	}
+
+	// 3. Switch to Chassis View
+	m.mode = viewChassis
+	chassisCmd := m.fetchChassisCmd()
+	if chassisCmd != nil {
+		chassisMsg := chassisCmd().(chassisLoadedMsg)
+		m.chassisResp = chassisMsg.resp
+		m.chassisNodes = chassisMsg.resp.Nodes
+	}
+	chassisView := m.View()
+	if !strings.Contains(chassisView, "Cluster Chassis & Nodes") {
+		t.Errorf("expected Cluster Chassis & Nodes in Chassis view, got: %s", chassisView)
+	}
+	if !strings.Contains(chassisView, "node-1") {
+		t.Errorf("expected node-1 in Chassis view, got: %s", chassisView)
+	}
+
+	// 4. Switch to Matrix View and verify table rendering
 	m.mode = viewMatrix
 	matrixView := m.View()
 	if !strings.Contains(matrixView, "PORT (LRP)") {
@@ -261,5 +300,17 @@ func TestDiagnosticsMode(t *testing.T) {
 	m.diagModal = false
 	if m.diagModal {
 		t.Errorf("expected diagModal to be closed")
+	}
+}
+
+func TestMachineOutput(t *testing.T) {
+	// Test JSON machine output
+	if err := runMachineOutput("", "dev-fixture", "l3", "", "json"); err != nil {
+		t.Errorf("expected machine output json to succeed, got: %v", err)
+	}
+
+	// Test YAML machine output
+	if err := runMachineOutput("", "dev-fixture", "chassis", "", "yaml"); err != nil {
+		t.Errorf("expected machine output yaml to succeed, got: %v", err)
 	}
 }

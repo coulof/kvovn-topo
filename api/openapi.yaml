@@ -308,6 +308,21 @@ components:
         vendor:
           type: string
           description: Value of vendor tag (e.g. kube-ovn).
+        workloadKind:
+          type: string
+          description: Kind of workload (Pod, VirtualMachine, Deployment, DaemonSet, StatefulSet).
+        workloadName:
+          type: string
+          description: Name of the owner workload or VM.
+        owner:
+          type: string
+          description: Top-level owner reference (e.g. Deployment/coredns).
+        vmi:
+          type: string
+          description: VirtualMachineInstance name for KubeVirt VMs.
+        networkAttachment:
+          type: string
+          description: NetworkAttachmentDefinition name for multi-NIC interfaces.
 
     NodeDetail:
       type: object
