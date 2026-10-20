@@ -118,6 +118,8 @@ type model struct {
 	l2Nodes          []api.GraphNode
 	focusedLS        string
 	focusedLSName    string
+	l2PaneActive     int // 0 = subnets left pane, 1 = workloads right pane
+	l2PortIdx        int // selected workload index in m.l2Nodes
 	chassisResp      *api.GraphResponse
 	chassisNodes     []api.GraphNode
 	expandedSwitches map[string]bool
@@ -959,10 +961,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "1":
 			m.mode = viewTree
 			m.selectedIdx = 0
+			m.l2PaneActive = 0
+			m.l2PortIdx = 0
 			return m, nil
 		case "2":
 			m.mode = viewL2
 			m.selectedIdx = 0
+			m.l2PaneActive = 0
+			m.l2PortIdx = 0
 			switches := m.switchList()
 			if len(switches) > 0 {
 				m.focusedLS = switches[0].Id
@@ -976,6 +982,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "3":
 			m.mode = viewChassis
 			m.selectedIdx = 0
+			m.l2PaneActive = 0
+			m.l2PortIdx = 0
 			if m.chassisResp == nil || len(m.chassisNodes) == 0 {
 				return m, m.fetchChassisCmd()
 			}
@@ -983,6 +991,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "4":
 			m.mode = viewMatrix
 			m.selectedIdx = 0
+			m.l2PaneActive = 0
+			m.l2PortIdx = 0
+			return m, nil
+		case "right", "l":
+			if m.mode == viewL2 && m.l2PaneActive == 0 && len(m.l2Nodes) > 0 {
+				m.l2PaneActive = 1
+				m.l2PortIdx = 0
+				return m, nil
+			}
+			return m, nil
+		case "left", "h":
+			if m.mode == viewL2 && m.l2PaneActive == 1 {
+				m.l2PaneActive = 0
+				return m, nil
+			}
 			return m, nil
 		case " ", "enter":
 			if m.mode == viewTree && len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
@@ -993,11 +1016,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, m.fetchL2Cmd(node.Id)
 					}
 				}
+				return m, nil
+			}
+			if m.mode == viewL2 {
+				if m.l2PaneActive == 0 && len(m.l2Nodes) > 0 {
+					m.l2PaneActive = 1
+					m.l2PortIdx = 0
+				} else {
+					m.l2PaneActive = 0
+				}
+				return m, nil
 			}
 			return m, nil
 		case "s":
 			if m.mode == viewL2 {
 				m.cycleFocusedSwitch()
+				m.l2PaneActive = 0
+				m.l2PortIdx = 0
 				return m, m.fetchL2Cmd(m.focusedLS)
 			}
 			return m, nil
@@ -1005,9 +1040,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Refreshing..."
 			return m, m.fetchGraphCmd()
 		case "up", "k":
+			if m.mode == viewL2 && m.l2PaneActive == 1 {
+				if m.l2PortIdx > 0 {
+					m.l2PortIdx--
+				}
+				return m, nil
+			}
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
 				if m.mode == viewL2 {
+					m.l2PortIdx = 0
 					switches := m.switchList()
 					if m.selectedIdx < len(switches) {
 						m.focusedLS = switches[m.selectedIdx].Id
@@ -1019,7 +1061,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			return m, nil
 		case "down", "j":
+			if m.mode == viewL2 && m.l2PaneActive == 1 {
+				if m.l2PortIdx < len(m.l2Nodes)-1 {
+					m.l2PortIdx++
+				}
+				return m, nil
+			}
 			maxIdx := 0
 			switch m.mode {
 			case viewTree:
@@ -1034,6 +1083,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedIdx < maxIdx {
 				m.selectedIdx++
 				if m.mode == viewL2 {
+					m.l2PortIdx = 0
 					switches := m.switchList()
 					if m.selectedIdx < len(switches) {
 						m.focusedLS = switches[m.selectedIdx].Id
@@ -1045,6 +1095,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			return m, nil
 		}
 	}
 
@@ -1117,19 +1168,74 @@ func (m model) resolveNodeName(candidate string) string {
 	return candidate
 }
 
+func (m model) currentSelectedTarget() (*api.GraphNode, *RouterPortConnection) {
+	switch m.mode {
+	case viewMatrix:
+		if len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+			return nil, &m.portList[m.selectedIdx]
+		}
+
+	case viewL2:
+		switches := m.switchList()
+		var swNode *api.GraphNode
+		if len(switches) > 0 {
+			switchIdx := 0
+			for i, s := range switches {
+				if s.Id == m.focusedLS || s.Name == m.focusedLSName {
+					switchIdx = i
+					break
+				}
+			}
+			if switchIdx < len(switches) {
+				swNode = &switches[switchIdx]
+			}
+		}
+
+		var conn *RouterPortConnection
+		if swNode != nil && len(m.switchPorts[swNode.Id]) > 0 {
+			conn = &m.switchPorts[swNode.Id][0]
+		}
+
+		if m.l2PaneActive == 1 && len(m.l2Nodes) > 0 && m.l2PortIdx < len(m.l2Nodes) {
+			return &m.l2Nodes[m.l2PortIdx], conn
+		}
+
+		if swNode != nil {
+			return swNode, conn
+		}
+
+	case viewChassis:
+		if len(m.chassisNodes) > 0 && m.selectedIdx < len(m.chassisNodes) {
+			return &m.chassisNodes[m.selectedIdx], nil
+		}
+
+	default: // viewTree
+		if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+			node := &m.nodeList[m.selectedIdx]
+			var conn *RouterPortConnection
+			if node.Type == api.GraphNodeTypeLS && len(m.switchPorts[node.Id]) > 0 {
+				conn = &m.switchPorts[node.Id][0]
+			} else if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
+				conn = &ports[0]
+			}
+			return node, conn
+		}
+	}
+
+	if len(m.portList) > 0 {
+		return nil, &m.portList[0]
+	}
+	return nil, nil
+}
+
 func (m model) selectedNodeName() string {
 	raw := m.rawSelectedNodeName()
 	return m.resolveNodeName(raw)
 }
 
 func (m model) rawSelectedNodeName() string {
-	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-		conn := m.portList[m.selectedIdx]
-		if conn.ActiveGateway != "" {
-			return conn.ActiveGateway
-		}
-	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		node := m.nodeList[m.selectedIdx]
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
 		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.Node != nil && *node.K8s.Node != "" {
 			return *node.K8s.Node
 		}
@@ -1150,23 +1256,25 @@ func (m model) rawSelectedNodeName() string {
 				return *workloads[0].K8s.Node
 			}
 		}
-	}
-	for _, conn := range m.portList {
-		if conn.ActiveGateway != "" {
-			return conn.ActiveGateway
+		if node.Type == api.GraphNodeTypeChassis {
+			if node.Properties != nil {
+				p := *node.Properties
+				if n, ok := p["nodeName"].(string); ok && n != "" {
+					return n
+				}
+			}
+			return node.Name
 		}
+	}
+	if conn != nil && conn.ActiveGateway != "" {
+		return conn.ActiveGateway
 	}
 	return ""
 }
 
 func (m model) selectedTargetIP() string {
-	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-		conn := m.portList[m.selectedIdx]
-		if len(conn.Networks) > 0 {
-			return extractCleanIP(conn.Networks[0])
-		}
-	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		node := m.nodeList[m.selectedIdx]
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
 		if node.Type == api.GraphNodeTypeLSP && node.Properties != nil {
 			p := *node.Properties
 			if addrs, ok := p["addresses"].([]interface{}); ok {
@@ -1180,6 +1288,9 @@ func (m model) selectedTargetIP() string {
 			}
 		}
 		if node.Type == api.GraphNodeTypeLS {
+			if conn != nil && len(conn.Networks) > 0 {
+				return extractCleanIP(conn.Networks[0])
+			}
 			workloads := m.switchWorkloads[node.Id]
 			for _, w := range workloads {
 				if w.Properties != nil {
@@ -1199,24 +1310,16 @@ func (m model) selectedTargetIP() string {
 				}
 			}
 		}
-		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
-			if len(ports[0].Networks) > 0 {
-				return extractCleanIP(ports[0].Networks[0])
-			}
-		}
+	}
+	if conn != nil && len(conn.Networks) > 0 {
+		return extractCleanIP(conn.Networks[0])
 	}
 	return ""
 }
 
 func (m model) selectedPortName() string {
-	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-		conn := m.portList[m.selectedIdx]
-		if conn.PeerPortName != "" {
-			return conn.PeerPortName
-		}
-		return conn.PortName
-	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		node := m.nodeList[m.selectedIdx]
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
 		if node.Type == api.GraphNodeTypeLSP {
 			return node.Name
 		}
@@ -1234,17 +1337,12 @@ func (m model) selectedPortName() string {
 				return workloads[0].Name
 			}
 		}
-		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
-			if ports[0].PeerPortName != "" {
-				return ports[0].PeerPortName
-			}
-			return ports[0].PortName
-		} else if ports, ok := m.switchPorts[node.Id]; ok && len(ports) > 0 {
-			if ports[0].PeerPortName != "" {
-				return ports[0].PeerPortName
-			}
-			return ports[0].PortName
+	}
+	if conn != nil {
+		if conn.PeerPortName != "" {
+			return conn.PeerPortName
 		}
+		return conn.PortName
 	}
 	return ""
 }
@@ -1314,6 +1412,15 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 										name = *w.K8s.WorkloadName
 									}
 								}
+								if strings.HasPrefix(w.Name, "node-") || swName == "join" {
+									dests = append(dests, TraceDestination{
+										Label:    fmt.Sprintf("[Node ovn0] %s (IP: %s on join)", name, ip),
+										IP:       ip,
+										Subnet:   swName,
+										Category: "Node",
+									})
+									continue
+								}
 								dests = append(dests, TraceDestination{
 									Label:    fmt.Sprintf("[%s] %s (IP: %s on %s)", kind, name, ip, swName),
 									IP:       ip,
@@ -1366,7 +1473,7 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 						if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
 							seenIPs[encIP] = true
 							dests = append(dests, TraceDestination{
-								Label:    fmt.Sprintf("[Node] %s (IP: %s)", nodeName, encIP),
+								Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
 								IP:       encIP,
 								Subnet:   "physical",
 								Category: "Node",
@@ -1379,7 +1486,7 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 					if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
 						seenIPs[encIP] = true
 						dests = append(dests, TraceDestination{
-							Label:    fmt.Sprintf("[Node] %s (IP: %s)", nodeName, encIP),
+							Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
 							IP:       encIP,
 							Subnet:   "physical",
 							Category: "Node",
@@ -1816,7 +1923,72 @@ func (m model) executeTcpdump(filter string, hintNode string, portName string, p
 	}
 }
 
+func (m model) formatKeyHint(key, desc string) string {
+	return fmt.Sprintf("%s %s", m.styles.PortBadge.Render("<"+key+">"), m.styles.Node.Render(desc))
+}
+
+func (m model) renderFooter() string {
+	var footer strings.Builder
+	divWidth := m.width - 2
+	if divWidth < 40 {
+		divWidth = 60
+	}
+	footer.WriteString(m.styles.MutedText.Render(strings.Repeat("─", divWidth)) + "\n")
+
+	// Row 1: Connection & Status line
+	statusDot := "●"
+	statusStyle := m.styles.BadgeBound
+	if m.err != nil || (m.diagMode && !m.diagAvailable) {
+		statusStyle = m.styles.BadgeUnbound
+	}
+
+	daemonInfo := m.daemonURL
+	if m.fixturePath != "" {
+		daemonInfo = "offline fixture: " + m.fixturePath
+	}
+
+	revInfo := ""
+	if m.graphResp != nil {
+		revInfo = fmt.Sprintf("Rev %d │ %d nodes, %d edges", m.graphResp.Revision, len(m.graphResp.Nodes), len(m.graphResp.Edges))
+	} else {
+		revInfo = m.status
+	}
+
+	statusLine := fmt.Sprintf(" %s %s │ %s │ %s │ Theme: %s",
+		statusStyle.Render(statusDot),
+		m.status,
+		revInfo,
+		daemonInfo,
+		m.styles.SelectedNode.Render("["+m.theme.Name+"]"),
+	)
+	footer.WriteString(m.styles.MutedText.Render(statusLine) + "\n")
+
+	// Row 2: k9s-style hotkey bar with badges
+	var keyBadges []string
+	keyBadges = append(keyBadges, m.formatKeyHint("1-4", "Views"))
+	switch m.mode {
+	case viewTree:
+		keyBadges = append(keyBadges, m.formatKeyHint("Space", "Expand"))
+	case viewL2:
+		keyBadges = append(keyBadges, m.formatKeyHint("Tab/←/→", "Pane"))
+	}
+	if m.diagAvailable {
+		keyBadges = append(keyBadges, m.formatKeyHint("x", "Diag"))
+	}
+	keyBadges = append(keyBadges, m.formatKeyHint("t", "Theme"))
+	keyBadges = append(keyBadges, m.formatKeyHint("j/k/↑/↓", "Nav"))
+	keyBadges = append(keyBadges, m.formatKeyHint("r", "Refresh"))
+	keyBadges = append(keyBadges, m.formatKeyHint("q", "Quit"))
+
+	footer.WriteString(" " + strings.Join(keyBadges, "  "))
+	return footer.String()
+}
+
 func (m model) View() string {
+	if m.diagModal {
+		return m.renderDiagModal()
+	}
+
 	var b strings.Builder
 
 	// Top Title and View Tabs
@@ -1825,9 +1997,9 @@ func (m model) View() string {
 	diagBadge := ""
 	if m.diagMode {
 		if m.diagAvailable {
-			diagBadge = m.styles.DiagBadgeActive.Render(" DIAG ACTIVE ") + " "
+			diagBadge = " " + m.styles.DiagBadgeActive.Render(" ⚡ DIAG ACTIVE ")
 		} else {
-			diagBadge = m.styles.DiagBadgeDisabled.Render(" DIAG DEGRADED ") + " "
+			diagBadge = " " + m.styles.DiagBadgeDisabled.Render(" ⚡ DIAG DEGRADED ")
 		}
 	}
 
@@ -1848,20 +2020,7 @@ func (m model) View() string {
 	}
 
 	tabs := fmt.Sprintf("%s%s%s%s", tab1, tab2, tab3, tab4)
-	diagShortcut := ""
-	if m.diagAvailable {
-		diagShortcut = " | x: diag"
-	}
-
-	statusText := m.styles.MutedText.Render(
-		fmt.Sprintf(" %s [%s]  [Tab/1-4: view | Space: expand | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
-
-	b.WriteString(header + " " + diagBadge + tabs + statusText + "\n\n")
-
-	if m.diagModal {
-		b.WriteString(m.renderDiagModal())
-		return b.String()
-	}
+	b.WriteString(header + diagBadge + "  " + tabs + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(m.styles.BadgeUnbound.Render(fmt.Sprintf("Error: %v\n", m.err)))
@@ -1877,17 +2036,16 @@ func (m model) View() string {
 	switch m.mode {
 	case viewL2:
 		b.WriteString(m.renderL2View())
-		return b.String()
 	case viewChassis:
 		b.WriteString(m.renderChassisView())
-		return b.String()
 	case viewMatrix:
 		b.WriteString(m.renderMatrixView())
-		return b.String()
 	default:
 		b.WriteString(m.renderTreeView())
-		return b.String()
 	}
+
+	b.WriteString("\n\n" + m.renderFooter())
+	return b.String()
 }
 
 func (m model) renderDiagModal() string {
@@ -1898,13 +2056,8 @@ func (m model) renderDiagModal() string {
 
 	// Target context
 	targetDesc := "Cluster Core"
-	var currentConn *RouterPortConnection
-	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-		currentConn = &m.portList[m.selectedIdx]
-		targetDesc = fmt.Sprintf("Port: %s (Router: %s, Switch: %s, IP: %s)",
-			currentConn.PortName, currentConn.RouterName, currentConn.SwitchName, strings.Join(currentConn.Networks, ", "))
-	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		node := m.nodeList[m.selectedIdx]
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
 		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.WorkloadName != nil {
 			targetDesc = fmt.Sprintf("[%s] %s (IP: %s, Node: %s)",
 				*node.K8s.WorkloadKind, *node.K8s.WorkloadName, m.selectedTargetIP(), m.selectedNodeName())
@@ -1913,6 +2066,9 @@ func (m model) renderDiagModal() string {
 		} else {
 			targetDesc = fmt.Sprintf("Node: %s (Type: %s)", node.Name, node.Type)
 		}
+	} else if conn != nil {
+		targetDesc = fmt.Sprintf("Port: %s (Router: %s, Switch: %s, IP: %s)",
+			conn.PortName, conn.RouterName, conn.SwitchName, strings.Join(conn.Networks, ", "))
 	}
 
 	fmt.Fprintf(&box, "  Target: %s\n\n", m.styles.PortBadge.Render(targetDesc))
@@ -2380,7 +2536,11 @@ func (m model) renderL2View() string {
 	var leftPanel strings.Builder
 	var rightPanel strings.Builder
 
-	leftPanel.WriteString(m.styles.Header.Render("Subnets (Broadcast Domains)") + "\n")
+	leftHeader := "Subnets (Broadcast Domains)"
+	if m.l2PaneActive == 0 {
+		leftHeader = "► " + leftHeader
+	}
+	leftPanel.WriteString(m.styles.Header.Render(leftHeader) + "\n")
 
 	var switches []api.GraphNode
 	for _, n := range m.nodeList {
@@ -2435,13 +2595,17 @@ func (m model) renderL2View() string {
 		swName = m.focusedLS
 	}
 
-	rightPanel.WriteString(m.styles.Header.Render(fmt.Sprintf("Workloads in %s (%d ports)", swName, len(m.l2Nodes))) + "\n\n")
+	rightHeader := fmt.Sprintf("Workloads in %s (%d ports)", swName, len(m.l2Nodes))
+	if m.l2PaneActive == 1 {
+		rightHeader = "► " + rightHeader
+	}
+	rightPanel.WriteString(m.styles.Header.Render(rightHeader) + "\n\n")
 
 	if len(m.l2Nodes) == 0 {
 		rightPanel.WriteString(m.styles.MutedText.Render("  No active workloads or ports in this subnet.\n"))
 		rightPanel.WriteString(m.styles.MutedText.Render("  Tip: Press 's' to cycle focused subnet or 'r' to refresh.\n"))
 	} else {
-		for _, n := range m.l2Nodes {
+		for idx, n := range m.l2Nodes {
 			kind := "Pod"
 			name := n.Name
 			ns := "default"
@@ -2488,9 +2652,15 @@ func (m model) renderL2View() string {
 				}
 			}
 
+			isWorkloadSelected := m.l2PaneActive == 1 && idx == m.l2PortIdx
 			var card strings.Builder
 			cardTitle := fmt.Sprintf("[%s] %s/%s", kind, ns, name)
-			card.WriteString(m.styles.PortBadge.Render(cardTitle) + "\n")
+			if isWorkloadSelected {
+				cardTitle = "► " + cardTitle
+				card.WriteString(m.styles.SelectedNode.Render(cardTitle) + "\n")
+			} else {
+				card.WriteString(m.styles.PortBadge.Render(cardTitle) + "\n")
+			}
 			fmt.Fprintf(&card, "  • Port Name:   %s\n", n.Name)
 			fmt.Fprintf(&card, "  • IP / MAC:    %s\n", m.styles.CIDR.Render(addrStr))
 			fmt.Fprintf(&card, "  • Placement:   Node %s\n", m.styles.BadgeBound.Render(chassis))
@@ -2500,7 +2670,11 @@ func (m model) renderL2View() string {
 			if vmi != "" && vmi != name {
 				fmt.Fprintf(&card, "  • KubeVirt VMI: %s\n", vmi)
 			}
-			rightPanel.WriteString(m.styles.DetailBox.Width(54).Render(card.String()) + "\n")
+			boxStyle := m.styles.DetailBox.Width(54)
+			if isWorkloadSelected {
+				boxStyle = m.styles.SelectedNode.Width(54)
+			}
+			rightPanel.WriteString(boxStyle.Render(card.String()) + "\n")
 		}
 	}
 

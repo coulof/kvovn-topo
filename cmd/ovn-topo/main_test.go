@@ -260,8 +260,8 @@ func TestDiagnosticsMode(t *testing.T) {
 	if !strings.Contains(view, "DIAG ACTIVE") {
 		t.Errorf("expected DIAG ACTIVE badge in view, got: %s", view)
 	}
-	if !strings.Contains(view, "| x: diag") {
-		t.Errorf("expected | x: diag shortcut in view, got: %s", view)
+	if !strings.Contains(view, "<x>") || !strings.Contains(view, "Diag") {
+		t.Errorf("expected <x> and Diag in view, got: %s", view)
 	}
 
 	// Open diagnostics modal
