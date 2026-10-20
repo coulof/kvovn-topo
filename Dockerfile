@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.27-alpine AS builder
+# Build stage: use BUILDPLATFORM so Go runs natively on runner CPU and cross-compiles instantly
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 WORKDIR /src
 
