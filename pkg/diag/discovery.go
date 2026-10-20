@@ -27,8 +27,26 @@ func NewPodLocator(client kubernetes.Interface, namespace string) *PodLocator {
 	}
 }
 
-// FindOvnCentralPod finds an active/running ovn-central pod.
+// FindOvnCentralPod finds an active/running ovn-central pod, prioritizing the active Southbound
+// Raft leader (labeled ovn-sb-leader=true by Kube-OVN) to prevent clustered Raft follower connection rejections.
 func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
+	// 1. Try to find the active Southbound Raft leader pod
+	leaderPods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=ovn-central,ovn-sb-leader=true",
+	})
+	if err == nil && len(leaderPods.Items) > 0 {
+		for _, p := range leaderPods.Items {
+			if p.Status.Phase == corev1.PodRunning {
+				return PodRef{
+					Namespace: l.namespace,
+					Name:      p.Name,
+					Container: "ovn-central",
+				}, nil
+			}
+		}
+	}
+
+	// 2. Fall back to any running ovn-central pod (for single-node or non-HA setups)
 	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=ovn-central",
 	})

@@ -239,11 +239,27 @@ func TestOvsCommands(t *testing.T) {
 func TestPodLocator(t *testing.T) {
 	ctx := context.Background()
 	fakeClient := fake.NewSimpleClientset(
+		// Follower pod (lexicographically first)
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ovn-central-58f79fbc94-x123",
+				Name:      "ovn-central-58f79fbc94-follower",
 				Namespace: "kube-system",
-				Labels:    map[string]string{"app": "ovn-central"},
+				Labels: map[string]string{
+					"app":           "ovn-central",
+					"ovn-sb-leader": "false",
+				},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+		// Leader pod (should be prioritized!)
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ovn-central-58f79fbc94-leader",
+				Namespace: "kube-system",
+				Labels: map[string]string{
+					"app":           "ovn-central",
+					"ovn-sb-leader": "true",
+				},
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},
@@ -264,8 +280,8 @@ func TestPodLocator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindOvnCentralPod failed: %v", err)
 	}
-	if centralPod.Name != "ovn-central-58f79fbc94-x123" {
-		t.Errorf("unexpected central pod name: %s", centralPod.Name)
+	if centralPod.Name != "ovn-central-58f79fbc94-leader" {
+		t.Errorf("expected leader pod ovn-central-58f79fbc94-leader to be prioritized, got %s", centralPod.Name)
 	}
 
 	cniPod, err := locator.FindNodeCNIPod(ctx, "node1")

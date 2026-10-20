@@ -558,13 +558,9 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		centralPod := m.diagCentralPod
-		if centralPod.Name == "" {
-			pod, err := m.diagLocator.FindOvnCentralPod(ctx)
-			if err != nil {
-				return diagExecResultMsg{err: err}
-			}
-			centralPod = pod
+		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		if err != nil {
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate ovn-central leader pod: %w", err)}
 		}
 
 		datapath := "default-subnet"
