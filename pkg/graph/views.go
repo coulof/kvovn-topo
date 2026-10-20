@@ -363,14 +363,21 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 		}
 
 		k8sMeta := ExtractK8sMetadata(lsp.ExternalIDs)
-		if boundChassis != "" && k8sMeta != nil && k8sMeta.Node == nil {
-			hostname := ""
-			if ch, ok := s.Chassis[boundChassis]; ok {
-				hostname = ch.Hostname
+		if boundChassis != "" {
+			if k8sMeta == nil {
+				k8sMeta = &api.K8sMetadata{}
 			}
-			mappedNode := s.NodeMapper.NodeForChassis(hostname, boundChassis)
-			if mappedNode != "" {
-				k8sMeta.Node = &mappedNode
+			if k8sMeta.Node == nil {
+				hostname := ""
+				if ch, ok := s.Chassis[boundChassis]; ok {
+					hostname = ch.Hostname
+				}
+				mappedNode := s.NodeMapper.NodeForChassis(hostname, boundChassis)
+				if mappedNode != "" {
+					k8sMeta.Node = &mappedNode
+				} else if hostname != "" {
+					k8sMeta.Node = &hostname
+				}
 			}
 		}
 

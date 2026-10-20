@@ -83,6 +83,7 @@ func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 
 // FindNodeCNIPod finds the kube-ovn-cni pod running on the specified node.
 func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRef, error) {
+	nodeName = l.resolveKubeNodeName(ctx, nodeName)
 	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=kube-ovn-cni",
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
@@ -121,6 +122,7 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 
 // FindNodeOVSPod finds the ovs-ovn or ovs pod running on the specified node (or falls back to kube-ovn-cni).
 func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRef, error) {
+	nodeName = l.resolveKubeNodeName(ctx, nodeName)
 	selectors := []string{"app=ovs", "app=ovs-ovn"}
 	for _, sel := range selectors {
 		pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
@@ -249,4 +251,29 @@ func (l *PodLocator) getFirstNodeName(ctx context.Context) string {
 		return nodes.Items[0].Name
 	}
 	return "cluster-node"
+}
+
+func (l *PodLocator) resolveKubeNodeName(ctx context.Context, candidate string) string {
+	if candidate == "" {
+		return candidate
+	}
+	// Check if candidate is already a valid node name
+	if n, err := l.client.CoreV1().Nodes().Get(ctx, candidate, metav1.GetOptions{}); err == nil && n != nil {
+		return n.Name
+	}
+
+	// Try resolving via annotations or hostname labels
+	nodes, err := l.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, n := range nodes.Items {
+			if n.Name == candidate || n.Labels["kubernetes.io/hostname"] == candidate {
+				return n.Name
+			}
+			if n.Annotations["ovn.kubernetes.io/chassis"] == candidate ||
+				n.Annotations["k8s.ovn.org/chassis"] == candidate {
+				return n.Name
+			}
+		}
+	}
+	return candidate
 }

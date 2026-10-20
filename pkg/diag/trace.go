@@ -198,7 +198,11 @@ func ParseTraceOutput(raw string) TraceResult {
 		} else if m := outputRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 			res.Verdict = "delivered"
 			res.FinalPort = m[1]
-			res.Summary = fmt.Sprintf("Packet forwarded to %s", m[1])
+			if strings.HasPrefix(m[1], "localnet") {
+				res.Summary = fmt.Sprintf("Packet egressed to physical underlay via %s (upstream firewall applies)", m[1])
+			} else {
+				res.Summary = fmt.Sprintf("Packet forwarded to %s", m[1])
+			}
 		} else if strings.Contains(trimmed, "drop;") || strings.Contains(trimmed, "/* drop */") || strings.Contains(trimmed, "action=drop") {
 			if res.Verdict != "delivered" {
 				res.Verdict = "dropped"

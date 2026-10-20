@@ -286,12 +286,7 @@ func TestDiagnosticsMode(t *testing.T) {
 		t.Errorf("expected Choose Destination Target in picker, got: %s", pickerView)
 	}
 
-	// Execute trace
-	var conn *RouterPortConnection
-	if len(m.portList) > 0 {
-		conn = &m.portList[0]
-	}
-	traceCmd := m.executeTrace(conn, m.traceDestinations[0].IP, "icmp", 0)
+	traceCmd := m.executeTrace(m.traceDestinations[0].IP, "icmp", 0)
 	if traceCmd == nil {
 		t.Fatalf("expected non-nil traceCmd")
 	}
