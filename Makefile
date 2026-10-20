@@ -15,8 +15,10 @@ generate:
 
 .PHONY: lint
 lint:
-	@echo "==> Running golangci-lint (enforcing read-only rules)..."
+	@echo "==> Running golangci-lint (enforcing read-only and depguard rules)..."
 	golangci-lint run ./...
+	@echo "==> Running ADR-0001 dependency check..."
+	./hack/check-deps.sh
 	@if [ -d "ui" ] && [ -f "ui/package.json" ]; then \
 		echo "==> Running eslint..."; \
 		(cd ui && yarn lint); \
