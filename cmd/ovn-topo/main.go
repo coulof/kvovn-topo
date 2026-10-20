@@ -467,6 +467,71 @@ func (m *model) applyGraph(resp *api.GraphResponse) {
 			}
 		}
 	}
+
+	// Expand all switches by default
+	for _, n := range resp.Nodes {
+		if n.Type == api.GraphNodeTypeLS {
+			m.expandedSwitches[n.Id] = true
+		}
+	}
+
+	// Pre-populate workloads if offline fixture
+	if m.fixturePath != "" {
+		snap := graph.LoadTestSnapshot(nil)
+		for _, n := range resp.Nodes {
+			if n.Type == api.GraphNodeTypeLS {
+				l2, err := snap.BuildGraph("l2", n.Id, 1, 1, 100)
+				if err == nil && l2 != nil {
+					var lsps []api.GraphNode
+					for _, item := range l2.Nodes {
+						if item.Type == api.GraphNodeTypeLSP {
+							lsps = append(lsps, item)
+						}
+					}
+					m.switchWorkloads[n.Id] = lsps
+				}
+			}
+		}
+	}
+
+	m.rebuildNodeList()
+}
+
+func (m *model) rebuildNodeList() {
+	var list []api.GraphNode
+	for _, vpcName := range m.vpcNames {
+		nodes := m.vpcGroups[vpcName]
+		for _, n := range nodes {
+			list = append(list, n)
+			if n.Type == api.GraphNodeTypeLS && m.expandedSwitches[n.Id] {
+				list = append(list, m.switchWorkloads[n.Id]...)
+			}
+		}
+	}
+	for _, n := range m.sharedNodes {
+		list = append(list, n)
+		if n.Type == api.GraphNodeTypeLS && m.expandedSwitches[n.Id] {
+			list = append(list, m.switchWorkloads[n.Id]...)
+		}
+	}
+	list = append(list, m.externalNodes...)
+	m.nodeList = list
+	if m.selectedIdx >= len(m.nodeList) {
+		m.selectedIdx = 0
+	}
+}
+
+func (m model) fetchAllSwitchesL2Cmd() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, n := range m.nodeList {
+		if n.Type == api.GraphNodeTypeLS {
+			cmds = append(cmds, m.fetchL2Cmd(n.Id))
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -483,21 +548,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyGraph(msg.resp)
-		return m, nil
+		return m, m.fetchAllSwitchesL2Cmd()
 
 	case l2LoadedMsg:
 		if msg.err == nil && msg.resp != nil {
-			m.l2Resp = msg.resp
 			var lsps []api.GraphNode
 			for _, n := range msg.resp.Nodes {
 				if n.Type == api.GraphNodeTypeLSP {
 					lsps = append(lsps, n)
 				}
 			}
-			m.l2Nodes = lsps
 			if msg.lsID != "" {
 				m.switchWorkloads[msg.lsID] = lsps
 			}
+			if msg.lsID == m.focusedLS || m.focusedLS == "" {
+				m.l2Resp = msg.resp
+				m.l2Nodes = lsps
+				m.focusedLS = msg.lsID
+			}
+			m.rebuildNodeList()
 		}
 		return m, nil
 
@@ -760,6 +829,17 @@ func (m model) selectedNodeName() string {
 		if conn.ActiveGateway != "" {
 			return conn.ActiveGateway
 		}
+	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		node := m.nodeList[m.selectedIdx]
+		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.Node != nil && *node.K8s.Node != "" {
+			return *node.K8s.Node
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			workloads := m.switchWorkloads[node.Id]
+			if len(workloads) > 0 && workloads[0].K8s != nil && workloads[0].K8s.Node != nil && *workloads[0].K8s.Node != "" {
+				return *workloads[0].K8s.Node
+			}
+		}
 	}
 	for _, conn := range m.portList {
 		if conn.ActiveGateway != "" {
@@ -777,6 +857,25 @@ func (m model) selectedTargetIP() string {
 		}
 	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 		node := m.nodeList[m.selectedIdx]
+		if node.Type == api.GraphNodeTypeLSP && node.Properties != nil {
+			p := *node.Properties
+			if addrs, ok := p["addresses"].([]interface{}); ok && len(addrs) > 0 {
+				if s, ok := addrs[0].(string); ok {
+					return s
+				}
+			}
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			workloads := m.switchWorkloads[node.Id]
+			if len(workloads) > 0 && workloads[0].Properties != nil {
+				p := *workloads[0].Properties
+				if addrs, ok := p["addresses"].([]interface{}); ok && len(addrs) > 0 {
+					if s, ok := addrs[0].(string); ok {
+						return s
+					}
+				}
+			}
+		}
 		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
 			if len(ports[0].Networks) > 0 {
 				return strings.Split(ports[0].Networks[0], "/")[0]
@@ -795,6 +894,15 @@ func (m model) selectedPortName() string {
 		return conn.PortName
 	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 		node := m.nodeList[m.selectedIdx]
+		if node.Type == api.GraphNodeTypeLSP {
+			return node.Name
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			workloads := m.switchWorkloads[node.Id]
+			if len(workloads) > 0 {
+				return workloads[0].Name
+			}
+		}
 		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
 			if ports[0].PeerPortName != "" {
 				return ports[0].PeerPortName
@@ -1142,7 +1250,12 @@ func (m model) renderDiagModal() string {
 			currentConn.PortName, currentConn.RouterName, currentConn.SwitchName, strings.Join(currentConn.Networks, ", "))
 	} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 		node := m.nodeList[m.selectedIdx]
-		targetDesc = fmt.Sprintf("Node: %s (Type: %s)", node.Name, node.Type)
+		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.WorkloadName != nil {
+			targetDesc = fmt.Sprintf("[%s] %s (IP: %s, Node: %s)",
+				*node.K8s.WorkloadKind, *node.K8s.WorkloadName, m.selectedTargetIP(), m.selectedNodeName())
+		} else {
+			targetDesc = fmt.Sprintf("Node: %s (Type: %s)", node.Name, node.Type)
+		}
 	}
 
 	fmt.Fprintf(&box, "  Target: %s\n\n", m.styles.PortBadge.Render(targetDesc))
@@ -1504,184 +1617,233 @@ func (m model) renderTreeView() string {
 }
 
 func (m model) renderL2View() string {
-	var b strings.Builder
+	var leftPanel strings.Builder
+	var rightPanel strings.Builder
 
+	leftPanel.WriteString(m.styles.Header.Render("Subnets (Broadcast Domains)") + "\n")
+
+	var switches []api.GraphNode
+	for _, n := range m.nodeList {
+		if n.Type == api.GraphNodeTypeLS {
+			alreadyIn := false
+			for _, s := range switches {
+				if s.Id == n.Id {
+					alreadyIn = true
+					break
+				}
+			}
+			if !alreadyIn {
+				switches = append(switches, n)
+			}
+		}
+	}
+
+	selectedSwitchIdx := 0
+	for i, s := range switches {
+		if s.Id == m.focusedLS || s.Name == m.focusedLSName {
+			selectedSwitchIdx = i
+			break
+		}
+	}
+
+	for i, s := range switches {
+		isSel := i == selectedSwitchIdx
+		cursor := "  "
+		if isSel {
+			cursor = "► "
+		}
+
+		pCount := ""
+		if s.Properties != nil {
+			p := *s.Properties
+			pCount = fmt.Sprintf(" [%v bound]", p["boundPortCount"])
+		}
+
+		line := fmt.Sprintf("%s%s%s", cursor, s.Name, pCount)
+		if isSel {
+			leftPanel.WriteString(m.styles.SelectedNode.Render(line) + "\n")
+		} else {
+			leftPanel.WriteString(m.styles.Node.Render(line) + "\n")
+		}
+	}
+
+	leftBox := m.styles.VPCBox.Width(34).Render(leftPanel.String())
+
+	// Right Pane: Workload inventory for focused switch
 	swName := m.focusedLSName
 	if swName == "" {
 		swName = m.focusedLS
 	}
-	if swName == "" {
-		swName = "All Subnets"
-	}
 
-	headerText := fmt.Sprintf("  Subnet: %s (%d attached ports)  [s: cycle subnet | ↑/↓ or j/k: navigate | x: diag]",
-		swName, len(m.l2Nodes))
-	b.WriteString(m.styles.Header.Render(headerText) + "\n\n")
-
-	tblHeader := fmt.Sprintf("  %-32s %-10s %-24s %-20s %s",
-		"NAME / LSP", "TYPE", "IP / MAC", "CHASSIS / NODE", "WORKLOAD IDENTITY")
-	b.WriteString(m.styles.TableHeader.Render(tblHeader) + "\n")
+	rightPanel.WriteString(m.styles.Header.Render(fmt.Sprintf("Workloads in %s (%d ports)", swName, len(m.l2Nodes))) + "\n\n")
 
 	if len(m.l2Nodes) == 0 {
-		b.WriteString("\n  No attached ports or loading subnet...\n")
-		b.WriteString(m.styles.MutedText.Render("  Tip: Press 's' to cycle focused subnet, '1' for tree, or 'r' to refresh.\n"))
-		return b.String()
-	}
-
-	for idx, n := range m.l2Nodes {
-		props := make(map[string]interface{})
-		if n.Properties != nil {
-			props = *n.Properties
-		}
-
-		portType, _ := props["type"].(string)
-		if portType == "" {
-			portType = "veth"
-		}
-
-		addrStr := ""
-		if addrs, ok := props["addresses"].([]interface{}); ok && len(addrs) > 0 {
-			var strList []string
-			for _, a := range addrs {
-				if s, ok := a.(string); ok {
-					strList = append(strList, s)
+		rightPanel.WriteString(m.styles.MutedText.Render("  No active workloads or ports in this subnet.\n"))
+		rightPanel.WriteString(m.styles.MutedText.Render("  Tip: Press 's' to cycle focused subnet or 'r' to refresh.\n"))
+	} else {
+		for _, n := range m.l2Nodes {
+			kind := "Pod"
+			name := n.Name
+			ns := "default"
+			owner := ""
+			vmi := ""
+			if n.K8s != nil {
+				if n.K8s.WorkloadKind != nil {
+					kind = *n.K8s.WorkloadKind
 				}
-			}
-			addrStr = strings.Join(strList, ", ")
-		}
-
-		boundState, _ := props["boundState"].(string)
-		chassis, _ := props["boundChassis"].(string)
-		chassisText := "(unbound)"
-		if boundState == "bound" {
-			nodeName := chassis
-			if n.K8s != nil && n.K8s.Node != nil {
-				nodeName = *n.K8s.Node
-			}
-			chassisText = m.styles.BadgeBound.Render(nodeName)
-		} else {
-			chassisText = m.styles.BadgeUnbound.Render(chassisText)
-		}
-
-		workloadText := "(none)"
-		if n.K8s != nil {
-			if n.K8s.WorkloadKind != nil && n.K8s.WorkloadName != nil {
-				ns := ""
+				if n.K8s.WorkloadName != nil {
+					name = *n.K8s.WorkloadName
+				}
 				if n.K8s.Namespace != nil {
-					ns = *n.K8s.Namespace + "/"
+					ns = *n.K8s.Namespace
 				}
-				owner := ""
-				if n.K8s.Owner != nil && *n.K8s.Owner != "" {
-					owner = fmt.Sprintf(" (%s)", *n.K8s.Owner)
+				if n.K8s.Owner != nil {
+					owner = *n.K8s.Owner
 				}
-				workloadText = fmt.Sprintf("[%s] %s%s%s", *n.K8s.WorkloadKind, ns, *n.K8s.WorkloadName, owner)
-			} else if n.K8s.Pod != nil {
-				workloadText = fmt.Sprintf("[Pod] %s", *n.K8s.Pod)
+				if n.K8s.Vmi != nil {
+					vmi = *n.K8s.Vmi
+				}
 			}
-		}
 
-		cursor := "  "
-		if idx == m.selectedIdx {
-			cursor = "► "
-		}
+			props := make(map[string]interface{})
+			if n.Properties != nil {
+				props = *n.Properties
+			}
+			addrStr := "(none)"
+			if addrs, ok := props["addresses"].([]interface{}); ok && len(addrs) > 0 {
+				var strList []string
+				for _, a := range addrs {
+					if s, ok := a.(string); ok {
+						strList = append(strList, s)
+					}
+				}
+				addrStr = strings.Join(strList, ", ")
+			}
 
-		row := fmt.Sprintf("%s%-32s %-10s %-24s %-20s %s",
-			cursor,
-			truncate(n.Name, 32),
-			truncate(portType, 10),
-			truncate(addrStr, 24),
-			truncate(chassisText, 20),
-			truncate(workloadText, 40))
+			chassis := "(unbound)"
+			if bound, ok := props["boundChassis"].(string); ok && bound != "" {
+				chassis = bound
+				if n.K8s != nil && n.K8s.Node != nil {
+					chassis = *n.K8s.Node
+				}
+			}
 
-		if idx == m.selectedIdx {
-			b.WriteString(m.styles.TableRowSelected.Render(row) + "\n")
-		} else {
-			b.WriteString(m.styles.TableRow.Render(row) + "\n")
+			var card strings.Builder
+			cardTitle := fmt.Sprintf("[%s] %s/%s", kind, ns, name)
+			card.WriteString(m.styles.PortBadge.Render(cardTitle) + "\n")
+			fmt.Fprintf(&card, "  • Port Name:   %s\n", n.Name)
+			fmt.Fprintf(&card, "  • IP / MAC:    %s\n", m.styles.CIDR.Render(addrStr))
+			fmt.Fprintf(&card, "  • Placement:   Node %s\n", m.styles.BadgeBound.Render(chassis))
+			if owner != "" {
+				fmt.Fprintf(&card, "  • Owner:       %s\n", owner)
+			}
+			if vmi != "" && vmi != name {
+				fmt.Fprintf(&card, "  • KubeVirt VMI: %s\n", vmi)
+			}
+			rightPanel.WriteString(m.styles.DetailBox.Width(54).Render(card.String()) + "\n")
 		}
 	}
 
-	return b.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftBox, rightPanel.String())
 }
 
 func (m model) renderChassisView() string {
-	var b strings.Builder
+	var leftPanel strings.Builder
+	var rightPanel strings.Builder
 
-	headerText := fmt.Sprintf("  Cluster Chassis & Nodes (%d members)  [↑/↓ or j/k: navigate | x: diag on node]",
-		len(m.chassisNodes))
-	b.WriteString(m.styles.Header.Render(headerText) + "\n\n")
+	leftPanel.WriteString(m.styles.Header.Render("Cluster Nodes") + "\n")
 
-	tblHeader := fmt.Sprintf("  %-28s %-18s %-18s %-12s %-14s %s",
-		"CHASSIS / NODE", "HOSTNAME", "IP ADDRESS", "ENCAP", "BOUND PORTS", "ACTIVE ROLES")
-	b.WriteString(m.styles.TableHeader.Render(tblHeader) + "\n")
+	for i, ch := range m.chassisNodes {
+		isSel := i == m.selectedIdx
+		cursor := "  "
+		if isSel {
+			cursor = "► "
+		}
 
-	if len(m.chassisNodes) == 0 {
-		b.WriteString("\n  Loading chassis inventory...\n")
-		return b.String()
-	}
-
-	for idx, ch := range m.chassisNodes {
 		props := make(map[string]interface{})
 		if ch.Properties != nil {
 			props = *ch.Properties
-		}
-
-		nodeName, _ := props["nodeName"].(string)
-		if nodeName == "" {
-			nodeName = ch.Name
 		}
 		hostname, _ := props["hostname"].(string)
 		if hostname == "" {
 			hostname = ch.Name
 		}
-		ip, _ := props["ip"].(string)
-		if ip == "" {
-			ip = "(overlay)"
+		nodeName, _ := props["nodeName"].(string)
+		if nodeName == "" {
+			nodeName = hostname
 		}
-		encap, _ := props["encapType"].(string)
-		if encap == "" {
-			encap = "geneve"
-		}
-		bindingCount := 0
-		if bc, ok := props["bindingCount"].(float64); ok {
-			bindingCount = int(bc)
-		} else if bc, ok := props["bindingCount"].(int); ok {
-			bindingCount = bc
-		}
+		bCount := props["bindingCount"]
 
-		// Check if this chassis hosts active gateways
-		var activeRoles []string
-		for _, conn := range m.portList {
-			if conn.ActiveGateway == hostname || conn.ActiveGateway == nodeName || conn.ActiveGateway == ch.Name {
-				activeRoles = append(activeRoles, fmt.Sprintf("GW: %s", conn.PortName))
-			}
-		}
-		roleText := "(compute node)"
-		if len(activeRoles) > 0 {
-			roleText = m.styles.ActiveGateway.Render(strings.Join(activeRoles, ", "))
-		}
-
-		cursor := "  "
-		if idx == m.selectedIdx {
-			cursor = "► "
-		}
-
-		row := fmt.Sprintf("%s%-28s %-18s %-18s %-12s %-14s %s",
-			cursor,
-			truncate(fmt.Sprintf("%s (%s)", nodeName, ch.Name), 28),
-			truncate(hostname, 18),
-			truncate(ip, 18),
-			truncate(encap, 12),
-			fmt.Sprintf("%d ports", bindingCount),
-			roleText)
-
-		if idx == m.selectedIdx {
-			b.WriteString(m.styles.TableRowSelected.Render(row) + "\n")
+		line := fmt.Sprintf("%s%s (%v ports)", cursor, nodeName, bCount)
+		if isSel {
+			leftPanel.WriteString(m.styles.SelectedNode.Render(line) + "\n")
 		} else {
-			b.WriteString(m.styles.TableRow.Render(row) + "\n")
+			leftPanel.WriteString(m.styles.Node.Render(line) + "\n")
 		}
 	}
 
-	return b.String()
+	leftBox := m.styles.VPCBox.Width(32).Render(leftPanel.String())
+
+	// Right Pane: Details for highlighted chassis
+	if len(m.chassisNodes) > 0 && m.selectedIdx < len(m.chassisNodes) {
+		ch := m.chassisNodes[m.selectedIdx]
+		props := make(map[string]interface{})
+		if ch.Properties != nil {
+			props = *ch.Properties
+		}
+		hostname, _ := props["hostname"].(string)
+		if hostname == "" {
+			hostname = ch.Name
+		}
+		nodeName, _ := props["nodeName"].(string)
+		if nodeName == "" {
+			nodeName = hostname
+		}
+		ip, _ := props["ip"].(string)
+		encap, _ := props["encapType"].(string)
+
+		rightPanel.WriteString(m.styles.Header.Render(fmt.Sprintf("Node Details: %s", nodeName)) + "\n")
+		fmt.Fprintf(&rightPanel, "  • Hostname:     %s\n", hostname)
+		fmt.Fprintf(&rightPanel, "  • Chassis UUID: %s\n", ch.Name)
+		fmt.Fprintf(&rightPanel, "  • Encap IP:     %s (type: %s)\n", m.styles.CIDR.Render(ip), encap)
+		fmt.Fprintf(&rightPanel, "  • Bound Ports:  %v\n\n", props["bindingCount"])
+
+		// Active Gateways hosted on this node
+		var gateways []string
+		for _, conn := range m.portList {
+			if conn.ActiveGateway == hostname || conn.ActiveGateway == nodeName || conn.ActiveGateway == ch.Name {
+				gateways = append(gateways, fmt.Sprintf("%s (VPC: %s, EIP: %s)", conn.PortName, conn.VPCName, strings.Join(conn.Networks, ", ")))
+			}
+		}
+
+		rightPanel.WriteString(m.styles.Header.Render("Active HA Gateways:") + "\n")
+		if len(gateways) == 0 {
+			rightPanel.WriteString(m.styles.MutedText.Render("  (no active gateway roles on this node)\n\n"))
+		} else {
+			for _, gw := range gateways {
+				rightPanel.WriteString("  • " + m.styles.ActiveGateway.Render(gw) + "\n")
+			}
+			rightPanel.WriteString("\n")
+		}
+
+		// Hosted Workloads
+		rightPanel.WriteString(m.styles.Header.Render("Workloads Running on this Node:") + "\n")
+		var hostedCount int
+		for _, lsps := range m.switchWorkloads {
+			for _, lsp := range lsps {
+				if lsp.K8s != nil && lsp.K8s.Node != nil && (*lsp.K8s.Node == nodeName || *lsp.K8s.Node == hostname) {
+					hostedCount++
+					wBadge := formatWorkloadBadge(lsp, m.styles)
+					rightPanel.WriteString("  • " + wBadge + "\n")
+				}
+			}
+		}
+		if hostedCount == 0 {
+			rightPanel.WriteString(m.styles.MutedText.Render("  (no attached workloads discovered on this node)\n"))
+		}
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftBox, m.styles.DetailBox.Width(58).Render(rightPanel.String()))
 }
 
 func (m model) renderMatrixView() string {
