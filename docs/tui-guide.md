@@ -6,9 +6,9 @@ This guide explains how to navigate and interpret the `ovn-topo` terminal visual
 
 ## 1. Views & Navigation
 
-The TUI provides two main operational views, toggled via **`Tab`**:
+The TUI provides four operational views, switchable via number keys **`1` - `4`** or the bottom navigation bar:
 
-### View 1: Topology Tree (`1. Topology Tree`)
+### View 1: Topology Tree (`1. L3 Tree`)
 Hierarchical layout grouped by VPC boundaries:
 - **Compound VPC Box**: Groups a Logical Router (`LR`) and its attached Logical Switches (`LS`).
 - **Branch Port Indicators**:
@@ -16,51 +16,88 @@ Hierarchical layout grouped by VPC boundaries:
   - `[GW IP: 10.54.0.1/16]`: Distributed default gateway interface for pods and VMs in that subnet.
   - `[Transit IP: 100.64.0.1/16]`: Multi-VPC interconnection interface.
   - `[EIP: 10.144.124.13/27] [GW: hv-01]`: Centralized external gateway interface (External IP) active on the designated chassis node (highlighted in Persimmon `#fe7c3f`).
+- **Workload Expansion (`Space` / `Enter`)**: Subnets are collapsed by default. Press **`Space`** on any switch to toggle its workload pods and KubeVirt VMs.
 - **Interconnects Box**: Displays shared switches (such as `join`) that attach to multiple Logical Routers across distinct VPCs.
 - **External Provider Underlays Box**: Displays provider networks attached via `localnet` switch ports to physical bridges.
 - **Side Panel (Right)**: Shows full metadata of the currently highlighted entity (IDs, route counts, NAT rules, policy counts, bound/unbound port tallies, and Kubernetes annotations).
 
-### View 2: Port Interconnection Matrix (`2. Port Interconnection Matrix`)
+### View 2: L2 Subnets Explorer (`2. L2 Subnets`)
+Interactive dual-pane broadcast domain explorer:
+- **Left Pane (Subnets)**: Scroll through all subnets in the cluster with bound/unbound port counts.
+- **Right Pane (Workload Cards)**: Press **`Tab`**, **`→`**, or **`Enter`** to move focus into the workload cards for that subnet.
+  - Scroll through specific VMs and Pods with **`j` / `k`** or **`↑` / `↓`**.
+  - Each card shows port name, IP/MAC, hosting cluster node, and KubeVirt VMI identity.
+  - Press **`x`** on any card to run diagnostics directly against that specific workload!
+  - Press **`←`** or **`Tab`** to return focus to the Subnets list.
+
+### View 3: Chassis Explorer (`3. Chassis`)
+Split-pane physical node and tunnel inspector:
+- **Left Pane (Nodes)**: List of physical cluster nodes (`hv-01` .. `hv-04`) with total OVN port bindings.
+- **Right Pane (Details)**: Encap tunnel IP, tunnel type (`geneve`/`vxlan`), active gateway roles, and chassis UUID.
+
+### View 4: Port Matrix (`4. Port Matrix`)
 Tabular inventory of all L3 interconnects in the cluster:
 - **Columns**: `VPC/ROUTER`, `PORT (LRP)`, `INTERFACE IP (CIDR)`, `TARGET SWITCH`, `MAC`, `GATEWAY STATUS`.
 - **Shared Indicator (`*`)**: Marks switches attached to more than one Logical Router.
-- **Port Inspector Box (Bottom)**: Opens a detailed inspection card for the highlighted port, displaying:
-  - Router, target switch, peer LSP name, MAC address, and subnet prefix.
-  - Gateway role (External EIP Gateway, Multi-VPC Transit IP, or Default Subnet Gateway).
-  - High availability details (Active node chassis, redirect port `cr-<port>`, routing mode).
-  - Cross-connected peer routers when attached to a shared interconnect switch.
+- **Port Inspector Box (Bottom)**: Detailed inspection card for the highlighted router port.
 
 ---
 
-## 2. Visual Palette & Semantic Colors
+## 2. k9s-Style Bottom Navigation Dock
+
+`ovn-topo` features an uncluttered top header and a dedicated 2-row bottom status and hotkey bar:
+
+```text
+───────────────────────────────────────────────────────────────────────────────────────────────────────
+ ● Connected to http://127.0.0.1:8080 │ Rev 8 │ 12 nodes, 7 edges │ Theme: [suse]
+ <1-4> Views  <Space> Expand  <Tab/←/→> Pane  <x> Diag  <t> Theme  <j/k/↑/↓> Nav  <r> Refresh  <q> Quit
+```
+- **Row 1**: Real-time connection indicator, daemon URL, topology revision, graph totals, and current active color theme.
+- **Row 2**: Context-sensitive hotkey badges formatted with theme accents.
+
+---
+
+## 3. Visual Palette & Semantic Colors
 
 | Element | Color | Role |
 |---|---|---|
 | **Gateways, EIPs & Alerts** | **Persimmon** (`#fe7c3f`) | Centralized HA gateways, EIP interfaces, active chassis roles |
 | **CIDRs & Network IPs** | **Mint** / Cyan (`#90ebcd`) | Subnet IP prefixes, interface IPs, and transit ranges |
-| **Router Ports (LRPs)** | **Waterhole** / Orange (`#2453ff`) | LRP and LSP port identifier badges |
+| **Router Ports (LRPs)** | **Waterhole** / Blue (`#2453ff`) | LRP and LSP port identifier badges |
 | **Bound / Healthy Ports** | **Jungle** / Green (`#30ba78`) | Bound ports, delivered packet trace verdicts, active statuses |
 | **Unbound Ports & Errors** | **Red** (`#ff5555`) | Unbound logical ports, dropped packets, connection errors |
 | **Compound VPC Boxes** | **Primary Theme Accent** | VPC container boundary and header banners |
 
 ---
 
-## 3. Tier 1 Diagnostics (`x` key)
+## 4. Tier 1 Diagnostics (`x` key)
 
-When started with `--diag`, pressing **`x`** opens the diagnostics menu:
+When started with `--diag`, pressing **`x`** opens the diagnostics menu for the currently highlighted entity:
 
-- **`[1] ovn-trace`**: Simulates microflow packet traversal through OVN logical pipelines.
-  - Displays **Simulation Endpoints**: Source inport, Source IP, Source MAC, Destination IP, and Protocol (`ip.ttl=255`, 4x `--ct=new`).
-  - Displays **Hop-by-Hop Flow Path**: Visual trace sequence across switches, routers, and peer ports:
-    ```text
-    ovn-default ──► ovn-cluster ──► join ──► Port 'node-hv-01'
-    ```
-  - Displays **Verdict**: `DELIVERED` or `DROPPED` with table-by-table evaluated stages.
-- **`[2] - [4] Live tcpdump`**: Real-time packet capture on the selected port's **dedicated host veth interface** (`<hash>_h` for VMs/Pods, `ovn0` for node ports, `br-external` for gateways). Includes safe 5-second execution timeout.
-- **`[5] Filtered Conntrack`**: Connection tracking table filtered specifically for the active port IP, removing loopback and control-plane noise.
-- **`[6] OVS Physical Bridges & Ports`**: Runs `ovs-vsctl show` displaying bridges, port types (`vxlan`, `internal`, `patch`), tunnel endpoints, and BFD statuses.
-- **`[7] Tail Controller Logs`**: Tails local `ovn-controller` logs on the target node.
-- **Navigation in Modal**: Use **`j` / `k`** or **`↓` / `↑`** to scroll through output; press **`o`** to toggle pretty-printed JSON.
+### `[1] ovn-trace` (Interactive Simulation)
+Opens the Destination Picker Dialog:
+- **Search & Custom IP Bar**: Type any text to filter candidates in real-time, or type an arbitrary IP address (e.g. `10.144.97.201` or `10.144.97.201:22`) to trace to custom endpoints outside OVN!
+- **Category Tabs**: Press **`Tab`** to filter by `[All]`, `[VM]`, `[Pod]`, `[Gateway]`, `[Node]`, or `[Public DNS]`.
+- **Protocol Selection**: Press **`Ctrl+P`** or **`F1` - `F5`** to toggle:
+  - `[1]` ICMP (Ping)
+  - `[2]` TCP 22 (SSH)
+  - `[3]` TCP 80 (HTTP)
+  - `[4]` TCP 443 (HTTPS)
+  - `[5]` UDP 53 (DNS)
+- **Automatic Gateway MAC**: When tracing from a VM to an external destination, `ovn-topo` automatically injects the subnet router's Gateway MAC (`eth.dst`), ensuring seamless traversal through logical routers to `localnet.external`.
+- **Trace Output**: Visual **Hop-by-Hop Flow Path**, `DELIVERED` / `DROPPED` verdict, and pipeline stage inspector.
+
+### `[2] - [4] Live tcpdump`
+Real-time packet capture on the selected port's **dedicated host veth interface** (`<hash>_h` for VMs/Pods, `ovn0` for node ports, `br-external` for gateways). Includes safe 5-second execution timeout and `-l` line-buffering.
+
+### `[5] Filtered Conntrack`
+Connection tracking table filtered specifically for the active port IP, removing loopback and control-plane noise.
+
+### `[6] OVS Physical Bridges & Ports`
+Runs `ovs-vsctl show` on the hosting node, displaying bridges, port types (`vxlan`, `internal`, `patch`), tunnel endpoints, and BFD statuses.
+
+### `[7] Tail Controller Logs`
+Tails local `ovn-controller` logs on the target node with automatic chassis UUID $\rightarrow$ node name translation.
 
 ---
 
