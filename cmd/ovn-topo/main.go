@@ -23,6 +23,19 @@ var (
 			Background(lipgloss.Color("#0070F3")).
 			Padding(0, 1)
 
+	tabActiveStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#7D56F4")).
+			Padding(0, 1).
+			MarginRight(1)
+
+	tabInactiveStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				Background(lipgloss.Color("#222222")).
+				Padding(0, 1).
+				MarginRight(1)
+
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#00A86B")).
@@ -43,25 +56,81 @@ var (
 				Background(lipgloss.Color("#7D56F4")).
 				Padding(0, 1)
 
+	edgeLineStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#666666"))
+
+	cidrStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00C7BE")).
+			Bold(true)
+
+	portBadgeStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF9500"))
+
 	detailBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#666666")).
-			Padding(1).
-			Width(45)
+			BorderForeground(lipgloss.Color("#555555")).
+			Padding(0, 1).
+			Width(52)
 
 	badgeBound = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#00A86B"))
 
 	badgeUnbound = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF453A"))
+
+	activeGatewayStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFD60A")).
+				Bold(true)
+
+	tableHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(lipgloss.Color("#333333")).
+				Padding(0, 1)
+
+	tableRowStyle = lipgloss.NewStyle().
+			Padding(0, 1)
+
+	tableRowSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(lipgloss.Color("#7D56F4")).
+				Padding(0, 1)
 )
+
+type viewMode int
+
+const (
+	viewTree viewMode = iota
+	viewMatrix
+)
+
+// RouterPortConnection represents an L3 interconnection between an LR port and an LS.
+type RouterPortConnection struct {
+	RouterID      string
+	RouterName    string
+	VPCName       string
+	PortName      string
+	MAC           string
+	Networks      []string
+	SwitchID      string
+	SwitchName    string
+	PeerPortName  string
+	ActiveGateway string
+	IsShared      bool
+}
 
 type model struct {
 	daemonURL    string
 	fixturePath  string
 	graphResp    *api.GraphResponse
+	mode         viewMode
 	selectedIdx  int
 	nodeList     []api.GraphNode
+	portList     []RouterPortConnection
+	routerPorts  map[string][]RouterPortConnection
+	switchPorts  map[string][]RouterPortConnection
+	nodeMap      map[string]api.GraphNode
 	err          error
 	status       string
 	width        int
@@ -78,6 +147,10 @@ func initialModel(daemonURL, fixturePath string) model {
 		daemonURL:   daemonURL,
 		fixturePath: fixturePath,
 		status:      "Connecting...",
+		mode:        viewTree,
+		nodeMap:     make(map[string]api.GraphNode),
+		routerPorts: make(map[string][]RouterPortConnection),
+		switchPorts: make(map[string][]RouterPortConnection),
 	}
 }
 
@@ -113,6 +186,123 @@ func (m model) fetchGraphCmd() tea.Cmd {
 	}
 }
 
+func (m *model) applyGraph(resp *api.GraphResponse) {
+	m.err = nil
+	m.graphResp = resp
+	m.status = fmt.Sprintf("Revision %d | %d nodes, %d edges", resp.Revision, len(resp.Nodes), len(resp.Edges))
+
+	m.nodeMap = make(map[string]api.GraphNode, len(resp.Nodes))
+	for _, n := range resp.Nodes {
+		m.nodeMap[n.Id] = n
+	}
+
+	// Build flat navigable list of selectable nodes
+	m.nodeList = make([]api.GraphNode, 0)
+	for _, n := range resp.Nodes {
+		if n.Type != api.GraphNodeTypeVPC {
+			m.nodeList = append(m.nodeList, n)
+		}
+	}
+	sort.Slice(m.nodeList, func(i, j int) bool {
+		if m.nodeList[i].Type != m.nodeList[j].Type {
+			return m.nodeList[i].Type < m.nodeList[j].Type
+		}
+		return m.nodeList[i].Name < m.nodeList[j].Name
+	})
+
+	// Index all router-peer interconnections from Edges
+	m.portList = make([]RouterPortConnection, 0)
+	m.routerPorts = make(map[string][]RouterPortConnection)
+	m.switchPorts = make(map[string][]RouterPortConnection)
+
+	// Count attachments to identify shared/interconnect switches
+	switchAttachmentCount := make(map[string]int)
+	for _, e := range resp.Edges {
+		if e.Type == api.RouterPeer {
+			switchAttachmentCount[e.Target]++
+		}
+	}
+
+	for _, e := range resp.Edges {
+		if e.Type != api.RouterPeer {
+			continue
+		}
+		srcNode, hasSrc := m.nodeMap[e.Source]
+		tgtNode, hasTgt := m.nodeMap[e.Target]
+		if !hasSrc || !hasTgt {
+			continue
+		}
+
+		lrpName := ""
+		lrpMac := ""
+		var networks []string
+		lspName := ""
+		activeGw := ""
+
+		if e.Properties != nil {
+			props := *e.Properties
+			if p, ok := props["lrp"].(string); ok {
+				lrpName = p
+			}
+			if mac, ok := props["lrpMac"].(string); ok {
+				lrpMac = mac
+			}
+			if l, ok := props["lsp"].(string); ok {
+				lspName = l
+			}
+			if gw, ok := props["activeGateway"].(string); ok {
+				activeGw = gw
+			}
+			if nets, ok := props["networks"].([]interface{}); ok {
+				for _, it := range nets {
+					if s, ok := it.(string); ok {
+						networks = append(networks, s)
+					}
+				}
+			}
+		}
+		if len(networks) == 0 && e.Label != nil {
+			networks = strings.Split(*e.Label, ", ")
+		}
+
+		vpcName := srcNode.Name
+		if srcNode.Parent != nil {
+			vpcName = strings.TrimPrefix(*srcNode.Parent, graph.PrefixVPC)
+		}
+
+		isShared := switchAttachmentCount[e.Target] > 1
+
+		conn := RouterPortConnection{
+			RouterID:      srcNode.Id,
+			RouterName:    srcNode.Name,
+			VPCName:       vpcName,
+			PortName:      lrpName,
+			MAC:           lrpMac,
+			Networks:      networks,
+			SwitchID:      tgtNode.Id,
+			SwitchName:    tgtNode.Name,
+			PeerPortName:  lspName,
+			ActiveGateway: activeGw,
+			IsShared:      isShared,
+		}
+
+		m.portList = append(m.portList, conn)
+		m.routerPorts[srcNode.Id] = append(m.routerPorts[srcNode.Id], conn)
+		m.switchPorts[tgtNode.Id] = append(m.switchPorts[tgtNode.Id], conn)
+	}
+
+	sort.Slice(m.portList, func(i, j int) bool {
+		if m.portList[i].RouterName != m.portList[j].RouterName {
+			return m.portList[i].RouterName < m.portList[j].RouterName
+		}
+		return m.portList[i].PortName < m.portList[j].PortName
+	})
+
+	if m.selectedIdx >= len(m.nodeList) {
+		m.selectedIdx = 0
+	}
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -126,30 +316,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Error loading graph"
 			return m, nil
 		}
-		m.err = nil
-		m.graphResp = msg.resp
-		m.status = fmt.Sprintf("Revision %d | %d nodes, %d edges", msg.resp.Revision, len(msg.resp.Nodes), len(msg.resp.Edges))
-
-		// Build flat navigable list of non-container nodes
-		m.nodeList = make([]api.GraphNode, 0)
-		for _, n := range msg.resp.Nodes {
-			if n.Type != api.GraphNodeTypeVPC {
-				m.nodeList = append(m.nodeList, n)
-			}
-		}
-		sort.Slice(m.nodeList, func(i, j int) bool {
-			return m.nodeList[i].Name < m.nodeList[j].Name
-		})
-
-		if m.selectedIdx >= len(m.nodeList) {
-			m.selectedIdx = 0
-		}
+		m.applyGraph(msg.resp)
 		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "tab":
+			if m.mode == viewTree {
+				m.mode = viewMatrix
+				m.selectedIdx = 0
+			} else {
+				m.mode = viewTree
+				m.selectedIdx = 0
+			}
+			return m, nil
 		case "r":
 			m.status = "Refreshing..."
 			return m, m.fetchGraphCmd()
@@ -158,7 +340,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedIdx--
 			}
 		case "down", "j":
-			if m.selectedIdx < len(m.nodeList)-1 {
+			maxIdx := len(m.nodeList) - 1
+			if m.mode == viewMatrix {
+				maxIdx = len(m.portList) - 1
+			}
+			if m.selectedIdx < maxIdx {
 				m.selectedIdx++
 			}
 		}
@@ -170,10 +356,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var b strings.Builder
 
-	// Top banner
-	header := titleStyle.Render(" OVN Network Topology (L3) ")
-	statusText := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render(fmt.Sprintf(" %s  [q: quit | r: refresh | j/k: navigate]", m.status))
-	b.WriteString(header + statusText + "\n\n")
+	// Top Title and View Tabs
+	header := titleStyle.Render(" OVN Network Topology ")
+
+	treeTab := tabInactiveStyle.Render("1. Topology Tree")
+	matrixTab := tabInactiveStyle.Render("2. Port Interconnection Matrix")
+	if m.mode == viewTree {
+		treeTab = tabActiveStyle.Render("1. Topology Tree")
+	} else {
+		matrixTab = tabActiveStyle.Render("2. Port Interconnection Matrix")
+	}
+
+	tabs := fmt.Sprintf("%s%s", treeTab, matrixTab)
+	statusText := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render(
+		fmt.Sprintf(" %s  [Tab: switch view | j/k: navigate | r: refresh | q: quit]", m.status))
+
+	b.WriteString(header + " " + tabs + statusText + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF453A")).Render(fmt.Sprintf("Error: %v\n", m.err)))
@@ -185,6 +383,19 @@ func (m model) View() string {
 		b.WriteString("Loading topology...\n")
 		return b.String()
 	}
+
+	if m.mode == viewMatrix {
+		b.WriteString(m.renderMatrixView())
+		return b.String()
+	}
+
+	// Tree View
+	b.WriteString(m.renderTreeView())
+	return b.String()
+}
+
+func (m model) renderTreeView() string {
+	var leftPanel strings.Builder
 
 	// Group nodes by VPC parent
 	vpcGroups := make(map[string][]api.GraphNode)
@@ -205,34 +416,95 @@ func (m model) View() string {
 		}
 	}
 
-	var leftPanel strings.Builder
+	var selectedNode *api.GraphNode
+	if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		selectedNode = &m.nodeList[m.selectedIdx]
+	}
 
 	// Render VPC compound boxes
 	for vpcName, nodes := range vpcGroups {
 		var boxContent strings.Builder
 		boxContent.WriteString(headerStyle.Render(fmt.Sprintf("VPC: %s", vpcName)) + "\n")
 
+		// Sort: Routers first, then Switches
+		sort.Slice(nodes, func(i, j int) bool {
+			if nodes[i].Type != nodes[j].Type {
+				return nodes[i].Type == api.GraphNodeTypeLR
+			}
+			return nodes[i].Name < nodes[j].Name
+		})
+
 		for _, n := range nodes {
+			isSel := selectedNode != nil && selectedNode.Id == n.Id
 			line := formatNodeLine(n)
-			if isSelected(n, m.nodeList, m.selectedIdx) {
+
+			if isSel {
 				boxContent.WriteString(selectedNodeStyle.Render(line) + "\n")
 			} else {
 				boxContent.WriteString(nodeStyle.Render(line) + "\n")
+			}
+
+			// If it's a Router, draw its connected LRP branch ports directly beneath it!
+			if n.Type == api.GraphNodeTypeLR {
+				ports := m.routerPorts[n.Id]
+				for idx, conn := range ports {
+					isLast := idx == len(ports)-1
+					glyph := "├──"
+					if isLast {
+						glyph = "└──"
+					}
+					cidr := strings.Join(conn.Networks, ", ")
+					peerInfo := fmt.Sprintf("[Switch] %s", conn.SwitchName)
+					if conn.IsShared {
+						peerInfo += " (interconnect)"
+					}
+					gwInfo := ""
+					if conn.ActiveGateway != "" {
+						gwInfo = activeGatewayStyle.Render(fmt.Sprintf(" [GW: %s]", conn.ActiveGateway))
+					}
+
+					branch := fmt.Sprintf("    %s (%s) %s ──► %s%s",
+						edgeLineStyle.Render(glyph),
+						portBadgeStyle.Render(conn.PortName),
+						cidrStyle.Render(cidr),
+						peerInfo,
+						gwInfo)
+					boxContent.WriteString(branch + "\n")
+				}
 			}
 		}
 		leftPanel.WriteString(vpcBoxStyle.Render(boxContent.String()) + "\n")
 	}
 
-	// Render Shared/Interconnect nodes (e.g. join subnets)
+	// Render Shared / Interconnect switches (e.g. join)
 	if len(sharedNodes) > 0 {
 		var sharedContent strings.Builder
-		sharedContent.WriteString(headerStyle.Render("Interconnect (Multi-LR)") + "\n")
+		sharedContent.WriteString(headerStyle.Render("Interconnects (Multi-LR Subnets)") + "\n")
 		for _, n := range sharedNodes {
+			isSel := selectedNode != nil && selectedNode.Id == n.Id
 			line := formatNodeLine(n)
-			if isSelected(n, m.nodeList, m.selectedIdx) {
+			if isSel {
 				sharedContent.WriteString(selectedNodeStyle.Render(line) + "\n")
 			} else {
 				sharedContent.WriteString(nodeStyle.Render(line) + "\n")
+			}
+
+			// Show routers connecting into this switch
+			conns := m.switchPorts[n.Id]
+			for idx, conn := range conns {
+				isLast := idx == len(conns)-1
+				glyph := "├──"
+				if isLast {
+					glyph = "└──"
+				}
+				cidr := strings.Join(conn.Networks, ", ")
+				branch := fmt.Sprintf("    %s ◄── (%s) %s ── [Router] %s (%s)",
+					edgeLineStyle.Render(glyph),
+					portBadgeStyle.Render(conn.PortName),
+					cidrStyle.Render(cidr),
+					conn.RouterName,
+					conn.VPCName)
+				sharedContent.WriteString(branch + "\n")
 			}
 		}
 		leftPanel.WriteString(vpcBoxStyle.Render(sharedContent.String()) + "\n")
@@ -241,10 +513,11 @@ func (m model) View() string {
 	// Render External nodes
 	if len(externalNodes) > 0 {
 		var extContent strings.Builder
-		extContent.WriteString(headerStyle.Render("External Underlays") + "\n")
+		extContent.WriteString(headerStyle.Render("External Provider Underlays") + "\n")
 		for _, n := range externalNodes {
+			isSel := selectedNode != nil && selectedNode.Id == n.Id
 			line := fmt.Sprintf("[EXT] %s", n.Name)
-			if isSelected(n, m.nodeList, m.selectedIdx) {
+			if isSel {
 				extContent.WriteString(selectedNodeStyle.Render(line) + "\n")
 			} else {
 				extContent.WriteString(nodeStyle.Render(line) + "\n")
@@ -253,47 +526,130 @@ func (m model) View() string {
 		leftPanel.WriteString(vpcBoxStyle.Render(extContent.String()) + "\n")
 	}
 
-	// Detail side panel for selected node
+	// Right panel: detailed breakdown of selected entity
 	var rightPanel strings.Builder
-	if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-		selected := m.nodeList[m.selectedIdx]
-		rightPanel.WriteString(headerStyle.Render("Node Details") + "\n")
-		fmt.Fprintf(&rightPanel, "ID:   %s\n", selected.Id)
-		fmt.Fprintf(&rightPanel, "Name: %s\n", selected.Name)
-		fmt.Fprintf(&rightPanel, "Type: %s\n", selected.Type)
+	if selectedNode != nil {
+		sel := *selectedNode
+		rightPanel.WriteString(headerStyle.Render("Selected: "+sel.Name) + "\n")
+		fmt.Fprintf(&rightPanel, "Type: %s\n", sel.Type)
+		fmt.Fprintf(&rightPanel, "ID:   %s\n", sel.Id)
+		if sel.Parent != nil {
+			fmt.Fprintf(&rightPanel, "VPC:  %s\n", strings.TrimPrefix(*sel.Parent, graph.PrefixVPC))
+		}
 
-		if selected.Properties != nil {
-			rightPanel.WriteString("\nProperties:\n")
-			for k, v := range *selected.Properties {
-				fmt.Fprintf(&rightPanel, "  • %s: %v\n", k, v)
+		switch sel.Type {
+		case api.GraphNodeTypeLR:
+			// Router port interconnection list
+			ports := m.routerPorts[sel.Id]
+			fmt.Fprintf(&rightPanel, "\n%s (%d):\n", headerStyle.Render("Ports & Interconnections"), len(ports))
+			if len(ports) == 0 {
+				rightPanel.WriteString("  (no connected ports)\n")
+			}
+			for _, conn := range ports {
+				fmt.Fprintf(&rightPanel, "• %s:\n", portBadgeStyle.Render(conn.PortName))
+				fmt.Fprintf(&rightPanel, "    CIDR:   %s\n", cidrStyle.Render(strings.Join(conn.Networks, ", ")))
+				if conn.MAC != "" {
+					fmt.Fprintf(&rightPanel, "    MAC:    %s\n", conn.MAC)
+				}
+				peerText := fmt.Sprintf("[Switch] %s", conn.SwitchName)
+				if conn.IsShared {
+					peerText += " (shared interconnect)"
+				}
+				fmt.Fprintf(&rightPanel, "    Target: %s\n", peerText)
+				if conn.ActiveGateway != "" {
+					fmt.Fprintf(&rightPanel, "    Status: %s\n", activeGatewayStyle.Render("Active GW on "+conn.ActiveGateway))
+				}
+			}
+
+			if sel.Properties != nil {
+				p := *sel.Properties
+				rightPanel.WriteString("\n" + headerStyle.Render("L3 Statistics:") + "\n")
+				fmt.Fprintf(&rightPanel, "  Static Routes: %v\n", p["routeCount"])
+				fmt.Fprintf(&rightPanel, "  NAT Rules:     %v\n", p["natCount"])
+				fmt.Fprintf(&rightPanel, "  Policies:      %v\n", p["policyCount"])
+				fmt.Fprintf(&rightPanel, "  LoadBalancers: %v\n", p["lbCount"])
+			}
+		case api.GraphNodeTypeLS:
+			// Switch attachments list
+			routers := m.switchPorts[sel.Id]
+			fmt.Fprintf(&rightPanel, "\n%s (%d):\n", headerStyle.Render("Connected Routers"), len(routers))
+			if len(routers) == 0 {
+				rightPanel.WriteString("  (standalone switch)\n")
+			}
+			for _, conn := range routers {
+				fmt.Fprintf(&rightPanel, "• %s (%s):\n", conn.RouterName, conn.VPCName)
+				fmt.Fprintf(&rightPanel, "    Router Port: %s\n", portBadgeStyle.Render(conn.PortName))
+				fmt.Fprintf(&rightPanel, "    Subnet/CIDR: %s\n", cidrStyle.Render(strings.Join(conn.Networks, ", ")))
+			}
+
+			if sel.Properties != nil {
+				p := *sel.Properties
+				rightPanel.WriteString("\n" + headerStyle.Render("L2 Port Summary:") + "\n")
+				fmt.Fprintf(&rightPanel, "  Total Ports:   %v\n", p["portCount"])
+				fmt.Fprintf(&rightPanel, "  Bound Ports:   %s\n", badgeBound.Render(fmt.Sprintf("%v", p["boundPortCount"])))
+				fmt.Fprintf(&rightPanel, "  Unbound Ports: %s\n", badgeUnbound.Render(fmt.Sprintf("%v", p["unboundPortCount"])))
 			}
 		}
 
-		if selected.K8s != nil {
-			rightPanel.WriteString("\nKubernetes:\n")
-			if selected.K8s.Namespace != nil {
-				fmt.Fprintf(&rightPanel, "  Namespace: %s\n", *selected.K8s.Namespace)
+		if sel.K8s != nil {
+			rightPanel.WriteString("\n" + headerStyle.Render("Kubernetes Metadata:") + "\n")
+			if sel.K8s.Namespace != nil {
+				fmt.Fprintf(&rightPanel, "  Namespace: %s\n", *sel.K8s.Namespace)
 			}
-			if selected.K8s.Subnet != nil {
-				fmt.Fprintf(&rightPanel, "  Subnet:    %s\n", *selected.K8s.Subnet)
+			if sel.K8s.Subnet != nil {
+				fmt.Fprintf(&rightPanel, "  Subnet:    %s\n", *sel.K8s.Subnet)
 			}
-			if selected.K8s.Vpc != nil {
-				fmt.Fprintf(&rightPanel, "  VPC:       %s\n", *selected.K8s.Vpc)
+			if sel.K8s.Vpc != nil {
+				fmt.Fprintf(&rightPanel, "  VPC:       %s\n", *sel.K8s.Vpc)
 			}
 		}
 	}
 
-	// Join left panel and side detail panel horizontally
-	layout := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel.String(), detailBoxStyle.Render(rightPanel.String()))
-	b.WriteString(layout)
-	return b.String()
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel.String(), detailBoxStyle.Render(rightPanel.String()))
 }
 
-func isSelected(n api.GraphNode, list []api.GraphNode, selectedIdx int) bool {
-	if selectedIdx < 0 || selectedIdx >= len(list) {
-		return false
+func (m model) renderMatrixView() string {
+	var b strings.Builder
+
+	header := fmt.Sprintf("%-14s %-16s %-18s %-18s %-19s %s",
+		"VPC/ROUTER", "PORT (LRP)", "NETWORKS", "TARGET SWITCH", "MAC", "GATEWAY STATUS")
+	b.WriteString(tableHeaderStyle.Render(header) + "\n")
+
+	if len(m.portList) == 0 {
+		b.WriteString("\n  No router ports found.\n")
+		return b.String()
 	}
-	return list[selectedIdx].Id == n.Id
+
+	for idx, conn := range m.portList {
+		routerLabel := conn.RouterName
+		cidr := strings.Join(conn.Networks, ", ")
+		switchLabel := conn.SwitchName
+		if conn.IsShared {
+			switchLabel += " *"
+		}
+		gw := "Distributed"
+		if conn.ActiveGateway != "" {
+			gw = fmt.Sprintf("Active: %s", conn.ActiveGateway)
+		}
+
+		row := fmt.Sprintf("%-14s %-16s %-18s %-18s %-19s %s",
+			truncate(routerLabel, 14),
+			truncate(conn.PortName, 16),
+			truncate(cidr, 18),
+			truncate(switchLabel, 18),
+			truncate(conn.MAC, 19),
+			gw)
+
+		if idx == m.selectedIdx {
+			b.WriteString(tableRowSelectedStyle.Render(row) + "\n")
+		} else {
+			b.WriteString(tableRowStyle.Render(row) + "\n")
+		}
+	}
+
+	b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render(
+		"  * Marked switches are shared interconnects (connected to multiple Logical Routers)."))
+	return b.String()
 }
 
 func formatNodeLine(n api.GraphNode) string {
@@ -304,7 +660,7 @@ func formatNodeLine(n api.GraphNode) string {
 			p := *n.Properties
 			counts = fmt.Sprintf(" (routes:%v, nat:%v, policies:%v, lb:%v)", p["routeCount"], p["natCount"], p["policyCount"], p["lbCount"])
 		}
-		return fmt.Sprintf("[Router] %s%s", n.Name, counts)
+		return fmt.Sprintf("▼ [Router] %s%s", n.Name, counts)
 	case api.GraphNodeTypeLS:
 		portInfo := ""
 		if n.Properties != nil {
@@ -317,6 +673,16 @@ func formatNodeLine(n api.GraphNode) string {
 	default:
 		return fmt.Sprintf("[%s] %s", n.Type, n.Name)
 	}
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) > maxLen {
+		if maxLen > 3 {
+			return s[:maxLen-3] + "..."
+		}
+		return s[:maxLen]
+	}
+	return s
 }
 
 func main() {
