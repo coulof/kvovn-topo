@@ -492,10 +492,19 @@ func (m model) renderTreeView() string {
 						gwInfo = activeGatewayStyle.Render(fmt.Sprintf(" [GW: %s]", conn.ActiveGateway))
 					}
 
+					var ipLabel string
+					if conn.ActiveGateway != "" {
+						ipLabel = activeGatewayStyle.Render("[EIP: " + cidr + "]")
+					} else if !conn.IsShared {
+						ipLabel = cidrStyle.Render("[GW IP: " + cidr + "]")
+					} else {
+						ipLabel = cidrStyle.Render("[Transit IP: " + cidr + "]")
+					}
+
 					branch := fmt.Sprintf("      %s (%s) %s ──► %s%s",
 						edgeLineStyle.Render(glyph),
 						portBadgeStyle.Render(conn.PortName),
-						cidrStyle.Render(cidr),
+						ipLabel,
 						peerInfo,
 						gwInfo)
 					boxContent.WriteString(branch + "\n")
@@ -643,8 +652,8 @@ func (m model) renderTreeView() string {
 func (m model) renderMatrixView() string {
 	var b strings.Builder
 
-	header := fmt.Sprintf("  %-16s %-32s %-18s %-22s %-19s %s",
-		"VPC/ROUTER", "PORT (LRP)", "NETWORKS", "TARGET SWITCH", "MAC", "GATEWAY STATUS")
+	header := fmt.Sprintf("  %-16s %-30s %-24s %-20s %-19s %s",
+		"VPC/ROUTER", "PORT (LRP)", "INTERFACE IP (CIDR)", "TARGET SWITCH", "MAC", "GATEWAY STATUS")
 	b.WriteString(tableHeaderStyle.Render(header) + "\n")
 
 	if len(m.portList) == 0 {
@@ -669,12 +678,12 @@ func (m model) renderMatrixView() string {
 			cursor = "► "
 		}
 
-		row := fmt.Sprintf("%s%-16s %-32s %-18s %-22s %-19s %s",
+		row := fmt.Sprintf("%s%-16s %-30s %-24s %-20s %-19s %s",
 			cursor,
 			truncate(routerLabel, 16),
-			truncate(conn.PortName, 32),
-			truncate(cidr, 18),
-			truncate(switchLabel, 22),
+			truncate(conn.PortName, 30),
+			truncate(cidr, 24),
+			truncate(switchLabel, 20),
 			truncate(conn.MAC, 19),
 			gw)
 
@@ -711,16 +720,39 @@ func (m model) renderPortInspector(conn RouterPortConnection) string {
 		peerLSP = "(none / internal)"
 	}
 
-	fmt.Fprintf(&box, "  Router:   %-34s Target Switch: %s%s\n",
+	rawCidr := strings.Join(conn.Networks, ", ")
+	ipAddr := rawCidr
+	prefix := ""
+	if strings.Contains(rawCidr, "/") {
+		parts := strings.SplitN(rawCidr, "/", 2)
+		ipAddr = parts[0]
+		prefix = "/" + parts[1]
+	}
+
+	fmt.Fprintf(&box, "  Router:       %-34s Target Switch: %s%s\n",
 		fmt.Sprintf("%s (VPC: %s)", conn.RouterName, conn.VPCName),
 		conn.SwitchName,
 		sharedBadge)
-	fmt.Fprintf(&box, "  LRP Port: %-34s Peer LSP:      %s\n",
+	fmt.Fprintf(&box, "  LRP Port:     %-34s Peer LSP:      %s\n",
 		portBadgeStyle.Render(conn.PortName),
 		peerLSP)
-	fmt.Fprintf(&box, "  MAC:      %-34s Networks:      %s\n",
+	fmt.Fprintf(&box, "  MAC Address:  %-34s Subnet Prefix: %s\n",
 		conn.MAC,
-		cidrStyle.Render(strings.Join(conn.Networks, ", ")))
+		prefix)
+
+	if conn.ActiveGateway != "" {
+		fmt.Fprintf(&box, "  Interface IP: %-34s Gateway Role:  %s\n",
+			cidrStyle.Render(rawCidr),
+			activeGatewayStyle.Render("External EIP Gateway"))
+	} else if conn.IsShared {
+		fmt.Fprintf(&box, "  Interface IP: %-34s Gateway Role:  %s\n",
+			cidrStyle.Render(rawCidr),
+			"Multi-VPC Transit IP")
+	} else {
+		fmt.Fprintf(&box, "  Interface IP: %-34s Gateway Role:  %s\n",
+			cidrStyle.Render(rawCidr),
+			badgeBound.Render(fmt.Sprintf("Default Gateway for %s", conn.SwitchName)))
+	}
 
 	// If this port attaches to a shared interconnect switch, show all other interconnected routers!
 	if conn.IsShared {
@@ -745,24 +777,31 @@ func (m model) renderPortInspector(conn RouterPortConnection) string {
 	// Gateway & High Availability details
 	fmt.Fprintf(&box, "\n  %s\n", headerStyle.Render("Gateway & Routing Details:"))
 	if conn.ActiveGateway != "" {
-		fmt.Fprintf(&box, "    • Mode:           Centralized HA Gateway\n")
-		fmt.Fprintf(&box, "    • Active Gateway: %s\n", activeGatewayStyle.Render(conn.ActiveGateway))
+		fmt.Fprintf(&box, "    • Routing Mode:   Centralized HA Gateway\n")
+		fmt.Fprintf(&box, "    • Active Gateway: %s\n", activeGatewayStyle.Render(conn.ActiveGateway+" (Active node)"))
 		fmt.Fprintf(&box, "    • Redirect Port:  cr-%s\n", conn.PortName)
+		fmt.Fprintf(&box, "    • Egress Subnet:  %s\n", conn.SwitchName)
+	} else if conn.IsShared {
+		fmt.Fprintf(&box, "    • Routing Mode:   Distributed Transit Interconnect\n")
+		fmt.Fprintf(&box, "    • Subnet Switch:  %s (shared by multiple VPC routers)\n", conn.SwitchName)
 	} else {
-		fmt.Fprintf(&box, "    • Mode:           Distributed (Local Chassis Egress)\n")
+		fmt.Fprintf(&box, "    • Routing Mode:   Distributed Subnet Gateway (Local Chassis Egress)\n")
+		fmt.Fprintf(&box, "    • Gateway Target: Workloads inside '%s' use %s as their default gateway\n",
+			conn.SwitchName, ipAddr)
 	}
 
 	// Architectural topology role explanation
 	fmt.Fprintf(&box, "\n  %s\n", headerStyle.Render("Topology Role:"))
 	switch {
+	case conn.ActiveGateway != "":
+		fmt.Fprintf(&box, "    North-South Gateway: EIP interface providing centralized egress to external network '%s'\n",
+			conn.SwitchName)
 	case conn.IsShared:
 		fmt.Fprintf(&box, "    East-West Interconnect: links router '%s' to '%s' for cross-VPC communication\n",
 			conn.RouterName, conn.SwitchName)
-	case conn.ActiveGateway != "":
-		fmt.Fprintf(&box, "    North-South Egress Gateway: routes centralized external outbound traffic through designated gateway node\n")
 	default:
-		fmt.Fprintf(&box, "    Internal Subnet Gateway: provides default gateway routing for workloads connected to '%s'\n",
-			conn.SwitchName)
+		fmt.Fprintf(&box, "    Internal Subnet Gateway: default gateway interface (%s) for pods and VMs in '%s'\n",
+			ipAddr, conn.SwitchName)
 	}
 
 	return inspectorBoxStyle.Render(box.String())
