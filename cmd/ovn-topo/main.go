@@ -468,13 +468,6 @@ func (m *model) applyGraph(resp *api.GraphResponse) {
 		}
 	}
 
-	// Expand all switches by default
-	for _, n := range resp.Nodes {
-		if n.Type == api.GraphNodeTypeLS {
-			m.expandedSwitches[n.Id] = true
-		}
-	}
-
 	// Pre-populate workloads if offline fixture
 	if m.fixturePath != "" {
 		snap := graph.LoadTestSnapshot(nil)
@@ -501,24 +494,33 @@ func (m *model) rebuildNodeList() {
 	var list []api.GraphNode
 	for _, vpcName := range m.vpcNames {
 		nodes := m.vpcGroups[vpcName]
-		for _, n := range nodes {
-			list = append(list, n)
-			if n.Type == api.GraphNodeTypeLS && m.expandedSwitches[n.Id] {
-				list = append(list, m.switchWorkloads[n.Id]...)
-			}
-		}
+		list = append(list, nodes...)
 	}
-	for _, n := range m.sharedNodes {
-		list = append(list, n)
-		if n.Type == api.GraphNodeTypeLS && m.expandedSwitches[n.Id] {
-			list = append(list, m.switchWorkloads[n.Id]...)
-		}
-	}
+	list = append(list, m.sharedNodes...)
 	list = append(list, m.externalNodes...)
 	m.nodeList = list
 	if m.selectedIdx >= len(m.nodeList) {
 		m.selectedIdx = 0
 	}
+}
+
+func (m model) switchList() []api.GraphNode {
+	var switches []api.GraphNode
+	for _, n := range m.nodeList {
+		if n.Type == api.GraphNodeTypeLS {
+			alreadyIn := false
+			for _, s := range switches {
+				if s.Id == n.Id {
+					alreadyIn = true
+					break
+				}
+			}
+			if !alreadyIn {
+				switches = append(switches, n)
+			}
+		}
+	}
+	return switches
 }
 
 func (m model) fetchAllSwitchesL2Cmd() tea.Cmd {
@@ -749,8 +751,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.mode = (m.mode + 1) % 4
 			m.selectedIdx = 0
-			if m.mode == viewL2 && (m.l2Resp == nil || len(m.l2Nodes) == 0) {
-				return m, m.fetchL2Cmd(m.focusedLS)
+			if m.mode == viewL2 {
+				switches := m.switchList()
+				if len(switches) > 0 {
+					m.focusedLS = switches[0].Id
+					m.focusedLSName = switches[0].Name
+					if len(m.switchWorkloads[m.focusedLS]) == 0 {
+						return m, m.fetchL2Cmd(m.focusedLS)
+					}
+					m.l2Nodes = m.switchWorkloads[m.focusedLS]
+				}
 			}
 			if m.mode == viewChassis && (m.chassisResp == nil || len(m.chassisNodes) == 0) {
 				return m, m.fetchChassisCmd()
@@ -763,8 +773,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "2":
 			m.mode = viewL2
 			m.selectedIdx = 0
-			if m.l2Resp == nil || len(m.l2Nodes) == 0 {
-				return m, m.fetchL2Cmd(m.focusedLS)
+			switches := m.switchList()
+			if len(switches) > 0 {
+				m.focusedLS = switches[0].Id
+				m.focusedLSName = switches[0].Name
+				if len(m.switchWorkloads[m.focusedLS]) == 0 {
+					return m, m.fetchL2Cmd(m.focusedLS)
+				}
+				m.l2Nodes = m.switchWorkloads[m.focusedLS]
 			}
 			return m, nil
 		case "3":
@@ -778,7 +794,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = viewMatrix
 			m.selectedIdx = 0
 			return m, nil
-		case "e", "enter":
+		case " ", "enter":
 			if m.mode == viewTree && len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 				node := m.nodeList[m.selectedIdx]
 				if node.Type == api.GraphNodeTypeLS {
@@ -801,6 +817,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			if m.selectedIdx > 0 {
 				m.selectedIdx--
+				if m.mode == viewL2 {
+					switches := m.switchList()
+					if m.selectedIdx < len(switches) {
+						m.focusedLS = switches[m.selectedIdx].Id
+						m.focusedLSName = switches[m.selectedIdx].Name
+						if len(m.switchWorkloads[m.focusedLS]) == 0 {
+							return m, m.fetchL2Cmd(m.focusedLS)
+						}
+						m.l2Nodes = m.switchWorkloads[m.focusedLS]
+					}
+				}
 			}
 		case "down", "j":
 			maxIdx := 0
@@ -808,7 +835,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case viewTree:
 				maxIdx = len(m.nodeList) - 1
 			case viewL2:
-				maxIdx = len(m.l2Nodes) - 1
+				maxIdx = len(m.switchList()) - 1
 			case viewChassis:
 				maxIdx = len(m.chassisNodes) - 1
 			case viewMatrix:
@@ -816,6 +843,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.selectedIdx < maxIdx {
 				m.selectedIdx++
+				if m.mode == viewL2 {
+					switches := m.switchList()
+					if m.selectedIdx < len(switches) {
+						m.focusedLS = switches[m.selectedIdx].Id
+						m.focusedLSName = switches[m.selectedIdx].Name
+						if len(m.switchWorkloads[m.focusedLS]) == 0 {
+							return m, m.fetchL2Cmd(m.focusedLS)
+						}
+						m.l2Nodes = m.switchWorkloads[m.focusedLS]
+					}
+				}
 			}
 		}
 	}
@@ -1199,7 +1237,7 @@ func (m model) View() string {
 	}
 
 	statusText := m.styles.MutedText.Render(
-		fmt.Sprintf(" %s [%s]  [Tab/1-4: view | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
+		fmt.Sprintf(" %s [%s]  [Tab/1-4: view | Space: expand | t: theme%s | j/k: nav | r: refresh | q: quit]", m.status, m.theme.Name, diagShortcut))
 
 	b.WriteString(header + " " + diagBadge + tabs + statusText + "\n\n")
 
@@ -1381,9 +1419,9 @@ func (m model) renderTreeView() string {
 			expandHint := ""
 			if n.Type == api.GraphNodeTypeLS {
 				if isExpanded {
-					expandHint = m.styles.MutedText.Render(" (expanded, press 'e' to collapse)")
+					expandHint = m.styles.MutedText.Render(" (expanded, press space to collapse)")
 				} else {
-					expandHint = m.styles.MutedText.Render(" (press 'e' to expand workloads)")
+					expandHint = m.styles.MutedText.Render(" (press space to expand workloads)")
 				}
 			}
 
@@ -1467,9 +1505,9 @@ func (m model) renderTreeView() string {
 			expandHint := ""
 			if n.Type == api.GraphNodeTypeLS {
 				if isExpanded {
-					expandHint = m.styles.MutedText.Render(" (expanded, press 'e' to collapse)")
+					expandHint = m.styles.MutedText.Render(" (expanded, press space to collapse)")
 				} else {
-					expandHint = m.styles.MutedText.Render(" (press 'e' to expand workloads)")
+					expandHint = m.styles.MutedText.Render(" (press space to expand workloads)")
 				}
 			}
 
