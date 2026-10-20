@@ -113,7 +113,7 @@ func TestTUIModelView(t *testing.T) {
 }
 
 func TestThemes(t *testing.T) {
-	themeNames := []string{"default", "dracula", "nord", "tokyonight", "catppuccin"}
+	themeNames := []string{"default", "suse", "dracula", "nord", "tokyonight", "catppuccin"}
 
 	for _, name := range themeNames {
 		theme, idx := GetThemeByName(name)
