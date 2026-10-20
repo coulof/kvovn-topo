@@ -24,7 +24,9 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M5 | Configuration-based path computation | T0 | daemon, TUI, extension | M4 |
 | M6 | TUI diagnostics: trace, tcpdump, wiring, conntrack, logs | T1 | TUI only | M4 |
 | M7 | Harvester validation + release hardening | — | all | M3, M4 |
-| Backlog | ACL hit counters, OVN-IC, metrics overlay, MCP server, logical flow browser | mixed | — | — |
+| M8 | Topology history & diff (ADR-0002) | T0 | daemon, TUI, extension | M4 (recorder may start after M1) |
+| M9 | MCP server (T0 tools only) | T0 | AI agents via `ovn-topo mcp` | M5; history tools gated on M8 |
+| Backlog | ACL hit counters, OVN-IC, metrics overlay, logical flow browser, history archival to S3, segmentation audit report, fleet view | mixed | — | — |
 
 ---
 
@@ -141,7 +143,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - [ ] A KubeVirt VM with 2 NICs on 2 subnets is shown as one VM with two attachments (fixture + e2e).
 - [ ] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage).
 - [ ] Teatest (or equivalent) golden tests for the main screens.
-- [ ] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types.
+- [x] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types. (Done 2026-10-20)
 
 ---
 
@@ -154,7 +156,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - Daemon access via the Rancher cluster service proxy (`AGENTS.md` §7).
 - **First task: the SSE-through-proxy probe.** Write the layer 4 e2e that applies a new subnet and asserts the UI updates. Record the result in § Open questions. If SSE is buffered, ship polling with `If-None-Match` as the primary mode.
 - L3 view:
-  - D3.js (SVG) with compound nodes (VPC) and elkjs layered layout.
+  - D3.js (SVG) / Cytoscape.js with compound nodes (VPC) and elkjs layered layout.
   - Incremental updates; positions persisted per view per cluster in `localStorage` (try/catch).
 - Side panel from `/node/{id}`, with a raw-columns toggle.
 - Empty state when the daemon is missing; API-version mismatch banner.
@@ -287,12 +289,125 @@ Extension: add the L2 and Chassis views here.
 
 ---
 
+## M8 — Topology history & diff (T0, ADR-0002)
+
+**Goal:** answer "what changed since it last worked?" and show the topology at any point in time since the daemon started.
+
+**Scope**
+- `pkg/history` per ADR-0002:
+  - **Recorder:** OVSDB row-level changes for consumed tables, stamped with time / epoch / revision / schema version.
+  - **Checkpoints** every N changes or T minutes, and on every (re)connect.
+  - **Noise control:** coalescing plus a denylist decided from measured churn.
+  - **Gap and coalesced records.**
+  - **Store interface** with a `memory` implementation (default, bounded) and a `bbolt` implementation (opt-in, PVC).
+  - **Reconstructor:** checkpoint + replay through the current `pkg/graph`.
+  - **Summarizer:** row changes → human-readable events. Initial event catalogue:
+    - LS/LR/LSP/LRP added/removed
+    - port bound/unbound/moved chassis
+    - NAT added/removed/retargeted (FIP moved)
+    - route/policy changed
+    - gateway failover (active `cr-` chassis changed)
+    - chassis up/down
+    - ACL/PG membership changed
+    - LB backend set changed
+    - VM migration started/finished
+
+    Anything unmapped surfaces as a generic row event.
+- The recorder may be built in parallel after M1. The summarizer events that need M4 relationships land once M4 is done.
+- API (add to `api/openapi.yaml`, still read-only and idempotent):
+  - `GET /history/events?since&until&kind&object&limit` — change feed, paginated, newest first.
+  - `GET /graph?...&at=<RFC3339|epoch:revision>` and `GET /node/{id}?at=` — reconstructed state.
+  - `GET /diff?from&to&view` — added / removed / changed nodes and edges, with attribute-level diffs.
+  - `GET /history/coverage` — retention window, gaps, mode, store size.
+- Chart: `history.mode` (`memory`|`persistent`), retention limits, optional `persistence.storageClass`/`size`. The default install stays stateless.
+- TUI:
+  - A change-feed pane, filterable by object or kind, with jump-to-object.
+  - `--at <time>` to browse the past, with a visible "HISTORICAL" badge.
+  - `ovn-topo diff --from --to [-o json]`.
+- Extension:
+  - A timeline panel (change feed with gaps drawn as breaks).
+  - Time scrubber on the L3 view.
+  - Diff mode: added, removed and changed elements styled with shell tokens, and a legend.
+  - Kubernetes enrichment shown with a "current, may differ from then" label in historical mode.
+
+**Out of scope:** S3 archival/export (backlog), multi-replica history, history of Kubernetes objects, alerting on changes.
+
+**DoD**
+- [ ] Reconstruction correctness: for every layer 3 scenario, apply a scripted sequence of changes. Then `graph(at=Tk)` must equal the live graph captured at Tk, for every step k (golden comparison, UUID-agnostic).
+- [ ] Gap handling: kill the daemon mid-sequence (memory and persistent modes) → a gap is recorded, a coalesced change set is correct, and no interpolation happens across the gap.
+- [ ] Schema-upgrade case: retention spans a Kube-OVN/OVN upgrade (two pinned versions in CI) and old checkpoints still reconstruct.
+- [ ] Summarizer: each catalogue event has a fixture producing it, and `ha-gateway-failover` and `kubevirt-multinic` (with migration) emit the expected events in order.
+- [ ] Performance on the 10k-LSP scale fixture with 24 h of synthetic churn:
+  - `graph(at)` p95 < 500 ms
+  - `/diff` over 24 h p95 < 1 s
+  - memory mode stays within its configured byte limit
+- [ ] Layer 4 e2e: the timeline shows a subnet creation done during the test, and diff mode highlights it.
+
+---
+
+## M9 — MCP server (T0 tools only)
+
+**Goal:** let AI agents answer network questions ("why can't vm-a reach vm-b?", "what changed in tenant-1 overnight?") from real data, kvtop-style.
+
+**Decisions (binding for this milestone)**
+- **Transport and host:** `ovn-topo mcp` subcommand over **stdio**, using the user's kubeconfig.
+  - **Backend A:** a daemon reached via the Kubernetes service proxy. Full feature set, including history.
+  - **Backend B:** embedded `pkg/graph` against OVSDB through a port-forward. No history tools.
+
+  Streamable HTTP inside the daemon is backlog, not this milestone.
+- **T0 only, always.** No `pkg/diag` tool is exposed through MCP, even when `--diag` is set. An agent must not be able to start a tcpdump or exec into nodes. This is enforced by `depguard` (`pkg/mcp` must not import `pkg/diag`).
+- Every tool is annotated read-only (`readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`).
+- SDK: the official Go MCP SDK (`github.com/modelcontextprotocol/go-sdk`), unless kvtop already uses a different one. In that case align with kvtop and note it in the PR.
+
+**Scope**
+- `pkg/mcp`: tool definitions and handlers over a `Backend` interface (daemon client or embedded graph).
+- Tools:
+
+  | Tool | Purpose |
+  |---|---|
+  | `find` | search objects by name, IP, MAC, pod/VM, namespace; returns IDs + one-line summaries |
+  | `get_graph` | view (`l3`/`l2`/`chassis`), `focus`, `depth`, optional `at` |
+  | `get_node` | full detail of one object, optional `at` |
+  | `resolve_ip` | IP → owner (LSP/LRP/node/external) |
+  | `effective_acls` | ACLs applying to a port, ordered, with source objects |
+  | `compute_path` | M5 path; result always carries `approximate: true` and `source: configuration` |
+  | `run_checks` | consistency/health checks, filterable by scope |
+  | `list_changes` | M8 change feed (`since`, `until`, `object`, `kind`) — backend A only |
+  | `diff` | M8 diff between two times — backend A only |
+  | `history_coverage` | retention window and gaps — backend A only |
+
+- **Output discipline for LLM consumers:**
+  - Compact JSON with a stable shape and a one-line `summary` field.
+  - Hard caps on items per response, with a `next` cursor.
+  - Every response carries `revision`, `timestamp`, and `historical: true|false`.
+  - Tools that would exceed caps return aggregated counts plus a hint to narrow `focus`.
+- **Prompt-injection hygiene:**
+  - Object names, `external_ids` and descriptions are cluster-user-controlled data. Return them only inside structured fields, never interpolated into prose summaries.
+  - The `summary` field is generated from typed fields only.
+- MCP `resources`: none in this milestone (tools only). Optional `prompts`: `troubleshoot-connectivity` and `what-changed`, templates that chain the tools above.
+- Docs: a `docs/mcp.md` section with client configuration examples (Claude Code, OpenCode, Gemini CLI) and the T0-only guarantee.
+
+**Out of scope:** exec/diagnostic tools, write tools, HTTP transport in the daemon, auth beyond the user's kubeconfig.
+
+**DoD**
+- [ ] `depguard` proves `pkg/mcp` has no path to `pkg/diag`.
+- [ ] Golden tests of every tool's output on fixtures (shape, caps, cursors, `summary` built only from typed fields).
+- [ ] Injection test: a fixture with LSP names / `external_ids` containing instruction-like text. The text never appears outside its data field.
+- [ ] Scenario eval (`test/mcp/`): a set of questions per layer 3 scenario, each with expected facts (e.g. "path vm-a → vm-b verdict = dropped-by-acl, ACL = …"). These are run as deterministic tool-call scripts in CI (no LLM in CI). An optional manual run with a real agent is recorded in the PR.
+- [ ] Works with backend A (daemon via service proxy) and backend B (embedded); history tools return a clear "not available with this backend" error on B.
+
+---
+
 ## Backlog (not scheduled — do not start without an explicit task)
 
 - **ACL hit counters (T1):** OpenFlow cookie → logical flow → ACL, aggregated across nodes (`ovn-detrace`-style).
 - **OVN-IC:** two-cluster interconnect view (`icnbctl`/`icsbctl` databases as an additional monitor).
 - **Prometheus overlay (T0):** chassis up, raft health, `subnet_used_ip_count`, pinger loss/latency, OVS interface rx/tx on LSP edges. Optional; requires Rancher Monitoring.
-- **MCP server:** expose `/graph`, `/resolve`, `/path`, `/checks` (T0 only) as MCP tools, kvtop-style.
+- **History archival/export:** periodic checkpoint + change upload to S3-compatible storage for long retention (ADR-0002 follow-up).
+- **MCP over streamable HTTP in the daemon:** needs an auth story beyond kubeconfig; own ADR.
+- **Segmentation audit report:** reachability matrix (namespace/VPC) from ACL/PG/AS + path engine, exported as signed evidence. Configuration-based, labelled as such.
+- **Fleet view:** cross-cluster inventory and CIDR-overlap detection in a global Rancher product page.
+- **Identity adapter boundary:** isolate Kube-OVN conventions (`external_ids`, `cr-`, `join`) behind an interface to allow ovn-kubernetes / OpenStack later. No other adapter without a request.
 - **SB Logical_Flow browser:** per datapath, on demand, expert mode.
 - **Extension diagnostics component:** would need its own ADR (see ADR-0001 Consequences).
 
@@ -338,3 +453,5 @@ Record answers here with evidence (date, link to test run or doc).
 | Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | open |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
 | Q7 | Should `pkg/diag` import `github.com/kubeovn/kube-ovn/pkg/ko` directly? | M6 | **Resolved (2026-10-20)**: **No.** Importing `github.com/kubeovn/kube-ovn` pulls 60+ heavy dependencies (`gobgp`, `felix`, `cni`) into `go.mod` and violates `AGENTS.md` rule 2 by querying Kube-OVN CRDs (`Subnet`, `Vpc`). Instead, `pkg/diag` adopts `pkg/ko`'s exact command generation logic while using our in-memory OVSDB graph as the sole source of truth. |
+| Q8 | Measured monitor churn per table (to set the ADR-0002 noise denylist and checkpoint cadence) | M8 | open; measure on `overlay-default` + `kubevirt-multinic` |
+| Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | open |
