@@ -127,6 +127,28 @@ export default defineComponent({
         </div>
       </div>
 
+      <!-- Gateway & EIP Information -->
+      <div
+        v-if="node.type === 'LR' && node.properties?.gateways && node.properties.gateways.length > 0"
+        class="section"
+      >
+        <h4>External Gateway Ports & EIPs</h4>
+        <ul class="gateway-list">
+          <li
+            v-for="gw in node.properties.gateways"
+            :key="gw.lrp"
+            class="gateway-item"
+          >
+            <span class="gw-badge">EIP GW</span>
+            <span class="gw-name mono">{{ gw.lrp }}</span>
+            <span
+              v-if="gw.activeChassis"
+              class="gw-status active"
+            >Active on {{ gw.activeChassis }}</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- Switch Specific Information -->
       <div
         v-if="node.type === 'LS' && node.properties"
@@ -350,6 +372,42 @@ export default defineComponent({
         }
         &.unbound .num {
           color: var(--error);
+        }
+      }
+    }
+
+    .gateway-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+
+      .gateway-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--subtle-border, var(--border));
+        font-size: 12px;
+
+        .gw-badge {
+          background-color: var(--warning);
+          color: #000000;
+          padding: 1px 6px;
+          border-radius: 3px;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .gw-name {
+          font-family: monospace;
+          color: var(--body-text);
+          flex: 1;
+        }
+
+        .gw-status.active {
+          color: var(--warning, #FFD60A);
+          font-weight: 600;
+          font-size: 11px;
         }
       }
     }

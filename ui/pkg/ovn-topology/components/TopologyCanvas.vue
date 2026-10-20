@@ -66,6 +66,16 @@ export default defineComponent({
     return {
       svgRef,
       viewportRef,
+      'edgeLabel': (edge: any): string => {
+        if (!edge.label) {
+          return '';
+        }
+        if (edge.properties?.activeGateway) {
+          return `${ edge.label } [GW: ${ edge.properties.activeGateway }]`;
+        }
+
+        return edge.label;
+      },
     };
   },
 });
@@ -152,19 +162,21 @@ export default defineComponent({
               class="edge-label-group"
             >
               <rect
-                :x="edge.labelX - (edge.label.length * 4.2 + 14)"
+                :x="edge.labelX - (edgeLabel(edge).length * 4.2 + 14)"
                 :y="edge.labelY - 11"
-                :width="(edge.label.length * 8.4 + 28)"
+                :width="(edgeLabel(edge).length * 8.4 + 28)"
                 height="22"
                 rx="11"
                 class="edge-label-bg"
+                :class="{ 'gateway-label': !!edge.properties?.activeGateway }"
               />
               <text
                 :x="edge.labelX"
                 :y="edge.labelY + 4"
                 class="edge-label-text"
+                :class="{ 'gateway-text': !!edge.properties?.activeGateway }"
               >
-                {{ edge.label }}
+                {{ edgeLabel(edge) }}
               </text>
             </g>
           </g>
@@ -309,6 +321,11 @@ export default defineComponent({
     stroke: var(--primary);
     stroke-width: 1.25px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+
+    &.gateway-label {
+      stroke: var(--warning, #FFD60A);
+      stroke-width: 1.5px;
+    }
   }
 
   .edge-label-text {
@@ -317,6 +334,11 @@ export default defineComponent({
     fill: var(--primary);
     text-anchor: middle;
     font-family: monospace;
+
+    &.gateway-text {
+      fill: var(--warning, #FFD60A);
+      font-weight: 700;
+    }
   }
 
   // Nodes
