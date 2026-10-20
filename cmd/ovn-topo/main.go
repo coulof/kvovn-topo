@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,6 +65,31 @@ type TraceDestination struct {
 	Category string
 }
 
+// TraceProtocolOption defines a selectable protocol and port for ovn-trace.
+type TraceProtocolOption struct {
+	Name     string
+	Protocol string
+	Port     int
+	Label    string
+}
+
+var AvailableTraceProtocols = []TraceProtocolOption{
+	{Name: "icmp", Protocol: "icmp", Port: 0, Label: "ICMP (Ping)"},
+	{Name: "ssh", Protocol: "tcp", Port: 22, Label: "TCP 22 (SSH)"},
+	{Name: "http", Protocol: "tcp", Port: 80, Label: "TCP 80 (HTTP)"},
+	{Name: "https", Protocol: "tcp", Port: 443, Label: "TCP 443 (HTTPS)"},
+	{Name: "dns", Protocol: "udp", Port: 53, Label: "UDP 53 (DNS)"},
+}
+
+var TraceCategories = []string{
+	"All",
+	"VM",
+	"Pod",
+	"Gateway",
+	"Node",
+	"Public DNS",
+}
+
 type model struct {
 	daemonURL     string
 	fixturePath   string
@@ -115,6 +141,9 @@ type model struct {
 	diagTraceParams   string
 	traceDestinations []TraceDestination
 	selectedDestIdx   int
+	traceSearchFilter string
+	traceCategoryIdx  int
+	traceProtoIdx     int
 	traceProtocol     string
 	tracePort         int
 	diagRawOutput     string
@@ -175,8 +204,10 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubec
 		switchPorts:      make(map[string][]RouterPortConnection),
 		expandedSwitches: make(map[string]bool),
 		switchWorkloads:  make(map[string][]api.GraphNode),
-		traceProtocol:    "icmp",
-		tracePort:        80,
+		traceProtocol:    AvailableTraceProtocols[0].Protocol,
+		tracePort:        AvailableTraceProtocols[0].Port,
+		traceProtoIdx:    0,
+		traceCategoryIdx: 0,
 	}
 
 	if diagMode {
@@ -574,7 +605,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyGraph(msg.resp)
-		return m, m.fetchAllSwitchesL2Cmd()
+		return m, tea.Batch(m.fetchAllSwitchesL2Cmd(), m.fetchChassisCmd())
 
 	case l2LoadedMsg:
 		if msg.err == nil && msg.resp != nil {
@@ -630,59 +661,109 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.diagStep == diagStepPickDest {
 				switch msg.String() {
 				case "esc":
+					if m.traceSearchFilter != "" {
+						m.traceSearchFilter = ""
+						m.selectedDestIdx = 0
+						return m, nil
+					}
 					m.diagStep = diagStepMenu
 					m.selectedDestIdx = 0
 					return m, nil
-				case "x", "ctrl+c":
+				case "ctrl+c":
 					m.diagModal = false
 					m.diagStep = diagStepMenu
 					return m, nil
-				case "p":
-					m.traceProtocol = "icmp"
+				case "tab":
+					m.traceCategoryIdx = (m.traceCategoryIdx + 1) % len(TraceCategories)
+					m.selectedDestIdx = 0
 					return m, nil
-				case "t":
-					m.traceProtocol = "tcp"
-					m.tracePort = 80
+				case "shift+tab":
+					m.traceCategoryIdx = (m.traceCategoryIdx - 1 + len(TraceCategories)) % len(TraceCategories)
+					m.selectedDestIdx = 0
 					return m, nil
-				case "s":
-					m.traceProtocol = "tcp"
-					m.tracePort = 443
+				case "ctrl+p":
+					m.traceProtoIdx = (m.traceProtoIdx + 1) % len(AvailableTraceProtocols)
+					m.traceProtocol = AvailableTraceProtocols[m.traceProtoIdx].Protocol
+					m.tracePort = AvailableTraceProtocols[m.traceProtoIdx].Port
 					return m, nil
-				case "u":
-					m.traceProtocol = "udp"
-					m.tracePort = 53
+				case "f1":
+					m.traceProtoIdx = 0
+					m.traceProtocol = AvailableTraceProtocols[0].Protocol
+					m.tracePort = AvailableTraceProtocols[0].Port
 					return m, nil
-				case "up", "k":
+				case "f2":
+					m.traceProtoIdx = 1
+					m.traceProtocol = AvailableTraceProtocols[1].Protocol
+					m.tracePort = AvailableTraceProtocols[1].Port
+					return m, nil
+				case "f3":
+					m.traceProtoIdx = 2
+					m.traceProtocol = AvailableTraceProtocols[2].Protocol
+					m.tracePort = AvailableTraceProtocols[2].Port
+					return m, nil
+				case "f4":
+					m.traceProtoIdx = 3
+					m.traceProtocol = AvailableTraceProtocols[3].Protocol
+					m.tracePort = AvailableTraceProtocols[3].Port
+					return m, nil
+				case "f5":
+					m.traceProtoIdx = 4
+					m.traceProtocol = AvailableTraceProtocols[4].Protocol
+					m.tracePort = AvailableTraceProtocols[4].Port
+					return m, nil
+				case "backspace":
+					if len(m.traceSearchFilter) > 0 {
+						m.traceSearchFilter = m.traceSearchFilter[:len(m.traceSearchFilter)-1]
+						m.selectedDestIdx = 0
+					}
+					return m, nil
+				case "ctrl+u":
+					m.traceSearchFilter = ""
+					m.selectedDestIdx = 0
+					return m, nil
+				case "up", "ctrl+k":
 					if m.selectedDestIdx > 0 {
 						m.selectedDestIdx--
 					}
 					return m, nil
-				case "down", "j":
-					if m.selectedDestIdx < len(m.traceDestinations)-1 {
+				case "down", "ctrl+j":
+					filtered := m.filteredTraceDestinations()
+					if m.selectedDestIdx < len(filtered)-1 {
 						m.selectedDestIdx++
 					}
 					return m, nil
-				case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-					idx := int(msg.String()[0] - '1')
-					if idx < len(m.traceDestinations) {
-						m.selectedDestIdx = idx
-						chosenDest := m.traceDestinations[m.selectedDestIdx]
-						m.diagRunning = true
-						m.diagStep = diagStepResult
-						m.diagScrollOffset = 0
-						return m, m.executeTrace(chosenDest.IP, m.traceProtocol, m.tracePort)
-					}
-					return m, nil
 				case "enter":
-					if len(m.traceDestinations) > 0 && m.selectedDestIdx < len(m.traceDestinations) {
-						chosenDest := m.traceDestinations[m.selectedDestIdx]
+					filtered := m.filteredTraceDestinations()
+					if len(filtered) > 0 && m.selectedDestIdx < len(filtered) {
+						chosenDest := filtered[m.selectedDestIdx]
+						proto := m.traceProtocol
+						port := m.tracePort
+						if chosenDest.Category == "Custom" && strings.Contains(m.traceSearchFilter, ":") {
+							parts := strings.Split(m.traceSearchFilter, ":")
+							if len(parts) == 2 {
+								if pNum, err := strconv.Atoi(parts[1]); err == nil && pNum > 0 {
+									proto = "tcp"
+									port = pNum
+								}
+							}
+						}
 						m.diagRunning = true
 						m.diagStep = diagStepResult
 						m.diagScrollOffset = 0
-						return m, m.executeTrace(chosenDest.IP, m.traceProtocol, m.tracePort)
+						return m, m.executeTrace(chosenDest.IP, proto, port)
 					}
 					return m, nil
 				default:
+					s := msg.String()
+					if len(s) == 1 {
+						ch := s[0]
+						if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+							ch == '.' || ch == ':' || ch == '-' || ch == '_' || ch == '/' {
+							m.traceSearchFilter += s
+							m.selectedDestIdx = 0
+							return m, nil
+						}
+					}
 					return m, nil
 				}
 			}
@@ -742,8 +823,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "1":
 				m.diagStep = diagStepPickDest
 				m.selectedDestIdx = 0
-				m.traceProtocol = "icmp"
-				m.tracePort = 80
+				m.traceSearchFilter = ""
+				m.traceCategoryIdx = 0
+				m.traceProtoIdx = 0
+				m.traceProtocol = AvailableTraceProtocols[0].Protocol
+				m.tracePort = AvailableTraceProtocols[0].Port
 				var selNode *api.GraphNode
 				if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
 					selNode = &m.nodeList[m.selectedIdx]
@@ -1217,10 +1301,14 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 							if ip != "" && !seenIPs[ip] {
 								seenIPs[ip] = true
 								kind := "Pod"
+								category := "Pod"
 								name := w.Name
 								if w.K8s != nil {
 									if w.K8s.WorkloadKind != nil && *w.K8s.WorkloadKind != "" {
 										kind = *w.K8s.WorkloadKind
+										if strings.EqualFold(kind, "VirtualMachine") || strings.EqualFold(kind, "VM") {
+											category = "VM"
+										}
 									}
 									if w.K8s.WorkloadName != nil && *w.K8s.WorkloadName != "" {
 										name = *w.K8s.WorkloadName
@@ -1230,7 +1318,7 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 									Label:    fmt.Sprintf("[%s] %s (IP: %s on %s)", kind, name, ip, swName),
 									IP:       ip,
 									Subnet:   swName,
-									Category: "Workload",
+									Category: category,
 								})
 							}
 						}
@@ -1256,29 +1344,118 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 					Label:    fmt.Sprintf("%s: %s (IP: %s on %s)", category, role, ip, conn.SwitchName),
 					IP:       ip,
 					Subnet:   conn.SwitchName,
-					Category: category,
+					Category: "Gateway",
 				})
 			}
 		}
 	}
 
-	// 3. Well-known Public Internet Destinations
+	// 3. Cluster Nodes / Physical Hosts
+	for _, ch := range m.chassisNodes {
+		nodeName := ch.Name
+		if ch.Properties != nil {
+			p := *ch.Properties
+			if n, ok := p["nodeName"].(string); ok && n != "" {
+				nodeName = n
+			} else if h, ok := p["hostname"].(string); ok && h != "" {
+				nodeName = h
+			}
+			if encaps, ok := p["encaps"].([]interface{}); ok {
+				for _, enc := range encaps {
+					if encMap, ok := enc.(map[string]interface{}); ok {
+						if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
+							seenIPs[encIP] = true
+							dests = append(dests, TraceDestination{
+								Label:    fmt.Sprintf("[Node] %s (IP: %s)", nodeName, encIP),
+								IP:       encIP,
+								Subnet:   "physical",
+								Category: "Node",
+							})
+						}
+					}
+				}
+			} else if encMaps, ok := p["encaps"].([]map[string]interface{}); ok {
+				for _, encMap := range encMaps {
+					if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
+						seenIPs[encIP] = true
+						dests = append(dests, TraceDestination{
+							Label:    fmt.Sprintf("[Node] %s (IP: %s)", nodeName, encIP),
+							IP:       encIP,
+							Subnet:   "physical",
+							Category: "Node",
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Well-known Public Internet & DNS
 	dests = append(dests,
 		TraceDestination{
-			Label:    "External Internet: 1.1.1.1 (Cloudflare Public DNS)",
+			Label:    "Cloudflare Public DNS: 1.1.1.1",
 			IP:       "1.1.1.1",
 			Subnet:   "external",
-			Category: "External",
+			Category: "Public DNS",
 		},
 		TraceDestination{
-			Label:    "External Internet: 8.8.8.8 (Google Public DNS)",
+			Label:    "Google Public DNS: 8.8.8.8",
 			IP:       "8.8.8.8",
 			Subnet:   "external",
-			Category: "External",
+			Category: "Public DNS",
+		},
+		TraceDestination{
+			Label:    "Quad9 Public DNS: 9.9.9.9",
+			IP:       "9.9.9.9",
+			Subnet:   "external",
+			Category: "Public DNS",
 		},
 	)
 
 	return dests
+}
+
+func (m model) filteredTraceDestinations() []TraceDestination {
+	var list []TraceDestination
+	cleanTyped := strings.TrimSpace(m.traceSearchFilter)
+	query := strings.ToLower(cleanTyped)
+
+	catFilter := "All"
+	if m.traceCategoryIdx >= 0 && m.traceCategoryIdx < len(TraceCategories) {
+		catFilter = TraceCategories[m.traceCategoryIdx]
+	}
+
+	// 1. If user typed an IP address, offer it as Custom Destination at the top
+	typedHost := cleanTyped
+	if strings.Contains(cleanTyped, ":") {
+		typedHost = strings.Split(cleanTyped, ":")[0]
+	}
+	if parsed := net.ParseIP(typedHost); parsed != nil {
+		list = append(list, TraceDestination{
+			Label:    fmt.Sprintf("⚡ Custom IP Target: %s (press Enter to trace)", cleanTyped),
+			IP:       parsed.String(),
+			Subnet:   "custom",
+			Category: "Custom",
+		})
+	}
+
+	for _, d := range m.traceDestinations {
+		if catFilter != "All" && d.Category != catFilter {
+			continue
+		}
+		if query != "" {
+			labelMatch := strings.Contains(strings.ToLower(d.Label), query)
+			ipMatch := strings.Contains(d.IP, query)
+			subMatch := strings.Contains(strings.ToLower(d.Subnet), query)
+			catMatch := strings.Contains(strings.ToLower(d.Category), query)
+			if !labelMatch && !ipMatch && !subMatch && !catMatch {
+				continue
+			}
+		}
+		list = append(list, d)
+	}
+
+	return list
 }
 
 func (m model) resolveTraceEndpoints(targetDstIP string, proto string, dstPort int) diag.TraceRequest {
@@ -1751,11 +1928,68 @@ func (m model) renderDiagModal() string {
 	}
 
 	if m.diagStep == diagStepPickDest {
-		box.WriteString(m.styles.Header.Render("Choose Destination Target:") + "\n")
-		if len(m.traceDestinations) == 0 {
-			box.WriteString(m.styles.MutedText.Render("    (no candidate destinations discovered, press Esc to go back)") + "\n")
+		box.WriteString(m.styles.Header.Render("Choose Destination Target:") + "\n\n")
+
+		// 1. Search / Custom IP Input Bar
+		searchPrompt := "  Search / Custom IP: "
+		cursorStr := "█"
+		inputDisplay := m.traceSearchFilter
+		if inputDisplay == "" {
+			inputDisplay = m.styles.MutedText.Render("(type any IP address, node name, or keyword...)") + cursorStr
 		} else {
-			for i, d := range m.traceDestinations {
+			inputDisplay = m.styles.SelectedNode.Render(inputDisplay) + cursorStr
+		}
+		box.WriteString(m.styles.Header.Render(searchPrompt) + inputDisplay + "\n\n")
+
+		// 2. Category Badges Bar
+		counts := make(map[string]int)
+		counts["All"] = len(m.traceDestinations)
+		for _, d := range m.traceDestinations {
+			counts[d.Category]++
+		}
+
+		var catBadges []string
+		for i, cat := range TraceCategories {
+			count := counts[cat]
+			label := fmt.Sprintf("[%s (%d)]", cat, count)
+			if i == m.traceCategoryIdx {
+				catBadges = append(catBadges, m.styles.TabActive.Render(label))
+			} else {
+				catBadges = append(catBadges, m.styles.TabInactive.Render(label))
+			}
+		}
+		box.WriteString("  Category: " + strings.Join(catBadges, " ") + "\n\n")
+
+		// 3. Filtered Destinations List
+		filtered := m.filteredTraceDestinations()
+		if len(filtered) == 0 {
+			box.WriteString(m.styles.MutedText.Render("    (no destinations matching filter; type an IP to trace directly)") + "\n\n")
+		} else {
+			if m.selectedDestIdx >= len(filtered) {
+				m.selectedDestIdx = len(filtered) - 1
+			}
+			if m.selectedDestIdx < 0 {
+				m.selectedDestIdx = 0
+			}
+
+			visibleLimit := 10
+			startIdx := 0
+			if m.selectedDestIdx >= visibleLimit {
+				startIdx = m.selectedDestIdx - visibleLimit + 1
+			}
+			endIdx := startIdx + visibleLimit
+			if endIdx > len(filtered) {
+				endIdx = len(filtered)
+			}
+
+			currentCat := ""
+			for i := startIdx; i < endIdx; i++ {
+				d := filtered[i]
+				if d.Category != currentCat && (TraceCategories[m.traceCategoryIdx] == "All" || d.Category == "Custom") {
+					currentCat = d.Category
+					box.WriteString(m.styles.MutedText.Render(fmt.Sprintf("  ── %s ──", currentCat)) + "\n")
+				}
+
 				isSel := i == m.selectedDestIdx
 				cursor := "  "
 				if isSel {
@@ -1768,16 +2002,24 @@ func (m model) renderDiagModal() string {
 					box.WriteString("  " + m.styles.Node.Render(line) + "\n")
 				}
 			}
+			if len(filtered) > visibleLimit {
+				box.WriteString(m.styles.MutedText.Render(fmt.Sprintf("    ... (showing %d-%d of %d matches)", startIdx+1, endIdx, len(filtered))) + "\n")
+			}
 		}
 
-		protoBadge := fmt.Sprintf("Protocol: %s", strings.ToUpper(m.traceProtocol))
-		if m.traceProtocol == "tcp" || m.traceProtocol == "udp" {
-			protoBadge += fmt.Sprintf(" (Port %d)", m.tracePort)
+		// 4. Protocol Selector Bar
+		var protoBadges []string
+		for i, opt := range AvailableTraceProtocols {
+			label := fmt.Sprintf("[%d] %s", i+1, opt.Label)
+			if i == m.traceProtoIdx {
+				protoBadges = append(protoBadges, m.styles.ActiveGateway.Render("► "+label))
+			} else {
+				protoBadges = append(protoBadges, m.styles.MutedText.Render(label))
+			}
 		}
 
-		box.WriteString("\n  " + m.styles.CIDR.Render(protoBadge) + "\n")
-		box.WriteString(m.styles.MutedText.Render("  Protocols: [p] ICMP (Ping) | [t] TCP 80 | [s] TCP 443 | [u] UDP 53\n\n"))
-		box.WriteString(m.styles.MutedText.Render("  [↑/↓ or j/k: select target | Enter or 1-9: run ovn-trace | p/t/s/u: proto | Esc: back]"))
+		box.WriteString("\n  Protocol: " + strings.Join(protoBadges, " | ") + "\n\n")
+		box.WriteString(m.styles.MutedText.Render("  [Type: filter / enter IP | Tab: category | Ctrl+P or F1-F5: proto | Enter: trace | Esc: back]"))
 
 		return m.styles.ModalBox.Render(box.String())
 	}

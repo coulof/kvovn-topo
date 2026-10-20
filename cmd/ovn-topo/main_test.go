@@ -285,6 +285,23 @@ func TestDiagnosticsMode(t *testing.T) {
 	if !strings.Contains(pickerView, "Choose Destination Target:") {
 		t.Errorf("expected Choose Destination Target in picker, got: %s", pickerView)
 	}
+	if !strings.Contains(pickerView, "Search / Custom IP:") {
+		t.Errorf("expected Search / Custom IP bar in picker, got: %s", pickerView)
+	}
+	if !strings.Contains(pickerView, "TCP 22 (SSH)") {
+		t.Errorf("expected TCP 22 (SSH) in protocol bar, got: %s", pickerView)
+	}
+	if !strings.Contains(pickerView, "Category:") {
+		t.Errorf("expected Category tabs bar in picker, got: %s", pickerView)
+	}
+
+	// Test custom IP filtering
+	m.traceSearchFilter = "10.144.97.201:22"
+	filtered := m.filteredTraceDestinations()
+	if len(filtered) == 0 || filtered[0].Category != "Custom" || filtered[0].IP != "10.144.97.201" {
+		t.Errorf("expected custom IP 10.144.97.201 at top of filtered list, got: %+v", filtered)
+	}
+	m.traceSearchFilter = ""
 
 	traceCmd := m.executeTrace(m.traceDestinations[0].IP, "icmp", 0)
 	if traceCmd == nil {
