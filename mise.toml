@@ -6,6 +6,7 @@ golangci-lint = "2.15.0"
 
 [env]
 KUBECONFIG = "{{env.KUBECONFIG | default(value=env.HOME ~ '/.kube/hv-01.yaml')}}"
+RANCHER_API = "https://10.144.98.13.sslip.io/"
 NB_PORT = "6641"
 SB_PORT = "6642"
 DAEMON_PORT = "8080"
@@ -177,4 +178,9 @@ run = "cd ui && yarn build-pkg ovn-topology"
 description = "Serve Rancher UI extension packages on port 4500 for Developer load testing"
 depends = ["ui-build"]
 run = "cd ui && yarn serve-pkgs"
+
+[tasks.ui-dev]
+description = "Launch Rancher UI extension dev server against Rancher Manager"
+run = "cd ui && NODE_TLS_REJECT_UNAUTHORIZED=0 API=\"$RANCHER_API\" yarn dev"
+
 
