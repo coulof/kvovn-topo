@@ -772,7 +772,7 @@ func main() {
 
 	flag.StringVar(&daemonURL, "daemon-url", "http://127.0.0.1:8080/api/v1", "URL of the ovn-topologyd API")
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
-	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, dracula, nord, tokyonight, catppuccin")
+	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
 	flag.Parse()
 
 	fixturePath := ""

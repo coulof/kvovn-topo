@@ -134,8 +134,26 @@ var (
 		PortBadge: lipgloss.Color("#fab387"), // Peach
 	}
 
+	ThemeSUSE = Theme{
+		Name:      "SUSE",
+		TitleBg:   lipgloss.Color("#30ba78"), // Jungle
+		TitleFg:   lipgloss.Color("#ffffff"), // White
+		Primary:   lipgloss.Color("#30ba78"), // Jungle
+		Header:    lipgloss.Color("#30ba78"), // Jungle
+		Text:      lipgloss.Color("#ffffff"), // White
+		Muted:     lipgloss.Color("#90ebcd"), // Mint
+		Border:    lipgloss.Color("#192072"), // Midnight
+		BoxBg:     lipgloss.Color("#0c322c"), // Pine
+		Success:   lipgloss.Color("#30ba78"), // Jungle
+		Error:     lipgloss.Color("#fe7c3f"), // Persimmon
+		Warning:   lipgloss.Color("#fe7c3f"), // Persimmon
+		CIDR:      lipgloss.Color("#90ebcd"), // Mint
+		PortBadge: lipgloss.Color("#2453ff"), // Waterhole
+	}
+
 	AvailableThemes = []Theme{
 		ThemeDefault,
+		ThemeSUSE,
 		ThemeDracula,
 		ThemeNord,
 		ThemeTokyoNight,
