@@ -329,6 +329,30 @@ func TestDiagnosticsMode(t *testing.T) {
 		t.Errorf("expected DELIVERED verdict in trace result view, got: %s", resultView)
 	}
 
+	// Test Live tcpdump filter selection dialog
+	m.diagStep = diagStepPickTcpdump
+	tcpdumpDialog := m.View()
+	if !strings.Contains(tcpdumpDialog, "Live tcpdump: Select Capture Filter") {
+		t.Errorf("expected tcpdump dialog header, got: %s", tcpdumpDialog)
+	}
+	if !strings.Contains(tcpdumpDialog, "TCP 22 (SSH)") {
+		t.Errorf("expected SSH preset in tcpdump dialog, got: %s", tcpdumpDialog)
+	}
+
+	// Test real-time streaming message update
+	m.diagStep = diagStepResult
+	m.diagStreaming = true
+	m.diagAction = "tcpdump"
+	m.tcpdumpPackets = append(m.tcpdumpPackets, "18:00:00.000 IP 10.0.0.1 > 10.0.0.2: ICMP echo request")
+	m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")
+	streamView := m.View()
+	if !strings.Contains(streamView, "LIVE CAPTURE ACTIVE") {
+		t.Errorf("expected LIVE CAPTURE ACTIVE in stream view, got: %s", streamView)
+	}
+	if !strings.Contains(streamView, "ICMP echo request") {
+		t.Errorf("expected captured packet in stream view, got: %s", streamView)
+	}
+
 	// Close modal
 	m.diagModal = false
 	if m.diagModal {

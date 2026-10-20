@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -54,8 +57,16 @@ type diagStep int
 const (
 	diagStepMenu diagStep = iota
 	diagStepPickDest
+	diagStepPickTcpdump
 	diagStepResult
 )
+
+// TcpdumpPreset defines a selectable BPF filter preset for tcpdump.
+type TcpdumpPreset struct {
+	Name   string
+	Label  string
+	Filter string
+}
 
 // TraceDestination represents an interactive target candidate for ovn-trace.
 type TraceDestination struct {
@@ -148,10 +159,25 @@ type model struct {
 	traceProtoIdx     int
 	traceProtocol     string
 	tracePort         int
+	tcpdumpFilterIdx  int
+	tcpdumpCustom     string
+	tcpdumpPackets    []string
+	tcpdumpIface      string
+	diagStreaming     bool
+	diagCancelStream  context.CancelFunc
 	diagRawOutput     string
 	diagRawView       bool
 	diagScrollOffset  int
 	diagError         error
+}
+
+type streamLineMsg struct {
+	line    string
+	scanner *bufio.Scanner
+}
+
+type streamDoneMsg struct {
+	err error
 }
 
 type graphLoadedMsg struct {
@@ -651,6 +677,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case streamLineMsg:
+		if !m.diagStreaming {
+			return m, nil
+		}
+		m.tcpdumpPackets = append(m.tcpdumpPackets, msg.line)
+		m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")
+		return m, readNextStreamLineCmd(msg.scanner)
+
+	case streamDoneMsg:
+		m.diagStreaming = false
+		m.diagRunning = false
+		if msg.err != nil && !errors.Is(msg.err, context.Canceled) && !errors.Is(msg.err, io.EOF) {
+			m.diagError = msg.err
+		}
+		return m, nil
+
 	case diagExecResultMsg:
 		m.diagRunning = false
 		m.diagAction = msg.action
@@ -774,18 +816,106 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			if m.diagStep == diagStepResult {
+			if m.diagStep == diagStepPickTcpdump {
 				switch msg.String() {
 				case "esc":
-					if m.diagAction == "trace" {
-						m.diagStep = diagStepPickDest
+					m.diagStep = diagStepMenu
+					m.tcpdumpCustom = ""
+					m.tcpdumpFilterIdx = 0
+					return m, nil
+				case "ctrl+c":
+					m.diagModal = false
+					m.diagStep = diagStepMenu
+					return m, nil
+				case "up", "ctrl+k":
+					if m.tcpdumpFilterIdx > 0 {
+						m.tcpdumpFilterIdx--
+					}
+					return m, nil
+				case "down", "ctrl+j":
+					presets := m.getTcpdumpPresets()
+					if m.tcpdumpFilterIdx < len(presets) {
+						m.tcpdumpFilterIdx++
+					}
+					return m, nil
+				case "1", "2", "3", "4", "5", "6":
+					idx := int(msg.String()[0] - '1')
+					presets := m.getTcpdumpPresets()
+					if idx < len(presets) {
+						m.tcpdumpFilterIdx = idx
+						preset := presets[idx]
+						nodeName := m.selectedNodeName()
+						portName := m.selectedPortName()
+						targetIP := m.selectedTargetIP()
+						return m, m.executeTcpdumpStream(preset.Filter, nodeName, portName, targetIP)
+					}
+					return m, nil
+				case "backspace":
+					if len(m.tcpdumpCustom) > 0 {
+						m.tcpdumpCustom = m.tcpdumpCustom[:len(m.tcpdumpCustom)-1]
+					}
+					return m, nil
+				case "enter":
+					presets := m.getTcpdumpPresets()
+					filter := ""
+					if m.tcpdumpFilterIdx < len(presets) && m.tcpdumpCustom == "" {
+						filter = presets[m.tcpdumpFilterIdx].Filter
+					} else if m.tcpdumpCustom != "" {
+						filter = m.tcpdumpCustom
 					} else {
+						filter = presets[0].Filter
+					}
+					nodeName := m.selectedNodeName()
+					portName := m.selectedPortName()
+					targetIP := m.selectedTargetIP()
+					return m, m.executeTcpdumpStream(filter, nodeName, portName, targetIP)
+				default:
+					s := msg.String()
+					if len(s) == 1 {
+						ch := s[0]
+						if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+							ch == '.' || ch == ' ' || ch == '-' || ch == '_' || ch == '=' || ch == '(' || ch == ')' {
+							m.tcpdumpCustom += s
+							m.tcpdumpFilterIdx = len(m.getTcpdumpPresets())
+							return m, nil
+						}
+					}
+					return m, nil
+				}
+			}
+
+			if m.diagStep == diagStepResult {
+				switch msg.String() {
+				case " ", "esc":
+					if m.diagStreaming {
+						if m.diagCancelStream != nil {
+							m.diagCancelStream()
+							m.diagCancelStream = nil
+						}
+						m.diagStreaming = false
+						m.diagRunning = false
+						return m, nil
+					}
+					switch m.diagAction {
+					case "trace":
+						m.diagStep = diagStepPickDest
+					case "tcpdump":
+						m.diagStep = diagStepPickTcpdump
+					default:
 						m.diagStep = diagStepMenu
 					}
 					m.diagRawOutput = ""
 					m.diagTraceRes = nil
 					return m, nil
 				case "x", "ctrl+c":
+					if m.diagStreaming {
+						if m.diagCancelStream != nil {
+							m.diagCancelStream()
+							m.diagCancelStream = nil
+						}
+						m.diagStreaming = false
+						m.diagRunning = false
+					}
 					m.diagModal = false
 					m.diagStep = diagStepMenu
 					return m, nil
@@ -842,46 +972,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.traceDestinations = m.collectTraceDestinations(selNode, srcIP)
 				return m, nil
 			case "2":
-				if m.diagRunning {
-					return m, nil
-				}
-				m.diagRunning = true
-				m.diagStep = diagStepResult
-				m.diagError = nil
-				m.diagScrollOffset = 0
-				nodeName := m.selectedNodeName()
-				portName := m.selectedPortName()
-				targetIP := m.selectedTargetIP()
-				return m, m.executeTcpdump("icmp or icmp6", nodeName, portName, targetIP)
+				m.diagStep = diagStepPickTcpdump
+				m.tcpdumpFilterIdx = 0
+				m.tcpdumpCustom = ""
+				return m, nil
 			case "3":
-				if m.diagRunning {
-					return m, nil
-				}
-				m.diagRunning = true
-				m.diagStep = diagStepResult
-				m.diagError = nil
-				m.diagScrollOffset = 0
-				nodeName := m.selectedNodeName()
-				portName := m.selectedPortName()
-				targetIP := m.selectedTargetIP()
-				return m, m.executeTcpdump("tcp", nodeName, portName, targetIP)
-			case "4":
-				if m.diagRunning {
-					return m, nil
-				}
-				m.diagRunning = true
-				m.diagStep = diagStepResult
-				m.diagError = nil
-				m.diagScrollOffset = 0
-				nodeName := m.selectedNodeName()
-				portName := m.selectedPortName()
-				targetIP := m.selectedTargetIP()
-				filter := "ip"
-				if targetIP != "" && net.ParseIP(targetIP) != nil {
-					filter = fmt.Sprintf("host %s", targetIP)
-				}
-				return m, m.executeTcpdump(filter, nodeName, portName, targetIP)
-			case "5":
 				if m.diagRunning {
 					return m, nil
 				}
@@ -892,7 +987,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				nodeName := m.selectedNodeName()
 				targetIP := m.selectedTargetIP()
 				return m, m.executeNodeDiag("conntrack", nodeName, targetIP)
-			case "6":
+			case "4":
+				if m.diagRunning {
+					return m, nil
+				}
+				m.diagRunning = true
+				m.diagStep = diagStepResult
+				m.diagError = nil
+				m.diagScrollOffset = 0
+				nodeName := m.selectedNodeName()
+				return m, m.executeNodeDiag("ovs-port", nodeName, "")
+			case "5":
 				if m.diagRunning {
 					return m, nil
 				}
@@ -902,7 +1007,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				return m, m.executeNodeDiag("ovs-iface", nodeName, "")
-			case "7":
+			case "6":
 				if m.diagRunning {
 					return m, nil
 				}
@@ -1834,6 +1939,17 @@ func (m model) executeNodeDiag(action string, nodeName string, targetIP string) 
 		case "conntrack":
 			cmd = diag.BuildConntrackDumpCommand(0)
 			title = fmt.Sprintf("Conntrack Table on node %s (IP: %s)", nodeName, targetIP)
+		case "ovs-port":
+			portName := m.selectedPortName()
+			_, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, nodeName, portName)
+			if err != nil || iface == "" {
+				iface = "br-int"
+			}
+			cmd, err = diag.BuildOvsIfaceDetailCommand(iface)
+			if err != nil {
+				return diagExecResultMsg{err: err}
+			}
+			title = fmt.Sprintf("OVS Port Interface & Telemetry: %s (%s on %s)", iface, portName, nodeName)
 		case "ovs-iface":
 			cmd = diag.BuildOvsVsctlShowCommand()
 			title = fmt.Sprintf("OVS Bridges & Interfaces (ovs-vsctl show) on node %s", nodeName)
@@ -1854,8 +1970,13 @@ func (m model) executeNodeDiag(action string, nodeName string, targetIP string) 
 		}
 
 		out := string(stdout)
-		if action == "conntrack" {
+		switch action {
+		case "conntrack":
 			out = diag.FormatConntrackOutput(out, targetIP)
+		case "ovs-port":
+			portName := m.selectedPortName()
+			_, iface, _ := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, nodeName, portName)
+			out = diag.FormatOvsIfaceOutput(out, iface)
 		}
 
 		return diagExecResultMsg{
@@ -1866,91 +1987,94 @@ func (m model) executeNodeDiag(action string, nodeName string, targetIP string) 
 	}
 }
 
-func (m model) executeTcpdump(filter string, hintNode string, portName string, portIP string) tea.Cmd {
-	return func() tea.Msg {
-		if m.diagExecutor == nil || m.diagLocator == nil {
-			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+func (m *model) executeTcpdumpStream(filter string, hintNode string, portName string, portIP string) tea.Cmd {
+	m.diagRunning = true
+	m.diagStreaming = true
+	m.diagStep = diagStepResult
+	m.diagAction = "tcpdump"
+	m.diagScrollOffset = 0
+	m.tcpdumpPackets = nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	m.diagCancelStream = cancel
+
+	nodeName, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, hintNode, portName)
+	if err != nil || nodeName == "" {
+		if hintNode != "" {
+			nodeName = hintNode
+		} else {
+			nodeName = "cluster-node"
 		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		nodeName, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, hintNode, portName)
-		if err != nil || nodeName == "" {
-			if hintNode != "" {
-				nodeName = hintNode
-			} else {
-				nodeName = "cluster-node"
-			}
-			if iface == "" {
-				iface = "br-int"
-			}
+		if iface == "" {
+			iface = "br-int"
 		}
+	}
 
-		// If capturing on br-int, scope the capture to the port's IP
-		effectiveFilter := filter
-		if iface == "br-int" && portIP != "" && !strings.Contains(filter, "host") {
-			effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, portIP)
-		}
+	effectiveFilter := filter
+	if iface == "br-int" && portIP != "" && !strings.Contains(filter, "host") {
+		effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, portIP)
+	}
 
+	m.tcpdumpIface = iface
+	m.diagTitle = fmt.Sprintf("Live tcpdump on %s (node: %s, filter: %s)", iface, nodeName, effectiveFilter)
+	m.tcpdumpPackets = []string{
+		fmt.Sprintf("Listening on interface '%s' (port: %s on node %s)", iface, portName, nodeName),
+		fmt.Sprintf("Filter: %s", effectiveFilter),
+		"",
+	}
+	m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")
+
+	pr, pw := io.Pipe()
+
+	go func() {
 		pod, err := m.diagLocator.FindNodeCNIPod(ctx, nodeName)
 		if err != nil {
-			return diagExecResultMsg{err: fmt.Errorf("failed to locate kube-ovn-cni pod on node %s: %w", nodeName, err)}
+			_ = pw.CloseWithError(err)
+			return
 		}
 
 		req := diag.TcpdumpRequest{
 			Interface: iface,
 			Filter:    effectiveFilter,
-			Count:     15,
+			Count:     500,
 		}
-		cmd, err := diag.BuildTcpdumpCommand(req)
+		cmd, err := diag.BuildTcpdumpStreamCommand(req)
 		if err != nil {
-			return diagExecResultMsg{err: err}
+			_ = pw.CloseWithError(err)
+			return
 		}
 
-		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
+		_ = m.diagExecutor.Stream(ctx, pod, cmd, nil, pw, pw)
+		_ = pw.Close()
+	}()
 
-		rawCombined := string(stdout)
-		if rawCombined == "" && len(stderr) > 0 {
-			rawCombined = string(stderr)
-		}
+	scanner := bufio.NewScanner(pr)
+	return readNextStreamLineCmd(scanner)
+}
 
-		var packetLines []string
-		for _, line := range strings.Split(string(stdout), "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "tcpdump:") ||
-				strings.HasPrefix(trimmed, "listening on") ||
-				strings.Contains(trimmed, "packets captured") ||
-				strings.Contains(trimmed, "packets received") ||
-				strings.Contains(trimmed, "packets dropped") {
-				continue
-			}
-			packetLines = append(packetLines, trimmed)
+func readNextStreamLineCmd(scanner *bufio.Scanner) tea.Cmd {
+	return func() tea.Msg {
+		if scanner.Scan() {
+			return streamLineMsg{line: scanner.Text(), scanner: scanner}
 		}
+		return streamDoneMsg{err: scanner.Err()}
+	}
+}
 
-		var raw string
-		if len(packetLines) > 0 {
-			raw = fmt.Sprintf("Captured %d packet(s) on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n%s",
-				len(packetLines), iface, portName, nodeName, effectiveFilter, strings.Join(packetLines, "\n"))
-		} else if strings.Contains(rawCombined, "0 packets captured") || (err != nil && strings.Contains(err.Error(), "124")) {
-			raw = fmt.Sprintf("Listening on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n0 packets captured within 5s (Interface is currently quiet).",
-				iface, portName, nodeName, effectiveFilter)
-		} else if err != nil {
-			errMsg := string(stderr)
-			if errMsg == "" {
-				errMsg = err.Error()
-			}
-			return diagExecResultMsg{err: fmt.Errorf("tcpdump failed: %s", errMsg)}
-		} else {
-			raw = fmt.Sprintf("Listening on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n0 packets captured within 5s (Interface is currently quiet).",
-				iface, portName, nodeName, effectiveFilter)
-		}
+func (m model) getTcpdumpPresets() []TcpdumpPreset {
+	targetIP := m.selectedTargetIP()
+	ipFilter := "ip"
+	if targetIP != "" && net.ParseIP(targetIP) != nil {
+		ipFilter = fmt.Sprintf("host %s", targetIP)
+	}
 
-		return diagExecResultMsg{
-			action:    "tcpdump",
-			title:     fmt.Sprintf("Live tcpdump on %s (%s)", iface, portName),
-			rawOutput: raw,
-		}
+	return []TcpdumpPreset{
+		{Name: "ip", Label: fmt.Sprintf("Port IP Traffic (%s)", ipFilter), Filter: ipFilter},
+		{Name: "icmp", Label: "ICMP (Ping / Echo requests & replies)", Filter: "icmp or icmp6"},
+		{Name: "tcp", Label: "TCP (All TCP connections)", Filter: "tcp"},
+		{Name: "ssh", Label: "TCP 22 (SSH)", Filter: "tcp port 22"},
+		{Name: "web", Label: "Web Traffic (HTTP 80 / HTTPS 443)", Filter: "tcp port 80 or tcp port 443"},
+		{Name: "dns", Label: "DNS Traffic (UDP 53)", Filter: "udp port 53"},
 	}
 }
 
@@ -2211,8 +2335,66 @@ func (m model) renderDiagModal() string {
 		return m.styles.ModalBox.Render(box.String())
 	}
 
+	if m.diagStep == diagStepPickTcpdump {
+		box.WriteString(m.styles.Header.Render("Live tcpdump: Select Capture Filter") + "\n\n")
+
+		portName := m.selectedPortName()
+		nodeName := m.selectedNodeName()
+		fmt.Fprintf(&box, "  Interface Host: Node %s (Port: %s)\n\n",
+			m.styles.SelectedNode.Render(nodeName), m.styles.PortBadge.Render(portName))
+
+		box.WriteString(m.styles.Header.Render("  Choose a Protocol Preset or Filter:") + "\n")
+		presets := m.getTcpdumpPresets()
+		for i, p := range presets {
+			isSel := i == m.tcpdumpFilterIdx && m.tcpdumpCustom == ""
+			cursor := "  "
+			if isSel {
+				cursor = "► "
+			}
+			line := fmt.Sprintf("%s[%d] %s", cursor, i+1, p.Label)
+			if isSel {
+				box.WriteString("  " + m.styles.SelectedNode.Render(line) + "\n")
+			} else {
+				box.WriteString("  " + m.styles.Node.Render(line) + "\n")
+			}
+		}
+
+		// Custom filter option
+		isCustomSel := m.tcpdumpFilterIdx == len(presets) || m.tcpdumpCustom != ""
+		cursor := "  "
+		if isCustomSel {
+			cursor = "► "
+		}
+		customDisplay := m.tcpdumpCustom
+		if customDisplay == "" {
+			customDisplay = m.styles.MutedText.Render("(type any custom BPF filter e.g. 'tcp port 22 or icmp')")
+		} else {
+			customDisplay = m.styles.SelectedNode.Render(customDisplay)
+		}
+		fmt.Fprintf(&box, "  %s[7] Custom Filter: %s█\n\n", cursor, customDisplay)
+
+		box.WriteString(m.styles.MutedText.Render("  [↑/↓: select filter | 1-6: run preset | Type: custom filter | Enter: start live capture | Esc: back]"))
+		return m.styles.ModalBox.Render(box.String())
+	}
+
 	if m.diagRawOutput != "" || m.diagTraceRes != nil {
 		fmt.Fprintf(&box, "  %s\n\n", m.styles.Header.Render("Result: "+m.diagTitle))
+
+		if m.diagStreaming {
+			packetCount := 0
+			if len(m.tcpdumpPackets) > 3 {
+				packetCount = len(m.tcpdumpPackets) - 3
+			}
+			streamBadge := fmt.Sprintf("🔴 LIVE CAPTURE ACTIVE — %d packets received (Press Space or Esc to stop)", packetCount)
+			box.WriteString("  " + m.styles.ActiveGateway.Render(streamBadge) + "\n\n")
+		} else if m.diagAction == "tcpdump" {
+			packetCount := 0
+			if len(m.tcpdumpPackets) > 3 {
+				packetCount = len(m.tcpdumpPackets) - 3
+			}
+			stopBadge := fmt.Sprintf("⏹ CAPTURE STOPPED — %d packets captured (Press Space or Esc: back | o: toggle raw)", packetCount)
+			box.WriteString("  " + m.styles.BadgeBound.Render(stopBadge) + "\n\n")
+		}
 
 		var contentText string
 		if m.diagAction == "trace" && m.diagTraceRes != nil && !m.diagRawView {
@@ -2274,18 +2456,13 @@ func (m model) renderDiagModal() string {
 		displayedLines := lines[m.diagScrollOffset:endIdx]
 		box.WriteString("  " + strings.Join(displayedLines, "\n  ") + "\n\n")
 
-		scrollHint := fmt.Sprintf("  [Lines %d-%d of %d | ↑/↓ or j/k: scroll | o: toggle raw | 1-7: run action | Esc/x: close]",
+		scrollHint := fmt.Sprintf("  [Lines %d-%d of %d | ↑/↓ or j/k: scroll | o: toggle raw | 1-6: run action | Esc/x: close]",
 			m.diagScrollOffset+1, endIdx, len(lines))
 		box.WriteString(m.styles.MutedText.Render(scrollHint))
 		return m.styles.ModalBox.Render(box.String())
 	}
 
 	targetIP := m.selectedTargetIP()
-	ipFilterLabel := "host " + targetIP
-	if targetIP == "" || net.ParseIP(targetIP) == nil {
-		ipFilterLabel = "ip"
-	}
-
 	nodeName := m.selectedNodeName()
 	targetNodeLabel := "local node"
 	if nodeName != "" {
@@ -2293,15 +2470,14 @@ func (m model) renderDiagModal() string {
 	}
 
 	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
-	box.WriteString("    [1] ovn-trace (Microflow trace from active port to peer switch/gateway)\n")
-	fmt.Fprintf(&box, "    [2] Live tcpdump: ICMP traffic (Ping / Echo trace on %s)\n", targetNodeLabel)
-	fmt.Fprintf(&box, "    [3] Live tcpdump: TCP traffic (All TCP connections on %s)\n", targetNodeLabel)
-	fmt.Fprintf(&box, "    [4] Live tcpdump: Port IP traffic (%s on %s)\n", ipFilterLabel, targetNodeLabel)
-	fmt.Fprintf(&box, "    [5] Filtered Conntrack (Active flows for port IP %s on %s)\n", targetIP, targetNodeLabel)
-	fmt.Fprintf(&box, "    [6] OVS Physical Bridges & Tunnels (ovs-vsctl show on %s)\n", targetNodeLabel)
-	fmt.Fprintf(&box, "    [7] Tail ovn-controller Logs (on %s)\n\n", targetNodeLabel)
+	box.WriteString("    [1] ovn-trace            (Microflow simulation through OVN logical pipeline)\n")
+	fmt.Fprintf(&box, "    [2] Live tcpdump         (Real-time packet capture on %s with protocol presets)\n", targetNodeLabel)
+	fmt.Fprintf(&box, "    [3] Filtered Conntrack   (Active flows for port IP %s on %s)\n", targetIP, targetNodeLabel)
+	box.WriteString("    [4] Port OVS Interface   (Contextual link state, ofport number, MTU & rx/tx telemetry)\n")
+	fmt.Fprintf(&box, "    [5] Physical Bridges     (ovs-vsctl show bridge & tunnel layout on %s)\n", targetNodeLabel)
+	fmt.Fprintf(&box, "    [6] Tail Controller Logs (on %s)\n\n", targetNodeLabel)
 
-	box.WriteString(m.styles.MutedText.Render("  Press 1-7 to execute | Esc or x to cancel"))
+	box.WriteString(m.styles.MutedText.Render("  Press 1-6 to execute | Esc or x to cancel"))
 
 	return m.styles.ModalBox.Render(box.String())
 }
