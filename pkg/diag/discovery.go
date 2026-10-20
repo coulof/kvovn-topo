@@ -173,3 +173,73 @@ func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRe
 	// Fallback to kube-ovn-cni on that node if dedicated ovs pod is absent
 	return l.FindNodeCNIPod(ctx, nodeName)
 }
+
+// FindOVSInterface locates which cluster node hosts the dedicated veth interface for an OVN port,
+// and returns the node name and interface name (e.g. "4e3b7_37a8eec_h" or "ovn0").
+// If the port has no dedicated veth (e.g. a pure logical router port), it falls back to "br-int" on hintNode.
+func (l *PodLocator) FindOVSInterface(ctx context.Context, exec Executor, hintNode string, portName string) (string, string, error) {
+	if portName == "" {
+		if hintNode == "" {
+			hintNode = l.getFirstNodeName(ctx)
+		}
+		return hintNode, "br-int", nil
+	}
+
+	// 1. If hintNode is provided, check it first
+	if hintNode != "" {
+		ovsPod, err := l.FindNodeOVSPod(ctx, hintNode)
+		if err == nil {
+			iface := l.queryInterfaceOnPod(ctx, exec, ovsPod, portName)
+			if iface != "" {
+				return hintNode, iface, nil
+			}
+		}
+	}
+
+	// 2. Query other cluster nodes to find where this port is attached
+	nodes, err := l.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, n := range nodes.Items {
+			if n.Name == hintNode {
+				continue
+			}
+			ovsPod, err := l.FindNodeOVSPod(ctx, n.Name)
+			if err != nil {
+				continue
+			}
+			iface := l.queryInterfaceOnPod(ctx, exec, ovsPod, portName)
+			if iface != "" {
+				return n.Name, iface, nil
+			}
+		}
+	}
+
+	// Fallback to hintNode or first node with br-int
+	if hintNode == "" {
+		hintNode = l.getFirstNodeName(ctx)
+	}
+	return hintNode, "br-int", nil
+}
+
+func (l *PodLocator) queryInterfaceOnPod(ctx context.Context, exec Executor, ovsPod PodRef, portName string) string {
+	cmd := []string{"ovs-vsctl", "--bare", "--columns=name", "find", "interface", fmt.Sprintf("external_ids:iface-id=%s", portName)}
+	stdout, _, err := exec.Exec(ctx, ovsPod, cmd)
+	if err == nil {
+		lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
+		for _, line := range lines {
+			iface := strings.TrimSpace(line)
+			if iface != "" {
+				return iface
+			}
+		}
+	}
+	return ""
+}
+
+func (l *PodLocator) getFirstNodeName(ctx context.Context) string {
+	nodes, err := l.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	if err == nil && len(nodes.Items) > 0 {
+		return nodes.Items[0].Name
+	}
+	return "cluster-node"
+}
