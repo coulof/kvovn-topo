@@ -37,11 +37,20 @@ export default defineComponent({
 
       d3.select(svgRef.value).call(zoom);
 
-      // Initial center fit
-      const initialScale = 0.85;
+      // Auto-fit and center graph within container
+      const containerW = svgRef.value.clientWidth || 1000;
+      const containerH = svgRef.value.clientHeight || 700;
+      const graphW = props.layout.bounds.width || 1000;
+      const graphH = props.layout.bounds.height || 700;
+
+      const scale = Math.min((containerW - 80) / graphW, (containerH - 80) / graphH, 1.0);
+      const finalScale = Math.max(scale, 0.45);
+      const tx = Math.max((containerW - graphW * finalScale) / 2, 40);
+      const ty = Math.max((containerH - graphH * finalScale) / 2, 40);
+
       const initialTransform = d3.zoomIdentity
-        .translate(60, 40)
-        .scale(initialScale);
+        .translate(tx, ty)
+        .scale(finalScale);
 
       d3.select(svgRef.value).call(zoom.transform, initialTransform);
     };
@@ -104,12 +113,20 @@ export default defineComponent({
                 :y="node.y"
                 :width="node.width"
                 :height="node.height"
-                rx="8"
+                rx="10"
                 class="vpc-box"
               />
-              <text
+              <rect
                 :x="node.x + 14"
-                :y="node.y + 22"
+                :y="node.y + 10"
+                :width="Math.max(node.name.length * 8 + 48, 90)"
+                height="22"
+                rx="4"
+                class="vpc-header-bg"
+              />
+              <text
+                :x="node.x + 22"
+                :y="node.y + 25"
                 class="vpc-title"
               >
                 VPC: {{ node.name }}
@@ -135,16 +152,16 @@ export default defineComponent({
               class="edge-label-group"
             >
               <rect
-                :x="edge.labelX - 42"
-                :y="edge.labelY - 10"
-                width="84"
-                height="18"
-                rx="4"
+                :x="edge.labelX - (edge.label.length * 4.2 + 14)"
+                :y="edge.labelY - 11"
+                :width="(edge.label.length * 8.4 + 28)"
+                height="22"
+                rx="11"
                 class="edge-label-bg"
               />
               <text
                 :x="edge.labelX"
-                :y="edge.labelY + 3"
+                :y="edge.labelY + 4"
                 class="edge-label-text"
               >
                 {{ edge.label }}
@@ -174,22 +191,28 @@ export default defineComponent({
               <rect
                 :width="node.width"
                 :height="node.height"
-                rx="6"
+                rx="8"
                 class="node-box"
+              />
+
+              <!-- Top Accent Color Bar -->
+              <path
+                :d="`M 0 8 A 8 8 0 0 1 8 0 L ${node.width - 8} 0 A 8 8 0 0 1 ${node.width} 8 L ${node.width} 8 L 0 8 Z`"
+                class="node-accent-bar"
               />
 
               <!-- Node Type Icon / Indicator Badge -->
               <rect
-                :x="8"
-                :y="8"
-                width="22"
-                height="16"
-                rx="3"
+                :x="12"
+                :y="16"
+                width="28"
+                height="18"
+                rx="4"
                 class="type-badge-rect"
               />
               <text
-                :x="19"
-                :y="19"
+                :x="26"
+                :y="29"
                 class="type-badge-text"
               >
                 {{ node.type === 'LR' ? 'LR' : node.type === 'LS' ? 'LS' : 'EXT' }}
@@ -197,8 +220,8 @@ export default defineComponent({
 
               <!-- Node Name -->
               <text
-                :x="36"
-                :y="20"
+                :x="48"
+                :y="30"
                 class="node-title"
               >
                 {{ node.name }}
@@ -207,19 +230,19 @@ export default defineComponent({
               <!-- Subtitle / Statistics -->
               <text
                 v-if="node.type === 'LR'"
-                :x="12"
-                :y="45"
+                :x="14"
+                :y="56"
                 class="node-subtitle"
               >
-                Routes: {{ node.properties?.routeCount ?? 0 }} | NAT: {{ node.properties?.natCount ?? 0 }}
+                Routes: {{ node.properties?.routeCount ?? 0 }} • NAT: {{ node.properties?.natCount ?? 0 }}
               </text>
               <text
                 v-else-if="node.type === 'LS'"
-                :x="12"
-                :y="42"
+                :x="14"
+                :y="52"
                 class="node-subtitle"
               >
-                Ports: {{ node.properties?.portCount ?? 0 }} ({{ node.properties?.boundPortCount ?? 0 }} bound)
+                {{ node.properties?.portCount ?? 0 }} Ports ({{ node.properties?.boundPortCount ?? 0 }} bound)
               </text>
             </g>
           </template>
@@ -252,21 +275,29 @@ export default defineComponent({
     fill: var(--box-bg);
     stroke: var(--border);
     stroke-width: 1.5px;
-    stroke-dasharray: 4 2;
-    opacity: 0.85;
+    stroke-dasharray: 6 3;
+    opacity: 0.9;
+  }
+
+  .vpc-header-bg {
+    fill: var(--body-bg);
+    stroke: var(--border);
+    stroke-width: 1px;
   }
 
   .vpc-title {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 700;
     fill: var(--body-text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   // Edges
   .edge-line {
     fill: none;
     stroke: var(--border);
-    stroke-width: 1.75px;
+    stroke-width: 2px;
   }
 
   .arrowhead-path {
@@ -275,13 +306,14 @@ export default defineComponent({
 
   .edge-label-bg {
     fill: var(--box-bg);
-    stroke: var(--subtle-border, var(--border));
-    stroke-width: 1px;
+    stroke: var(--primary);
+    stroke-width: 1.25px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
   }
 
   .edge-label-text {
-    font-size: 10px;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
     fill: var(--primary);
     text-anchor: middle;
     font-family: monospace;
@@ -290,35 +322,52 @@ export default defineComponent({
   // Nodes
   .node-group {
     cursor: pointer;
-    transition: transform 0.15s ease;
 
     .node-box {
       fill: var(--box-bg);
       stroke: var(--border);
       stroke-width: 1.5px;
       transition: stroke 0.2s, stroke-width 0.2s;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08));
+    }
+
+    .node-accent-bar {
+      fill: var(--border);
+    }
+
+    &.router-node .node-accent-bar {
+      fill: var(--primary);
+    }
+
+    &.switch-node .node-accent-bar {
+      fill: var(--success);
+    }
+
+    &.external-node .node-accent-bar {
+      fill: var(--warning);
     }
 
     .type-badge-rect {
-      fill: var(--primary);
-      opacity: 0.15;
+      fill: var(--body-bg);
+      stroke: var(--border);
+      stroke-width: 1px;
     }
 
     .type-badge-text {
-      font-size: 9px;
-      font-weight: 700;
-      fill: var(--primary);
+      font-size: 10px;
+      font-weight: 800;
+      fill: var(--body-text);
       text-anchor: middle;
     }
 
     .node-title {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       fill: var(--body-text);
     }
 
     .node-subtitle {
-      font-size: 10px;
+      font-size: 11px;
       fill: var(--muted);
       font-family: monospace;
     }
@@ -331,22 +380,6 @@ export default defineComponent({
     &.selected .node-box {
       stroke: var(--primary);
       stroke-width: 2.5px;
-    }
-
-    &.router-node .type-badge-text {
-      fill: var(--primary);
-    }
-
-    &.switch-node .type-badge-text {
-      fill: var(--success);
-    }
-
-    &.switch-node .type-badge-rect {
-      fill: var(--success);
-    }
-
-    &.external-node .type-badge-text {
-      fill: var(--warning);
     }
   }
 }

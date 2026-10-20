@@ -41,5 +41,4 @@ export function init($extension: IPlugin, store: any) {
   });
 
   harvesterDSL.basicType(['ovn-topology'], 'networks');
-  harvesterDSL.basicType(['ovn-topology'], 'Networks');
 }
