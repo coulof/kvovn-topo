@@ -111,6 +111,16 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
   - Multi-NIC: LSP `pod.ns.provider` → `NetworkAttachmentDefinition`. A VM shows all its interfaces across switches.
   - Node join ports (`node-<name>`) → k8s Node.
   - Adds read-only K8s watches on Pod, VMI, VM, NAD (as ADR-0001 allows). Missing CRDs (no KubeVirt) are handled silently.
+- **Workload Relationship Display (Pod & KubeVirt VM)**:
+  - **Tree View Expansion**: Allow expanding any Logical Switch to list its attached LSPs mapped directly to their Kubernetes workloads:
+    - Pods: `[Pod] <name>` (`namespace/<name>`, owner: Deployment/StatefulSet/DaemonSet, IP/MAC).
+    - KubeVirt VMs: `[VM] <name>` (resolved from `virt-launcher` pod → VMI → VM, suppressing launcher noise).
+    - Multi-NIC VMs: Display all interfaces belonging to the same VM across different subnets.
+  - **Port Interconnection Inspector**: When highlighting any port, show the full workload relationship card:
+    - Workload Name & Kind (`Pod` or `VirtualMachine`)
+    - Kubernetes Namespace
+    - Assigned Node & Chassis Hostname
+    - Associated Host Veth Interface (`<hash>_h`)
 - Machine output: `ovn-topo graph --view l3 -o json|yaml` for scripting (same shape as the API).
 
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
@@ -233,6 +243,7 @@ Extension: add the L2 and Chassis views here.
   - **Physical OpenFlow trace**: Supports `ovs-appctl ofproto/trace br-int in_port=<ofport>...` on the node.
   - **Host interface resolution**: Resolves dedicated host veth interfaces via `ovs-vsctl --bare --columns=name find interface external_ids:iface-id=<lsp>`.
   - **Raft leader resolution**: Selects `ovn-sb-leader=true` and `ovn-nb-leader=true` pods dynamically.
+  - **Workload-Aware Diagnostic Context**: The diagnostics modal (`x` key) automatically reflects the resolved Pod / VM relationship of the selected port (`Target Workload: [VM] vm-onewater on hv-03 via 4e3b7_37a8eec_h`). `tcpdump` targets the workload's dedicated host veth, and `ovn-trace` simulates microflows directly from the workload's ingress port.
 
 **Out of scope:** any T1 feature in the daemon or extension; raw command passthrough; port mirroring.
 

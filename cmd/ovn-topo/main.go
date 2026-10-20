@@ -80,10 +80,12 @@ type model struct {
 	diagRunning    bool
 	diagAction     string
 	diagTitle      string
-	diagTraceRes   *diag.TraceResult
-	diagRawOutput  string
-	diagRawView    bool
-	diagError      error
+	diagTraceRes     *diag.TraceResult
+	diagTraceParams  string
+	diagRawOutput    string
+	diagRawView      bool
+	diagScrollOffset int
+	diagError        error
 }
 
 type graphLoadedMsg struct {
@@ -98,11 +100,12 @@ type diagProbeMsg struct {
 }
 
 type diagExecResultMsg struct {
-	action    string
-	title     string
-	traceRes  *diag.TraceResult
-	rawOutput string
-	err       error
+	action      string
+	title       string
+	traceRes    *diag.TraceResult
+	traceParams string
+	rawOutput   string
+	err         error
 }
 
 func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubeconfigPath, k8sNamespace string) model {
@@ -415,7 +418,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diagAction = msg.action
 		m.diagTitle = msg.title
 		m.diagTraceRes = msg.traceRes
+		m.diagTraceParams = msg.traceParams
 		m.diagRawOutput = msg.rawOutput
+		m.diagScrollOffset = 0
 		m.diagError = msg.err
 		return m, nil
 
@@ -428,9 +433,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diagTraceRes = nil
 				m.diagError = nil
 				m.diagRunning = false
+				m.diagScrollOffset = 0
+				return m, nil
+			case "down", "j":
+				m.diagScrollOffset++
+				return m, nil
+			case "up", "k":
+				if m.diagScrollOffset > 0 {
+					m.diagScrollOffset--
+				}
+				return m, nil
+			case "pgdown":
+				m.diagScrollOffset += 8
+				return m, nil
+			case "pgup":
+				if m.diagScrollOffset >= 8 {
+					m.diagScrollOffset -= 8
+				} else {
+					m.diagScrollOffset = 0
+				}
 				return m, nil
 			case "o":
 				m.diagRawView = !m.diagRawView
+				m.diagScrollOffset = 0
 				return m, nil
 			case "1":
 				if m.diagRunning {
@@ -438,6 +463,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				var conn *RouterPortConnection
 				if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
 					conn = &m.portList[m.selectedIdx]
@@ -456,6 +482,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				portName := m.selectedPortName()
 				targetIP := m.selectedTargetIP()
@@ -466,6 +493,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				portName := m.selectedPortName()
 				targetIP := m.selectedTargetIP()
@@ -476,6 +504,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				portName := m.selectedPortName()
 				targetIP := m.selectedTargetIP()
@@ -490,6 +519,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				targetIP := m.selectedTargetIP()
 				return m, m.executeNodeDiag("conntrack", nodeName, targetIP)
@@ -499,6 +529,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				return m, m.executeNodeDiag("ovs-iface", nodeName, "")
 			case "7":
@@ -507,6 +538,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.diagRunning = true
 				m.diagError = nil
+				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
 				return m, m.executeNodeDiag("logs", nodeName, "")
 			default:
@@ -693,11 +725,15 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		}
 
 		traceRes := diag.ParseTraceOutput(string(stdout))
+		traceParams := fmt.Sprintf("Source (From):      [Switch %s] port '%s' (IP: %s, MAC: %s)\nDestination (To):   %s\nProtocol Match:     ICMP Echo Request (ip.ttl=255, 4x --ct=new)",
+			datapath, inport, srcIP, srcMAC, dstIP)
+
 		return diagExecResultMsg{
-			action:    "trace",
-			title:     fmt.Sprintf("ovn-trace on %s (inport: %s, %s -> %s)", datapath, inport, srcIP, dstIP),
-			traceRes:  &traceRes,
-			rawOutput: string(stdout),
+			action:      "trace",
+			title:       fmt.Sprintf("ovn-trace on %s (inport: %s, %s -> %s)", datapath, inport, srcIP, dstIP),
+			traceRes:    &traceRes,
+			traceParams: traceParams,
+			rawOutput:   string(stdout),
 		}
 	}
 }
@@ -930,41 +966,71 @@ func (m model) renderDiagModal() string {
 	}
 
 	if m.diagRawOutput != "" || m.diagTraceRes != nil {
-		box.WriteString(m.styles.Header.Render(fmt.Sprintf("  Result: %s", m.diagTitle)) + "\n\n")
+		fmt.Fprintf(&box, "  %s\n\n", m.styles.Header.Render("Result: "+m.diagTitle))
 
+		var contentText string
 		if m.diagAction == "trace" && m.diagTraceRes != nil && !m.diagRawView {
+			var traceContent strings.Builder
 			tr := m.diagTraceRes
 			verdictStyle := m.styles.BadgeBound
 			if tr.Verdict != "delivered" {
 				verdictStyle = m.styles.BadgeUnbound
 			}
-			fmt.Fprintf(&box, "  Verdict: %s\n", verdictStyle.Render(strings.ToUpper(tr.Verdict)))
-			fmt.Fprintf(&box, "  Summary: %s\n\n", tr.Summary)
+			fmt.Fprintf(&traceContent, "Verdict: %s\n", verdictStyle.Render(strings.ToUpper(tr.Verdict)))
+			fmt.Fprintf(&traceContent, "Summary: %s\n\n", tr.Summary)
 
-			box.WriteString(m.styles.Header.Render("  Pipeline Stages Evaluated:") + "\n")
-			for i, st := range tr.Stages {
-				if i >= 12 {
-					fmt.Fprintf(&box, "    ... (%d more stages, press 'o' for raw)\n", len(tr.Stages)-12)
-					break
+			if m.diagTraceParams != "" {
+				traceContent.WriteString("Simulation Endpoints:\n")
+				for _, pLine := range strings.Split(m.diagTraceParams, "\n") {
+					traceContent.WriteString("  • " + pLine + "\n")
 				}
-				fmt.Fprintf(&box, "    • [%s table %d] %-22s ➔ %s\n",
-					st.Pipeline, st.Table, st.Name, truncate(st.Action, 45))
+				traceContent.WriteString("\n")
 			}
+
+			if tr.HopPath != "" {
+				traceContent.WriteString("Hop-by-Hop Flow Path:\n")
+				traceContent.WriteString("  " + m.styles.ActiveGateway.Render(tr.HopPath) + "\n\n")
+			}
+
+			traceContent.WriteString("Pipeline Stages Evaluated:\n")
+			for _, st := range tr.Stages {
+				fmt.Fprintf(&traceContent, "  • [%s table %d] %-24s ➔ %s\n",
+					st.Pipeline, st.Table, st.Name, truncate(st.Action, 48))
+			}
+			contentText = traceContent.String()
 		} else {
 			rawText := m.diagRawOutput
 			if m.diagRawView {
 				rawText = diag.FormatJsonOutput(rawText)
 			}
-			lines := strings.Split(strings.TrimSpace(rawText), "\n")
-			maxLines := 18
-			if len(lines) > maxLines {
-				lines = lines[:maxLines]
-				lines = append(lines, fmt.Sprintf("... (%d lines truncated, press 'o' to toggle pretty JSON)", len(strings.Split(rawText, "\n"))-maxLines))
-			}
-			box.WriteString("  " + strings.Join(lines, "\n  ") + "\n")
+			contentText = rawText
 		}
 
-		box.WriteString("\n" + m.styles.MutedText.Render("  [o: toggle pretty JSON/raw | 1-7: run another test | Esc/x: return to topology]"))
+		lines := strings.Split(strings.TrimSpace(contentText), "\n")
+		visibleLines := m.height - 16
+		if visibleLines < 10 {
+			visibleLines = 10
+		}
+
+		maxOffset := len(lines) - visibleLines
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.diagScrollOffset > maxOffset {
+			m.diagScrollOffset = maxOffset
+		}
+
+		endIdx := m.diagScrollOffset + visibleLines
+		if endIdx > len(lines) {
+			endIdx = len(lines)
+		}
+
+		displayedLines := lines[m.diagScrollOffset:endIdx]
+		box.WriteString("  " + strings.Join(displayedLines, "\n  ") + "\n\n")
+
+		scrollHint := fmt.Sprintf("  [Lines %d-%d of %d | ↑/↓ or j/k: scroll | o: toggle raw | 1-7: run action | Esc/x: close]",
+			m.diagScrollOffset+1, endIdx, len(lines))
+		box.WriteString(m.styles.MutedText.Render(scrollHint))
 		return m.styles.ModalBox.Render(box.String())
 	}
 
