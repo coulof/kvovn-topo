@@ -30,7 +30,7 @@ func TestBuildTraceCommand(t *testing.T) {
 				Protocol: "icmp",
 			},
 			wantErr: false,
-			wantCmd: `ovn-trace --ct=new default-subnet inport == "test-pod.default" && eth.src == 00:00:00:aa:bb:cc && eth.dst == 00:00:00:dd:ee:ff && ip4.src == 10.244.0.10 && ip4.dst == 10.244.0.20 && ip.proto == 1 && icmp4.type == 8 && icmp4.code == 0`,
+			wantCmd: `ovn-trace --ct=new --ct=new --ct=new --ct=new default-subnet inport == "test-pod.default" && eth.src == 00:00:00:aa:bb:cc && eth.dst == 00:00:00:dd:ee:ff && ip.ttl == 255 && ip4.src == 10.244.0.10 && ip4.dst == 10.244.0.20 && ip.proto == 1 && icmp4.type == 8 && icmp4.code == 0`,
 		},
 		{
 			name: "valid tcp trace with custom ports",
@@ -45,7 +45,7 @@ func TestBuildTraceCommand(t *testing.T) {
 				CTState:  "est",
 			},
 			wantErr: false,
-			wantCmd: `ovn-trace --ct=est ovn_cluster inport == "lrp-join" && ip4.src == 100.64.0.2 && ip4.dst == 10.244.1.5 && ip.proto == 6 && tcp.src == 54321 && tcp.dst == 8080`,
+			wantCmd: `ovn-trace --ct=new --ct=new --ct=new --ct=new ovn_cluster inport == "lrp-join" && ip.ttl == 255 && ip4.src == 100.64.0.2 && ip4.dst == 10.244.1.5 && ip.proto == 6 && tcp.src == 54321 && tcp.dst == 8080`,
 		},
 		{
 			name: "injection attempt in inport",

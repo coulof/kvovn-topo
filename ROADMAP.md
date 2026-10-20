@@ -227,6 +227,13 @@ Extension: add the L2 and Chassis views here.
   4. **Conntrack per port.** `ovn-appctl ct-zone-list` → zone → `ovs-appctl dpctl/dump-conntrack zone=N`.
   5. **Log tails.** `ovn-controller` on the port's node, filtered by LSP name.
 
+- **Relationship with `kubectl ko` (`pkg/ko`)**:
+  Rather than importing `github.com/kubeovn/kube-ovn` as a Go module (which would violate `AGENTS.md` by pulling in GoBGP, Calico/Felix, and querying CRDs), `pkg/diag` adopts the proven command patterns from `pkg/ko` directly:
+  - **`ovn-trace` formula**: Matches `pkg/ko/trace.go` using `ip.ttl == 255`, protocol matchers, and 4x `--ct=new` for multi-tier NAT/ACL conntrack simulation.
+  - **Physical OpenFlow trace**: Supports `ovs-appctl ofproto/trace br-int in_port=<ofport>...` on the node.
+  - **Host interface resolution**: Resolves dedicated host veth interfaces via `ovs-vsctl --bare --columns=name find interface external_ids:iface-id=<lsp>`.
+  - **Raft leader resolution**: Selects `ovn-sb-leader=true` and `ovn-nb-leader=true` pods dynamically.
+
 **Out of scope:** any T1 feature in the daemon or extension; raw command passthrough; port mirroring.
 
 **DoD**
@@ -307,3 +314,4 @@ Record answers here with evidence (date, link to test run or doc).
 | Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`. Pinned to `v24.03.2` in `hack/ovn-version`. |
 | Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | open |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
+| Q7 | Should `pkg/diag` import `github.com/kubeovn/kube-ovn/pkg/ko` directly? | M6 | **Resolved (2026-10-20)**: **No.** Importing `github.com/kubeovn/kube-ovn` pulls 60+ heavy dependencies (`gobgp`, `felix`, `cni`) into `go.mod` and violates `AGENTS.md` rule 2 by querying Kube-OVN CRDs (`Subnet`, `Vpc`). Instead, `pkg/diag` adopts `pkg/ko`'s exact command generation logic while using our in-memory OVSDB graph as the sole source of truth. |
