@@ -39,6 +39,7 @@ type TraceResult struct {
 	Verdict   string // "delivered", "dropped", "no-route", "unknown"
 	Summary   string
 	FinalPort string
+	HopPath   string
 	Stages    []TraceStage
 }
 
@@ -131,6 +132,7 @@ var (
 	outputPortRegex = regexp.MustCompile(`output\("([^"]+)"\)`)
 	outputRegex     = regexp.MustCompile(`output to "([^"]+)"`)
 	tableRegex      = regexp.MustCompile(`(?:table=(\d+)\s*\(([^)]*)\)|^\s*(\d+)\.\s+([a-zA-Z0-9_-]+))`)
+	datapathRegex   = regexp.MustCompile(`(?:ingress|egress)\(dp="([^"]+)"`)
 )
 
 // ParseTraceOutput parses raw ovn-trace output into a structured TraceResult.
@@ -143,6 +145,7 @@ func ParseTraceOutput(raw string) TraceResult {
 
 	lines := strings.Split(raw, "\n")
 	var stages []TraceStage
+	var hops []string
 	currentPipeline := "ingress"
 
 	for _, line := range lines {
@@ -155,6 +158,14 @@ func ParseTraceOutput(raw string) TraceResult {
 			currentPipeline = "egress"
 		} else if strings.HasPrefix(trimmed, "# ingress") {
 			currentPipeline = "ingress"
+		}
+
+		// Datapath hop detection
+		if dm := datapathRegex.FindStringSubmatch(trimmed); len(dm) > 1 {
+			dp := dm[1]
+			if len(hops) == 0 || hops[len(hops)-1] != dp {
+				hops = append(hops, dp)
+			}
 		}
 
 		// Stage detection
@@ -197,6 +208,13 @@ func ParseTraceOutput(raw string) TraceResult {
 			res.Verdict = "no-route"
 			res.Summary = "Packet dropped: no route found"
 		}
+	}
+
+	if res.FinalPort != "" {
+		hops = append(hops, fmt.Sprintf("Port '%s'", res.FinalPort))
+	}
+	if len(hops) > 0 {
+		res.HopPath = strings.Join(hops, " ──► ")
 	}
 
 	res.Stages = stages

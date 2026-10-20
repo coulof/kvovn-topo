@@ -176,13 +176,14 @@ func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRe
 
 // FindOVSInterface locates which cluster node hosts the dedicated veth interface for an OVN port,
 // and returns the node name and interface name (e.g. "4e3b7_37a8eec_h" or "ovn0").
-// If the port has no dedicated veth (e.g. a pure logical router port), it falls back to "br-int" on hintNode.
+// If the port has no dedicated veth (e.g. a pure logical router port), it falls back to an active UP
+// interface: "br-external" for external gateways, or "ovn0" for internal/node traffic.
 func (l *PodLocator) FindOVSInterface(ctx context.Context, exec Executor, hintNode string, portName string) (string, string, error) {
 	if portName == "" {
 		if hintNode == "" {
 			hintNode = l.getFirstNodeName(ctx)
 		}
-		return hintNode, "br-int", nil
+		return hintNode, "ovn0", nil
 	}
 
 	// 1. If hintNode is provided, check it first
@@ -214,11 +215,17 @@ func (l *PodLocator) FindOVSInterface(ctx context.Context, exec Executor, hintNo
 		}
 	}
 
-	// Fallback to hintNode or first node with br-int
+	// Fallback to active UP interface on hintNode (never br-int which is administratively DOWN)
 	if hintNode == "" {
 		hintNode = l.getFirstNodeName(ctx)
 	}
-	return hintNode, "br-int", nil
+
+	lowerPort := strings.ToLower(portName)
+	if strings.Contains(lowerPort, "ext") || strings.Contains(lowerPort, "external") || strings.Contains(lowerPort, "gw") {
+		return hintNode, "br-external", nil
+	}
+
+	return hintNode, "ovn0", nil
 }
 
 func (l *PodLocator) queryInterfaceOnPod(ctx context.Context, exec Executor, ovsPod PodRef, portName string) string {
