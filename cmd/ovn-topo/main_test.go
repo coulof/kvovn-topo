@@ -275,12 +275,23 @@ func TestDiagnosticsMode(t *testing.T) {
 		t.Errorf("expected option [1] ovn-trace in modal, got: %s", modalView)
 	}
 
+	// Open destination picker
+	m.diagStep = diagStepPickDest
+	m.traceDestinations = m.collectTraceDestinations(nil, "10.244.0.1")
+	if len(m.traceDestinations) == 0 {
+		t.Fatalf("expected candidate destinations to be collected")
+	}
+	pickerView := m.View()
+	if !strings.Contains(pickerView, "Choose Destination Target:") {
+		t.Errorf("expected Choose Destination Target in picker, got: %s", pickerView)
+	}
+
 	// Execute trace
 	var conn *RouterPortConnection
 	if len(m.portList) > 0 {
 		conn = &m.portList[0]
 	}
-	traceCmd := m.executeTrace(conn)
+	traceCmd := m.executeTrace(conn, m.traceDestinations[0].IP, "icmp", 0)
 	if traceCmd == nil {
 		t.Fatalf("expected non-nil traceCmd")
 	}
@@ -295,6 +306,7 @@ func TestDiagnosticsMode(t *testing.T) {
 
 	// Apply result
 	m.diagRunning = false
+	m.diagStep = diagStepResult
 	m.diagAction = execMsg.action
 	m.diagTitle = execMsg.title
 	m.diagTraceRes = execMsg.traceRes

@@ -48,6 +48,22 @@ type RouterPortConnection struct {
 	IsShared      bool
 }
 
+type diagStep int
+
+const (
+	diagStepMenu diagStep = iota
+	diagStepPickDest
+	diagStepResult
+)
+
+// TraceDestination represents an interactive target candidate for ovn-trace.
+type TraceDestination struct {
+	Label    string
+	IP       string
+	Subnet   string
+	Category string
+}
+
 type model struct {
 	daemonURL     string
 	fixturePath   string
@@ -82,24 +98,29 @@ type model struct {
 	switchWorkloads  map[string][]api.GraphNode
 
 	// Tier 1 Diagnostics (ADR-0001)
-	diagMode         bool
-	diagAvailable    bool
-	diagReason       string
-	k8sNamespace     string
-	k8sClient        kubernetes.Interface
-	diagExecutor     diag.Executor
-	diagLocator      *diag.PodLocator
-	diagCentralPod   diag.PodRef
-	diagModal        bool
-	diagRunning      bool
-	diagAction       string
-	diagTitle        string
-	diagTraceRes     *diag.TraceResult
-	diagTraceParams  string
-	diagRawOutput    string
-	diagRawView      bool
-	diagScrollOffset int
-	diagError        error
+	diagMode          bool
+	diagAvailable     bool
+	diagReason        string
+	k8sNamespace      string
+	k8sClient         kubernetes.Interface
+	diagExecutor      diag.Executor
+	diagLocator       *diag.PodLocator
+	diagCentralPod    diag.PodRef
+	diagModal         bool
+	diagStep          diagStep
+	diagRunning       bool
+	diagAction        string
+	diagTitle         string
+	diagTraceRes      *diag.TraceResult
+	diagTraceParams   string
+	traceDestinations []TraceDestination
+	selectedDestIdx   int
+	traceProtocol     string
+	tracePort         int
+	diagRawOutput     string
+	diagRawView       bool
+	diagScrollOffset  int
+	diagError         error
 }
 
 type graphLoadedMsg struct {
@@ -154,6 +175,8 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubec
 		switchPorts:      make(map[string][]RouterPortConnection),
 		expandedSwitches: make(map[string]bool),
 		switchWorkloads:  make(map[string][]api.GraphNode),
+		traceProtocol:    "icmp",
+		tracePort:        80,
 	}
 
 	if diagMode {
@@ -604,61 +627,138 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.diagModal {
+			if m.diagStep == diagStepPickDest {
+				switch msg.String() {
+				case "esc":
+					m.diagStep = diagStepMenu
+					m.selectedDestIdx = 0
+					return m, nil
+				case "x", "ctrl+c":
+					m.diagModal = false
+					m.diagStep = diagStepMenu
+					return m, nil
+				case "p":
+					m.traceProtocol = "icmp"
+					return m, nil
+				case "t":
+					m.traceProtocol = "tcp"
+					m.tracePort = 80
+					return m, nil
+				case "s":
+					m.traceProtocol = "tcp"
+					m.tracePort = 443
+					return m, nil
+				case "u":
+					m.traceProtocol = "udp"
+					m.tracePort = 53
+					return m, nil
+				case "up", "k":
+					if m.selectedDestIdx > 0 {
+						m.selectedDestIdx--
+					}
+					return m, nil
+				case "down", "j":
+					if m.selectedDestIdx < len(m.traceDestinations)-1 {
+						m.selectedDestIdx++
+					}
+					return m, nil
+				case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+					idx := int(msg.String()[0] - '1')
+					if idx < len(m.traceDestinations) {
+						m.selectedDestIdx = idx
+						chosenDest := m.traceDestinations[m.selectedDestIdx]
+						m.diagRunning = true
+						m.diagStep = diagStepResult
+						m.diagScrollOffset = 0
+						conn := m.resolveCurrentConnection()
+						return m, m.executeTrace(conn, chosenDest.IP, m.traceProtocol, m.tracePort)
+					}
+					return m, nil
+				case "enter":
+					if len(m.traceDestinations) > 0 && m.selectedDestIdx < len(m.traceDestinations) {
+						chosenDest := m.traceDestinations[m.selectedDestIdx]
+						m.diagRunning = true
+						m.diagStep = diagStepResult
+						m.diagScrollOffset = 0
+						conn := m.resolveCurrentConnection()
+						return m, m.executeTrace(conn, chosenDest.IP, m.traceProtocol, m.tracePort)
+					}
+					return m, nil
+				default:
+					return m, nil
+				}
+			}
+
+			if m.diagStep == diagStepResult {
+				switch msg.String() {
+				case "esc":
+					if m.diagAction == "trace" {
+						m.diagStep = diagStepPickDest
+					} else {
+						m.diagStep = diagStepMenu
+					}
+					m.diagRawOutput = ""
+					m.diagTraceRes = nil
+					return m, nil
+				case "x", "ctrl+c":
+					m.diagModal = false
+					m.diagStep = diagStepMenu
+					return m, nil
+				case "o":
+					m.diagRawView = !m.diagRawView
+					return m, nil
+				case "down", "j":
+					m.diagScrollOffset++
+					return m, nil
+				case "up", "k":
+					if m.diagScrollOffset > 0 {
+						m.diagScrollOffset--
+					}
+					return m, nil
+				case "pgdown":
+					m.diagScrollOffset += 8
+					return m, nil
+				case "pgup":
+					if m.diagScrollOffset >= 8 {
+						m.diagScrollOffset -= 8
+					} else {
+						m.diagScrollOffset = 0
+					}
+					return m, nil
+				default:
+					return m, nil
+				}
+			}
+
+			// Main Diagnostics Menu (diagStepMenu)
 			switch msg.String() {
 			case "esc", "x", "ctrl+c":
 				m.diagModal = false
+				m.diagStep = diagStepMenu
 				m.diagRawOutput = ""
 				m.diagTraceRes = nil
 				m.diagError = nil
 				m.diagRunning = false
 				m.diagScrollOffset = 0
 				return m, nil
-			case "down", "j":
-				m.diagScrollOffset++
-				return m, nil
-			case "up", "k":
-				if m.diagScrollOffset > 0 {
-					m.diagScrollOffset--
-				}
-				return m, nil
-			case "pgdown":
-				m.diagScrollOffset += 8
-				return m, nil
-			case "pgup":
-				if m.diagScrollOffset >= 8 {
-					m.diagScrollOffset -= 8
-				} else {
-					m.diagScrollOffset = 0
-				}
-				return m, nil
-			case "o":
-				m.diagRawView = !m.diagRawView
-				m.diagScrollOffset = 0
-				return m, nil
 			case "1":
-				if m.diagRunning {
-					return m, nil
+				m.diagStep = diagStepPickDest
+				m.selectedDestIdx = 0
+				m.traceProtocol = "icmp"
+				m.tracePort = 80
+				var selNode *api.GraphNode
+				if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+					selNode = &m.nodeList[m.selectedIdx]
 				}
-				m.diagRunning = true
-				m.diagError = nil
-				m.diagScrollOffset = 0
-				var conn *RouterPortConnection
-				if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
-					conn = &m.portList[m.selectedIdx]
-				} else if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
-					node := m.nodeList[m.selectedIdx]
-					if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
-						conn = &ports[0]
-					} else if ports, ok := m.switchPorts[node.Id]; ok && len(ports) > 0 {
-						conn = &ports[0]
-					}
-				}
-				return m, m.executeTrace(conn)
+				srcIP := m.selectedTargetIP()
+				m.traceDestinations = m.collectTraceDestinations(selNode, srcIP)
+				return m, nil
 			case "2":
 				if m.diagRunning {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -670,6 +770,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -681,6 +782,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -696,6 +798,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -706,6 +809,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -715,6 +819,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.diagRunning = true
+				m.diagStep = diagStepResult
 				m.diagError = nil
 				m.diagScrollOffset = 0
 				nodeName := m.selectedNodeName()
@@ -737,11 +842,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.diagModal = true
+			m.diagStep = diagStepMenu
 			m.diagRawOutput = ""
 			m.diagTraceRes = nil
 			m.diagError = nil
 			m.diagRunning = false
 			m.diagRawView = false
+			m.diagScrollOffset = 0
 			return m, nil
 		case "t":
 			m.themeIndex = (m.themeIndex + 1) % len(AvailableThemes)
@@ -1043,7 +1150,117 @@ func (m *model) cycleFocusedSwitch() {
 	m.selectedIdx = 0
 }
 
-func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
+func (m model) resolveCurrentConnection() *RouterPortConnection {
+	if m.mode == viewMatrix && len(m.portList) > 0 && m.selectedIdx < len(m.portList) {
+		return &m.portList[m.selectedIdx]
+	}
+	if len(m.nodeList) > 0 && m.selectedIdx < len(m.nodeList) {
+		node := m.nodeList[m.selectedIdx]
+		if ports, ok := m.routerPorts[node.Id]; ok && len(ports) > 0 {
+			return &ports[0]
+		}
+		if ports, ok := m.switchPorts[node.Id]; ok && len(ports) > 0 {
+			return &ports[0]
+		}
+	}
+	if len(m.portList) > 0 {
+		return &m.portList[0]
+	}
+	return nil
+}
+
+func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP string) []TraceDestination {
+	var dests []TraceDestination
+	seenIPs := make(map[string]bool)
+	if sourceIP != "" {
+		seenIPs[sourceIP] = true
+	}
+
+	// 1. Workload Destinations (VMs and Pods across all subnets)
+	for lsID, workloads := range m.switchWorkloads {
+		swName := lsID
+		if node, ok := m.nodeMap[lsID]; ok {
+			swName = node.Name
+		}
+		for _, w := range workloads {
+			if w.Properties != nil {
+				p := *w.Properties
+				portType, _ := p["type"].(string)
+				if portType == "router" {
+					continue
+				}
+				if addrs, ok := p["addresses"].([]interface{}); ok {
+					for _, a := range addrs {
+						if s, ok := a.(string); ok {
+							ip := extractCleanIP(s)
+							if ip != "" && !seenIPs[ip] {
+								seenIPs[ip] = true
+								kind := "Pod"
+								name := w.Name
+								if w.K8s != nil {
+									if w.K8s.WorkloadKind != nil && *w.K8s.WorkloadKind != "" {
+										kind = *w.K8s.WorkloadKind
+									}
+									if w.K8s.WorkloadName != nil && *w.K8s.WorkloadName != "" {
+										name = *w.K8s.WorkloadName
+									}
+								}
+								dests = append(dests, TraceDestination{
+									Label:    fmt.Sprintf("[%s] %s (IP: %s on %s)", kind, name, ip, swName),
+									IP:       ip,
+									Subnet:   swName,
+									Category: "Workload",
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Gateway Destinations (Logical Router Ports)
+	for _, conn := range m.portList {
+		for _, netCIDR := range conn.Networks {
+			ip := extractCleanIP(netCIDR)
+			if ip != "" && !seenIPs[ip] {
+				seenIPs[ip] = true
+				category := "Subnet Gateway"
+				role := conn.RouterName
+				if conn.ActiveGateway != "" {
+					category = "External Gateway"
+					role = fmt.Sprintf("%s (Active: %s)", conn.RouterName, conn.ActiveGateway)
+				}
+				dests = append(dests, TraceDestination{
+					Label:    fmt.Sprintf("%s: %s (IP: %s on %s)", category, role, ip, conn.SwitchName),
+					IP:       ip,
+					Subnet:   conn.SwitchName,
+					Category: category,
+				})
+			}
+		}
+	}
+
+	// 3. Well-known Public Internet Destinations
+	dests = append(dests,
+		TraceDestination{
+			Label:    "External Internet: 1.1.1.1 (Cloudflare Public DNS)",
+			IP:       "1.1.1.1",
+			Subnet:   "external",
+			Category: "External",
+		},
+		TraceDestination{
+			Label:    "External Internet: 8.8.8.8 (Google Public DNS)",
+			IP:       "8.8.8.8",
+			Subnet:   "external",
+			Category: "External",
+		},
+	)
+
+	return dests
+}
+
+func (m model) executeTrace(conn *RouterPortConnection, targetDstIP string, proto string, dstPort int) tea.Cmd {
 	return func() tea.Msg {
 		if m.diagExecutor == nil || m.diagLocator == nil {
 			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
@@ -1060,7 +1277,7 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		datapath := "ovn-default"
 		inport := ""
 		srcIP := "10.244.0.1"
-		dstIP := "10.244.0.2"
+		dstIP := targetDstIP
 		srcMAC := ""
 
 		if conn != nil {
@@ -1079,12 +1296,20 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 				inport = conn.PortName
 			}
 
-			for _, peer := range m.switchPorts[conn.SwitchID] {
-				if peer.PortName != conn.PortName && len(peer.Networks) > 0 {
-					dstIP = strings.Split(peer.Networks[0], "/")[0]
-					break
+			if dstIP == "" {
+				for _, peer := range m.switchPorts[conn.SwitchID] {
+					if peer.PortName != conn.PortName && len(peer.Networks) > 0 {
+						dstIP = extractCleanIP(peer.Networks[0])
+						break
+					}
 				}
 			}
+		}
+		if dstIP == "" {
+			dstIP = "1.1.1.1"
+		}
+		if proto == "" {
+			proto = "icmp"
 		}
 
 		req := diag.TraceRequest{
@@ -1093,7 +1318,8 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 			SrcMAC:   srcMAC,
 			SrcIP:    srcIP,
 			DstIP:    dstIP,
-			Protocol: "icmp",
+			Protocol: proto,
+			DstPort:  dstPort,
 		}
 
 		cmd, err := diag.BuildTraceCommand(req)
@@ -1111,12 +1337,12 @@ func (m model) executeTrace(conn *RouterPortConnection) tea.Cmd {
 		}
 
 		traceRes := diag.ParseTraceOutput(string(stdout))
-		traceParams := fmt.Sprintf("Source (From):      [Switch %s] port '%s' (IP: %s, MAC: %s)\nDestination (To):   %s\nProtocol Match:     ICMP Echo Request (ip.ttl=255, 4x --ct=new)",
-			datapath, inport, srcIP, srcMAC, dstIP)
+		traceParams := fmt.Sprintf("Source (From):      [Switch %s] port '%s' (IP: %s, MAC: %s)\nDestination (To):   %s\nProtocol Match:     %s (ip.ttl=255, 4x --ct=new)",
+			datapath, inport, srcIP, srcMAC, dstIP, strings.ToUpper(proto))
 
 		return diagExecResultMsg{
 			action:      "trace",
-			title:       fmt.Sprintf("ovn-trace on %s (inport: %s, %s -> %s)", datapath, inport, srcIP, dstIP),
+			title:       fmt.Sprintf("ovn-trace: %s -> %s via %s", srcIP, dstIP, inport),
 			traceRes:    &traceRes,
 			traceParams: traceParams,
 			rawOutput:   string(stdout),
@@ -1382,6 +1608,38 @@ func (m model) renderDiagModal() string {
 
 	if m.diagError != nil {
 		box.WriteString(m.styles.BadgeUnbound.Render(fmt.Sprintf("  ❌ Diagnostic Error: %v", m.diagError)) + "\n\n")
+	}
+
+	if m.diagStep == diagStepPickDest {
+		box.WriteString(m.styles.Header.Render("Choose Destination Target:") + "\n")
+		if len(m.traceDestinations) == 0 {
+			box.WriteString(m.styles.MutedText.Render("    (no candidate destinations discovered, press Esc to go back)") + "\n")
+		} else {
+			for i, d := range m.traceDestinations {
+				isSel := i == m.selectedDestIdx
+				cursor := "  "
+				if isSel {
+					cursor = "► "
+				}
+				line := fmt.Sprintf("%s[%d] %s", cursor, i+1, d.Label)
+				if isSel {
+					box.WriteString("  " + m.styles.SelectedNode.Render(line) + "\n")
+				} else {
+					box.WriteString("  " + m.styles.Node.Render(line) + "\n")
+				}
+			}
+		}
+
+		protoBadge := fmt.Sprintf("Protocol: %s", strings.ToUpper(m.traceProtocol))
+		if m.traceProtocol == "tcp" || m.traceProtocol == "udp" {
+			protoBadge += fmt.Sprintf(" (Port %d)", m.tracePort)
+		}
+
+		box.WriteString("\n  " + m.styles.CIDR.Render(protoBadge) + "\n")
+		box.WriteString(m.styles.MutedText.Render("  Protocols: [p] ICMP (Ping) | [t] TCP 80 | [s] TCP 443 | [u] UDP 53\n\n"))
+		box.WriteString(m.styles.MutedText.Render("  [↑/↓ or j/k: select target | Enter or 1-9: run ovn-trace | p/t/s/u: proto | Esc: back]"))
+
+		return m.styles.ModalBox.Render(box.String())
 	}
 
 	if m.diagRawOutput != "" || m.diagTraceRes != nil {
