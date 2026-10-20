@@ -51,9 +51,9 @@ image:
 
 .PHONY: ui-dev
 ui-dev:
-	@echo "==> Starting UI development app..."
-	@test -n "$$RANCHER_URL" || (echo "Error: RANCHER_URL must be set (e.g. API=https://rancher.example.com make ui-dev)" && exit 1)
-	cd ui && API=$${RANCHER_URL} yarn dev
+	@echo "==> Starting UI development app against Rancher..."
+	@API_URL="$${RANCHER_API:-$${RANCHER_URL:-https://10.144.98.13.sslip.io/}}"; \
+	cd ui && NODE_TLS_REJECT_UNAUTHORIZED=0 API="$$API_URL" yarn dev
 
 .PHONY: ui-build
 ui-build:
