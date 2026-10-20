@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import Loading from '@shell/components/Loading.vue';
 import { TopologyApiService, GraphResponse } from '../services/api';
-import { computeLayout, PositionedGraph, PositionedNode } from '../utils/layout';
+import { computeLayout, clearLayoutCache, PositionedGraph, PositionedNode } from '../utils/layout';
 import TopologyCanvas from '../components/TopologyCanvas.vue';
 import NodeDetailDrawer from '../components/NodeDetailDrawer.vue';
 import DaemonMissing from '../components/DaemonMissing.vue';
@@ -66,6 +66,11 @@ export default defineComponent({
       selectedNode.value = null;
     };
 
+    const resetLayout = () => {
+      clearLayoutCache(clusterId.value);
+      loadTopology();
+    };
+
     onMounted(() => {
       loadTopology();
     });
@@ -80,6 +85,7 @@ export default defineComponent({
       selectedNode,
       errorMessage,
       loadTopology,
+      resetLayout,
       onSelectNode,
       onCloseDrawer,
     };
@@ -107,6 +113,13 @@ export default defineComponent({
         </div>
       </div>
       <div class="header-right">
+        <button
+          class="btn btn-sm role-secondary mr-10"
+          :disabled="loading"
+          @click="resetLayout"
+        >
+          Reset View
+        </button>
         <button
           class="btn btn-sm role-secondary"
           :disabled="loading"
@@ -212,6 +225,15 @@ export default defineComponent({
             color: var(--muted);
           }
         }
+      }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+
+      .mr-10 {
+        margin-right: 10px;
       }
     }
   }

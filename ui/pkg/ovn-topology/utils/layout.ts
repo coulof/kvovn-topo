@@ -23,6 +23,14 @@ export interface PositionedGraph {
   bounds: { width: number; height: number };
 }
 
+export function clearLayoutCache(clusterId: string, view = 'l3') {
+  try {
+    localStorage.removeItem(`ovn_topology_pos_v2_${ clusterId }_${ view }`);
+  } catch (e) {
+    // Silently ignore localStorage failures
+  }
+}
+
 export async function computeLayout(graph: GraphResponse, clusterId: string): Promise<PositionedGraph> {
   const nodeMap = new Map<string, GraphNode>();
 
@@ -39,10 +47,11 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       const vpcContainer: ElkNode = {
         'id':            n.id,
         'layoutOptions': {
-          'elk.padding':          '[top=55,left=35,bottom=35,right=35]',
-          'elk.algorithm':        'layered',
-          'elk.direction':        'DOWN',
-          'elk.spacing.nodeNode': '50',
+          'elk.padding':                               '[top=65,left=40,bottom=65,right=40]',
+          'elk.algorithm':                             'layered',
+          'elk.direction':                             'DOWN',
+          'elk.spacing.nodeNode':                      '80',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '140',
         },
         'children': [],
       };
@@ -92,9 +101,10 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       'elk.algorithm':                             'layered',
       'elk.direction':                             'DOWN',
       'elk.hierarchyHandling':                     'INCLUDE_CHILDREN',
-      'elk.spacing.nodeNode':                      '65',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '110',
-      'elk.padding':                               '[top=40,left=40,bottom=40,right=40]',
+      'elk.spacing.nodeNode':                      '100',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '160',
+      'elk.spacing.componentComponent':            '90',
+      'elk.padding':                               '[top=60,left=60,bottom=60,right=60]',
     },
     'children': rootChildren,
     'edges':    elkEdges,
@@ -117,7 +127,7 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
 
       coordsMap.set(child.id, {
         'x': absX,
-        'y':   absY
+        'y': absY
       });
 
       const original = nodeMap.get(child.id);
@@ -144,7 +154,25 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
 
   collectNodes(layoutResult, 0, 0);
 
-  // Position edges
+  // Index edges per node to distribute attachment ports cleanly
+  const outgoingMap = new Map<string, GraphEdge[]>();
+  const incomingMap = new Map<string, GraphEdge[]>();
+
+  for (const e of graph.edges) {
+    if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+      if (!outgoingMap.has(e.source)) {
+        outgoingMap.set(e.source, []);
+      }
+      outgoingMap.get(e.source)!.push(e);
+
+      if (!incomingMap.has(e.target)) {
+        incomingMap.set(e.target, []);
+      }
+      incomingMap.get(e.target)!.push(e);
+    }
+  }
+
+  // Position edges with distributed connection points and collision-free label coordinates
   const positionedEdges: PositionedEdge[] = [];
 
   for (const e of graph.edges) {
@@ -158,13 +186,24 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
       const srcH = srcNode.type === 'LR' ? 75 : srcNode.type === 'External' ? 55 : 65;
       const tgtW = tgtNode.type === 'LR' ? 220 : tgtNode.type === 'External' ? 180 : 200;
 
-      const startX = srcCoords.x + srcW / 2;
+      const outList = outgoingMap.get(e.source) || [e];
+      const inList = incomingMap.get(e.target) || [e];
+
+      const srcIdx = outList.findIndex((item) => item.id === e.id);
+      const tgtIdx = inList.findIndex((item) => item.id === e.id);
+
+      const srcRatio = (srcIdx >= 0 && outList.length > 1) ? (srcIdx + 1) / (outList.length + 1) : 0.5;
+      const tgtRatio = (tgtIdx >= 0 && inList.length > 1) ? (tgtIdx + 1) / (inList.length + 1) : 0.5;
+
+      const startX = srcCoords.x + srcW * srcRatio;
       const startY = srcCoords.y + srcH;
-      const endX = tgtCoords.x + tgtW / 2;
+      const endX = tgtCoords.x + tgtW * tgtRatio;
       const endY = tgtCoords.y;
 
-      const midY = (startY + endY) / 2;
-      const pathD = `M ${ startX } ${ startY } C ${ startX } ${ midY }, ${ endX } ${ midY }, ${ endX } ${ endY }`;
+      const deltaY = endY - startY;
+      const midY = startY + deltaY * 0.5;
+      const arrowStopY = endY - 4;
+      const pathD = `M ${ startX } ${ startY } C ${ startX } ${ midY }, ${ endX } ${ midY }, ${ endX } ${ arrowStopY }`;
 
       positionedEdges.push({
         ...e,
@@ -176,13 +215,13 @@ export async function computeLayout(graph: GraphResponse, clusterId: string): Pr
   }
 
   const bounds = {
-    'width':  (layoutResult.width || 1200) + 100,
-    'height': (layoutResult.height || 800) + 100,
+    'width':  (layoutResult.width || 1200) + 140,
+    'height': (layoutResult.height || 800) + 140,
   };
 
-  // Attempt to restore user-persisted node drags from localStorage
+  // Attempt to restore user-persisted node drags from localStorage (v2 cache)
   try {
-    const cacheKey = `ovn_topology_pos_${ clusterId }_${ graph.view }`;
+    const cacheKey = `ovn_topology_pos_v2_${ clusterId }_${ graph.view }`;
     const saved = localStorage.getItem(cacheKey);
 
     if (saved) {
