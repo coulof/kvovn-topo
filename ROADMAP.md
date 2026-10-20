@@ -122,6 +122,17 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
     - Assigned Node & Chassis Hostname
     - Associated Host Veth Interface (`<hash>_h`)
 - Machine output: `ovn-topo graph --view l3 -o json|yaml` for scripting (same shape as the API).
+- **TUI Interpretation Guide & Screenshot Catalog (`docs/tui-guide.md`)**:
+  - User documentation explaining how to navigate and interpret the TUI screens (Topology Tree, Port Interconnection Matrix, and Diagnostics Modal).
+  - Recommended screenshot inventory capturing all core OVN / Kube-OVN architectural objects:
+    1. **Compound VPC Container**: Logical Router (`LR`) and attached Logical Switches (`LS`) enclosed in a rounded VPC boundary.
+    2. **Multi-VPC Interconnect (Transit Switch)**: Shared switch (e.g. `join`) linked to multiple routers for cross-VPC routing.
+    3. **Centralized HA Gateway & EIP**: Gateway port highlighted in Persimmon (`#fe7c3f`) showing active chassis node (e.g. `[GW: hv-01]`, `cr-` redirect port).
+    4. **Distributed Subnet Gateway**: Internal subnet interface acting as default gateway for workloads (`[GW IP: 10.54.0.1/16]`).
+    5. **External Provider Underlay**: Provider network integration via `localnet` port to physical bridge (`br-external`).
+    6. **Port Interconnection Inspector**: Detailed inspection box showing MAC, Subnet Prefix, Interface IP, Peer LSP, and Topology Role.
+    7. **Tier 1 Diagnostics (`ovn-trace`)**: Logical pipeline simulation with endpoints, visual Hop-by-Hop Flow Path (`[Switch] ➔ [Router] ➔ [Switch] ➔ Port`), and DELIVERED/DROPPED verdict.
+    8. **Live `tcpdump` on Dedicated VETH**: Packet capture on isolated workload host veth interface (`<hash>_h`).
 
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
 
@@ -130,6 +141,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - [ ] A KubeVirt VM with 2 NICs on 2 subnets is shown as one VM with two attachments (fixture + e2e).
 - [ ] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage).
 - [ ] Teatest (or equivalent) golden tests for the main screens.
+- [ ] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types.
 
 ---
 
