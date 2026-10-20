@@ -1169,26 +1169,40 @@ func (m model) executeTcpdump(filter string, hintNode string, portName string, p
 
 		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
 
-		raw := string(stdout)
-		if raw == "" && len(stderr) > 0 {
-			raw = string(stderr)
+		rawCombined := string(stdout)
+		if rawCombined == "" && len(stderr) > 0 {
+			rawCombined = string(stderr)
 		}
 
-		// Format output and handle 0 packets captured within timeout
-		if strings.Contains(raw, "0 packets captured") || (err != nil && strings.Contains(err.Error(), "124")) {
+		var packetLines []string
+		for _, line := range strings.Split(string(stdout), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "tcpdump:") ||
+				strings.HasPrefix(trimmed, "listening on") ||
+				strings.Contains(trimmed, "packets captured") ||
+				strings.Contains(trimmed, "packets received") ||
+				strings.Contains(trimmed, "packets dropped") {
+				continue
+			}
+			packetLines = append(packetLines, trimmed)
+		}
+
+		var raw string
+		if len(packetLines) > 0 {
+			raw = fmt.Sprintf("Captured %d packet(s) on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n%s",
+				len(packetLines), iface, portName, nodeName, effectiveFilter, strings.Join(packetLines, "\n"))
+		} else if strings.Contains(rawCombined, "0 packets captured") || (err != nil && strings.Contains(err.Error(), "124")) {
 			raw = fmt.Sprintf("Listening on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n0 packets captured within 5s (Interface is currently quiet).",
 				iface, portName, nodeName, effectiveFilter)
-		} else {
-			lines := strings.Split(raw, "\n")
-			var filteredLines []string
-			for _, line := range lines {
-				if strings.Contains(line, "listening on") || strings.Contains(line, "verbose output") {
-					continue
-				}
-				filteredLines = append(filteredLines, line)
+		} else if err != nil {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
 			}
-			raw = fmt.Sprintf("Captured on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n%s",
-				iface, portName, nodeName, effectiveFilter, strings.TrimSpace(strings.Join(filteredLines, "\n")))
+			return diagExecResultMsg{err: fmt.Errorf("tcpdump failed: %s", errMsg)}
+		} else {
+			raw = fmt.Sprintf("Listening on dedicated interface '%s' (port: %s on node %s)\nFilter: %s\n\n0 packets captured within 5s (Interface is currently quiet).",
+				iface, portName, nodeName, effectiveFilter)
 		}
 
 		return diagExecResultMsg{

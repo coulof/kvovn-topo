@@ -49,6 +49,7 @@ func BuildTcpdumpCommand(req TcpdumpRequest) ([]string, error) {
 	return []string{
 		"timeout", "5",
 		"tcpdump",
+		"-l",
 		"-i", req.Interface,
 		"-nn",
 		"-c", strconv.Itoa(count),
