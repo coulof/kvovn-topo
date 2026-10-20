@@ -5,9 +5,18 @@ metadata:
   labels:
     {{- include "ovn-topology.labels" . | nindent 4 }}
 rules:
-  # Strictly read-only access to nodes to map chassis <-> k8s node
+  # Strictly read-only access to nodes, pods, services for workload identity (ADR-0001)
   - apiGroups: [""]
-    resources: ["nodes"]
+    resources: ["nodes", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["k8s.cni.cncf.io"]
+    resources: ["network-attachment-definitions"]
     verbs: ["get", "list", "watch"]
   {{- if and .Values.ovn.tls.enabled .Values.ovn.tls.secretName }}
   # Read-only access to OVN TLS secret only
