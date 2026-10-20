@@ -215,6 +215,28 @@ func TestBuildTcpdumpCommand(t *testing.T) {
 }
 
 func TestOvsCommands(t *testing.T) {
+	ifaceDetailCmd, err := BuildOvsIfaceDetailCommand("test_h")
+	if err != nil || len(ifaceDetailCmd) != 5 || ifaceDetailCmd[4] != "test_h" {
+		t.Errorf("unexpected ifaceDetailCmd: %v, err: %v", ifaceDetailCmd, err)
+	}
+
+	sampleOvs := `name                : "test_h"
+ofport              : 10
+admin_state         : up
+link_state          : up
+mtu                 : 1450
+external_ids        : {iface-id="test-port"}
+statistics          : {rx_bytes=1000, rx_packets=10, tx_bytes=2000, tx_packets=20}`
+	formatted := FormatOvsIfaceOutput(sampleOvs, "test_h")
+	if !strings.Contains(formatted, "ofport 10") || !strings.Contains(formatted, "1450 bytes") {
+		t.Errorf("expected formatted telemetry, got: %s", formatted)
+	}
+
+	streamCmd, err := BuildTcpdumpStreamCommand(TcpdumpRequest{Interface: "test_h", Filter: "tcp"})
+	if err != nil || len(streamCmd) != 10 || streamCmd[1] != "60" {
+		t.Errorf("unexpected streamCmd: %v, err: %v", streamCmd, err)
+	}
+
 	ifaceCmd := BuildOvsVsctlListInterfaceCommand()
 	if len(ifaceCmd) != 2 || ifaceCmd[0] != "ovs-vsctl" || ifaceCmd[1] != "show" {
 		t.Errorf("unexpected ifaceCmd: %v", ifaceCmd)

@@ -56,3 +56,40 @@ func BuildTcpdumpCommand(req TcpdumpRequest) ([]string, error) {
 		filter,
 	}, nil
 }
+
+// BuildTcpdumpStreamCommand constructs the argv slice for real-time streaming tcpdump (60s safety timeout).
+func BuildTcpdumpStreamCommand(req TcpdumpRequest) ([]string, error) {
+	if req.Interface == "" {
+		return nil, fmt.Errorf("interface cannot be empty")
+	}
+
+	if invalidChars.MatchString(req.Interface) {
+		return nil, fmt.Errorf("invalid characters in interface: %q", req.Interface)
+	}
+
+	filter := strings.TrimSpace(req.Filter)
+	if filter == "" {
+		filter = "ip"
+	}
+	if invalidChars.MatchString(filter) {
+		return nil, fmt.Errorf("invalid characters in filter: %q", filter)
+	}
+
+	count := req.Count
+	if count <= 0 {
+		count = 500
+	}
+	if count > MaxPacketCount {
+		count = MaxPacketCount
+	}
+
+	return []string{
+		"timeout", "60",
+		"tcpdump",
+		"-l",
+		"-nn",
+		"-i", req.Interface,
+		"-c", strconv.Itoa(count),
+		filter,
+	}, nil
+}

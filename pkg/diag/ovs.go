@@ -13,6 +13,23 @@ func BuildOvsVsctlListInterfaceCommand() []string {
 	return []string{"ovs-vsctl", "show"}
 }
 
+// BuildOvsIfaceDetailCommand returns the typed command for inspecting a specific interface's link state, ofport, and stats.
+func BuildOvsIfaceDetailCommand(iface string) ([]string, error) {
+	if iface == "" {
+		return nil, fmt.Errorf("interface cannot be empty")
+	}
+	if invalidChars.MatchString(iface) {
+		return nil, fmt.Errorf("invalid characters in interface name: %q", iface)
+	}
+	return []string{
+		"ovs-vsctl",
+		"--columns=name,ofport,admin_state,link_state,mtu,external_ids,statistics",
+		"list",
+		"interface",
+		iface,
+	}, nil
+}
+
 // BuildOvsVsctlShowCommand returns the typed command for ovs-vsctl show.
 func BuildOvsVsctlShowCommand() []string {
 	return []string{"ovs-vsctl", "show"}
@@ -169,4 +186,64 @@ func FormatJsonOutput(raw string) string {
 		return raw
 	}
 	return string(formatted)
+}
+
+// FormatOvsIfaceOutput formats ovs-vsctl list interface output into an inspection card.
+func FormatOvsIfaceOutput(raw string, iface string) string {
+	var b strings.Builder
+	lines := strings.Split(raw, "\n")
+	fields := make(map[string]string)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) == 2 {
+			k := strings.TrimSpace(parts[0])
+			v := strings.TrimSpace(parts[1])
+			fields[k] = v
+		}
+	}
+
+	name := strings.Trim(fields["name"], `"`)
+	if name == "" {
+		name = iface
+	}
+	ofport := fields["ofport"]
+	adminState := fields["admin_state"]
+	linkState := fields["link_state"]
+	mtu := fields["mtu"]
+
+	fmt.Fprintf(&b, "Contextual OVS Interface Telemetry: '%s'\n\n", name)
+	fmt.Fprintf(&b, "  • Host Interface:   %s\n", name)
+	fmt.Fprintf(&b, "  • OpenFlow Port:    ofport %s\n", ofport)
+	fmt.Fprintf(&b, "  • Interface State:  Link %s / Admin %s\n", strings.ToUpper(linkState), strings.ToUpper(adminState))
+	fmt.Fprintf(&b, "  • Configured MTU:   %s bytes\n\n", mtu)
+
+	if stats, ok := fields["statistics"]; ok && stats != "" {
+		b.WriteString("  Hardware Packet & Byte Counters:\n")
+		statsClean := strings.Trim(stats, "{}")
+		for _, statPair := range strings.Split(statsClean, ",") {
+			sParts := strings.SplitN(strings.TrimSpace(statPair), "=", 2)
+			if len(sParts) == 2 {
+				fmt.Fprintf(&b, "    • %-20s %s\n", sParts[0]+":", sParts[1])
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	if ext, ok := fields["external_ids"]; ok && ext != "" {
+		b.WriteString("  External Metadata:\n")
+		extClean := strings.Trim(ext, "{}")
+		for _, extPair := range strings.Split(extClean, ",") {
+			eParts := strings.SplitN(strings.TrimSpace(extPair), "=", 2)
+			if len(eParts) == 2 {
+				fmt.Fprintf(&b, "    • %-20s %s\n", eParts[0]+":", strings.Trim(eParts[1], `"`))
+			}
+		}
+	}
+
+	return b.String()
 }
