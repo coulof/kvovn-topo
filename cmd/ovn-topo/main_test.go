@@ -89,4 +89,25 @@ func TestTUIModelView(t *testing.T) {
 	if !strings.Contains(matrixView, "default-subnet") {
 		t.Errorf("expected default-subnet in matrix, got: %s", matrixView)
 	}
+	if !strings.Contains(matrixView, "Port Interconnection Inspector") {
+		t.Errorf("expected Port Interconnection Inspector in matrix view, got: %s", matrixView)
+	}
+	if !strings.Contains(matrixView, "Topology Role:") {
+		t.Errorf("expected Topology Role in inspector, got: %s", matrixView)
+	}
+
+	// Select the join interconnect port and verify cross-router listing
+	for idx, conn := range m.portList {
+		if conn.PortName == "lrp-join-def" {
+			m.selectedIdx = idx
+			break
+		}
+	}
+	joinMatrixView := m.View()
+	if !strings.Contains(joinMatrixView, "Interconnected VPC Routers on 'join'") {
+		t.Errorf("expected Interconnected VPC Routers on join, got: %s", joinMatrixView)
+	}
+	if !strings.Contains(joinMatrixView, "custom-vpc") {
+		t.Errorf("expected custom-vpc to be listed as peer on join, got: %s", joinMatrixView)
+	}
 }
