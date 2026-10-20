@@ -6,7 +6,7 @@ import (
 )
 
 func TestTUIModelView(t *testing.T) {
-	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture")
+	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "default")
 
 	// Trigger initial command to load fixture graph
 	cmd := m.Init()
@@ -109,5 +109,27 @@ func TestTUIModelView(t *testing.T) {
 	}
 	if !strings.Contains(joinMatrixView, "custom-vpc") {
 		t.Errorf("expected custom-vpc to be listed as peer on join, got: %s", joinMatrixView)
+	}
+}
+
+func TestThemes(t *testing.T) {
+	themeNames := []string{"default", "dracula", "nord", "tokyonight", "catppuccin"}
+
+	for _, name := range themeNames {
+		theme, idx := GetThemeByName(name)
+		if idx < 0 || idx >= len(AvailableThemes) {
+			t.Errorf("invalid theme index for %s: %d", name, idx)
+		}
+		styles := CompileStyles(theme)
+		rendered := styles.Title.Render("Test")
+		if rendered == "" {
+			t.Errorf("failed to render title with theme %s", name)
+		}
+	}
+
+	// Verify cycle
+	m := initialModel("http://127.0.0.1:8080/api/v1", "dev-fixture", "dracula")
+	if m.theme.Name != "Dracula" {
+		t.Errorf("expected Dracula, got %s", m.theme.Name)
 	}
 }
