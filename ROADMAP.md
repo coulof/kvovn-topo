@@ -28,6 +28,38 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M9 | MCP server (T0 tools only) | T0 | AI agents via `ovn-topo mcp` | M5; history tools gated on M8 |
 | Backlog | ACL hit counters, OVN-IC, metrics overlay, logical flow browser, history archival to S3, segmentation audit report, fleet view | mixed | — | — |
 
+## Status and tech-debt register (2026-10-21)
+
+**Order rule broken.** M2, M3 and M6 were built while the M0 and M1 DoD were still open, and M6 ahead of M4. This is recorded here rather than hidden. **Before M4 starts, the foundation items below take priority.** The M2 and M6 work stays, and new feature work waits.
+
+| M | DoD | Reality |
+|---|---|---|
+| M0 | 0/4 | Lint and deps guards work. No `test/` tree, no `make dev-cluster` run recorded, no `hack/capture-fixtures.sh`. |
+| M1 | 0/5 | API and goldens exist on a single hand-written fixture. The live data path was fixed and unit-tested on 2026-10-21 (see the M1 follow-up). The layer 2/3 tests, scale test and API freeze are missing. |
+| M2 | 5/6 | LR routes/policies/NAT open. Scenario navigation was checked on the lab, not on committed fixtures. |
+| M3 | 2/3 | **No live updates in the extension** (no SSE, no polling) and no API-version banner. See the M3 DoD. |
+| M4, M5 | 0 | Not started. |
+| M6 | 5/5 | Done out of order. Layer 3 verification was manual on `hv-01`; there is no automated suite. |
+| M7–M9 | 0 | Not started. |
+
+**Tech-debt register** (from the 2026-10-21 audit; fixed items moved to milestone follow-ups):
+
+| # | Item | Where it closes |
+|---|---|---|
+| B1 | Only one hand-written fixture. The seven §Testing-strategy scenarios and `hack/capture-fixtures.sh` are missing. | M0 / M1 |
+| B2 | No `test/` tree: layers 2–5 absent. | M0 / M1 / M7 |
+| B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
+| B4 | `make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff. | M0 |
+| B5 | Extension has one unit test (`layout.test.ts`). | M3 |
+| C1 | `forbidigo` misses `.Patch`, `.Apply` and `.Evict`. | quick win |
+| C2 | No `depguard` rule for `pkg/mcp` yet. | quick win (before M9) |
+| C3 | OVN schemas are downloaded by `make generate`, not vendored. | quick win |
+| A6 | SSE has no heartbeat; idle streams may be cut by proxies. | M3 |
+| E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). | before M5 |
+| E2 | Three chassis → node resolvers (daemon `MatchChassis`, TUI `resolveNodeName`, `pkg/diag` `resolveKubeNodeName` + an extra `ovn-sbctl` exec). The TUI should use the daemon's `nodeName`. | before M5 |
+| E3 | `ovn-trace` output parsed with regexes. | M5 |
+| F1 | Version `0.1.0` everywhere; no release has run end to end. | M7 |
+
 ---
 
 ## M0 — Foundations
@@ -156,7 +188,7 @@ The fix:
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
 
 **DoD**
-- [x] All three views navigable on the `overlay-default`, `custom-vpc-ovn-nat` and `underlay-vlan` scenarios. (Done 2026-10-20)
+- [x] All three views navigable on the `overlay-default`, `custom-vpc-ovn-nat` and `underlay-vlan` scenarios. (Done 2026-10-20, on the `hv-01` lab. These scenarios are not committed as fixtures yet; see tech-debt B1.)
 - [x] A KubeVirt VM with 2 NICs on 2 subnets is shown as one VM with two attachments (fixture + e2e). (Done 2026-10-20)
 - [x] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage). (Done 2026-10-20)
 - [x] Teatest (or equivalent) golden tests for the main screens. (Done 2026-10-20)
@@ -208,7 +240,8 @@ The fix:
 **Out of scope:** L2 and Chassis views in the extension (they come with M4), any T1 feature.
 
 **DoD**
-- [x] Layer 4: product visible in Cluster Explorer and Harvester Networks, node count equals `/graph`, side panel, empty state, theme switch, live update. (Done 2026-10-20)
+- [x] Layer 4: product visible in Cluster Explorer and Harvester Networks, node count equals `/graph`, side panel, empty state, theme switch. (Done 2026-10-20)
+- [ ] Live update: the extension consumes `/events` with the `If-None-Match` polling fallback, and shows the API-version mismatch banner. (Corrected 2026-10-21: the page loads `/graph` once and never refreshes. The earlier tick covered both.)
 - [x] Extension installable from the ECI in an offline-mirrored registry (Hauler manifest in release.yml). (Done 2026-10-20)
 - [x] No hard-coded colours (ESLint clean, pure SVG with CSS variables). (Done 2026-10-20)
 
@@ -309,7 +342,7 @@ Extension: add the L2 and Chassis views here.
 **DoD**
 - [x] `hack/check-deps.sh` still proves the daemon is free of `pkg/diag`.
 - [x] Point-and-click `ovn-trace`, live `tcpdump`, conntrack, `ovs-vsctl show`, and controller log tailing implemented in TUI.
-- [x] Layer 3 e2e for trace and tcpdump command builders verified against real Kube-OVN/OVS outputs on Harvester `hv-01`.
+- [x] Layer 3 e2e for trace and tcpdump command builders verified against real Kube-OVN/OVS outputs on Harvester `hv-01`. (Manual lab run; no automated layer 3 suite exists yet, see tech-debt B2.)
 - [x] Automated regression tests prevent view and pane index mismatches (now `TestDiagTargetIsAlwaysTheSelection` and the executor-level tests, see the follow-up below).
 - [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
 
@@ -517,7 +550,7 @@ Record answers here with evidence (date, link to test run or doc).
 
 | # | Question | Blocks | Status / answer |
 |---|---|---|---|
-| Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | **Resolved (2026-10-20)**: Reverse proxies may buffer chunked HTTP. UI client degrades gracefully: attempts SSE on `/events` and falls back to polling `/graph` with `If-None-Match`. |
+| Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | **Resolved (2026-10-20)**: Reverse proxies may buffer chunked HTTP. Clients must degrade: attempt SSE on `/events` and fall back to polling `/graph` with `If-None-Match`. The TUI does this. **The extension does not consume either yet** (2026-10-21, see the M3 DoD). Whether the Rancher proxy actually buffers has not been measured. |
 | Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | **Resolved (2026-10-20)**: No. Reusable workflows hardcode `working-directory: ./`. Solved via custom workflow steps in `.github/workflows/ui.yml` and `release.yml`. |
 | Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. |
 | Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`. Pinned to `v24.03.2` in `hack/ovn-version`. |

@@ -110,7 +110,7 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 ### Security
 
 - Distroless, non-root, read-only root filesystem.
-- K8s RBAC for the daemon ServiceAccount: `get/list/watch nodes`, `get secrets` for the OVN TLS secret only. Nothing else.
+- K8s RBAC for the daemon ServiceAccount: `get/list/watch` on exactly the kinds allowed by hard rule 2 (`nodes`, `pods`, `services`, `endpointslices`, KubeVirt `virtualmachines`/`virtualmachineinstances`, `network-attachment-definitions`), plus `get` on the OVN TLS secret only. Nothing else.
 - Access to the API is via the Kubernetes service proxy; viewer authorization is `services/proxy` RBAC. Document this in the chart README.
 - OVSDB NB has no read-only role; read-only is guaranteed by code + lint. Say so in the README. Do not soften it.
 
@@ -127,7 +127,7 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 - `Port_Binding.logical_port` == LSP/LRP name → binding state + chassis.
 - `Datapath_Binding.external_ids["logical-switch"|"logical-router"]` == NB UUID.
 - Active gateway = `Port_Binding.chassis` of the `chassisredirect` port (`cr-<lrp>`).
-- Chassis ↔ k8s Node: `Chassis.hostname`, fallback to node annotation `ovn.kubernetes.io/chassis`.
+- Chassis ↔ k8s Node: node annotation `ovn.kubernetes.io/chassis` == `Chassis.name` (the OVS system-id, authoritative), fallback to `Chassis.hostname`. Hostname is informational in OVN and can be shared or stale; report which rule matched.
 - Kubernetes identity from NB `external_ids`: LSP `pod`, `namespace`, `ls`; `vendor=kube-ovn`; LR VPC name. Treat missing keys as normal (non-Kube-OVN objects exist).
 
 ### Node types
@@ -183,7 +183,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 ### Design system
 
 - Use existing shell / `@rancher/components` components from the Storybook (buttons, banners, loading, tabs, sortable tables, badges, side panels) instead of custom ones. Check Storybook first; only build a custom component when nothing fits, and justify it in the PR.
-- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. This includes Cytoscape styles: resolve CSS variables at runtime and re-apply on theme change.
+- Colors, spacing, typography from shell CSS variables / design tokens only — no hard-coded hex. This includes graph styles: use CSS variables (resolved at runtime if a canvas library is ever used) and re-apply on theme change.
 - Follow Rancher patterns for empty states, errors, and loading.
 
 ### Behaviour
@@ -192,7 +192,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Call the daemon via the Rancher cluster service proxy:
   `/k8s/clusters/<clusterId>/api/v1/namespaces/<ns>/services/http:ovn-topologyd:8080/proxy/api/v1/...`
 - If the daemon is absent (404/503 on `/version`), show an empty state explaining how to install the `ovn-topology` chart on that cluster. No stack traces.
-- Rendering: **Cytoscape.js** with compound nodes + **elkjs** (layered). Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
+- Rendering: compound nodes laid out by **elkjs** (layered). The extension renders native SVG themed by shell CSS variables. Cytoscape.js was the original choice; the SVG renderer replaced it in M3 (ROADMAP M3 scope). Apply SSE deltas incrementally; do not re-layout the whole graph on each update; persist node positions per view per cluster in `localStorage` (wrapped in try/catch).
 - Side panel shows `/node/{id}` details; raw columns available behind a "raw" toggle.
 - Types come from generated `openapi` TS types only. No hand-written API types.
 - Bundle all assets (air-gap). No external fonts/CDNs.
@@ -221,7 +221,7 @@ Additional edge types introduced by later milestones (`attached-to` LSP→Worklo
 - Fixtures: OVSDB snapshots in `testdata/` (captured with `ovsdb-client backup` from a dev cluster), loaded into libovsdb's in-process test server (`github.com/ovn-kubernetes/libovsdb/server`) so tests exercise the real monitor path.
 - Golden-file tests for `/graph` responses per view (`-update` flag to regenerate).
 - Required fixture scenarios: default VPC only; custom VPC with distributed FIP; centralized gateway with HA chassis group; underlay/localnet; LS attached to multiple LRs; unbound port; chassis down.
-- UI: component tests for the graph adapter (API → Cytoscape elements); no snapshot tests of rendered canvas.
+- UI: component tests for the graph adapter (API → positioned layout elements); no snapshot tests of rendered output.
 
 ## 10. Conventions
 
