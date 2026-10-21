@@ -329,13 +329,20 @@ func (m model) stateView() []string {
 	title := st.Label.Render("Loading")
 	if m.err != nil {
 		title = st.Bad.Render("Daemon unreachable")
-		body = []string{"",
-			"  " + st.Bad.Render("✗ ") + m.err.Error(), "",
-			"  Check that ovn-topologyd is running and reachable at " + st.CIDR.Render(m.daemonURL) + ", e.g.:",
-			"    kubectl -n kube-system port-forward svc/ovn-topologyd 8080:8080",
-			"  or explore the bundled dataset offline with " + st.CIDR.Render("ovn-topo --fixture") + ".", "",
-			"  " + st.Key.Render("<r>") + " retry   " + st.Key.Render("<q>") + " quit",
+		body = []string{""}
+		for i, l := range strings.Split(m.err.Error(), "\n") {
+			if i == 0 {
+				body = append(body, "  "+st.Bad.Render("✗ ")+l)
+			} else {
+				body = append(body, "    "+st.Warn.Render(l))
+			}
 		}
+		body = append(body, "",
+			"  Check that ovn-topologyd is running and reachable at "+st.CIDR.Render(m.daemonURL)+", e.g.:",
+			"    kubectl -n kube-system port-forward svc/ovn-topologyd 8080:8080",
+			"  or explore the bundled dataset offline with "+st.CIDR.Render("ovn-topo --fixture")+".", "",
+			"  "+st.Key.Render("<r>")+" retry   "+st.Key.Render("<q>")+" quit",
+		)
 	} else {
 		body = []string{"", "  Loading topology from " + st.CIDR.Render(firstNonEmpty(m.fixturePath, m.daemonURL)) + " …"}
 	}

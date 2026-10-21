@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -72,9 +73,47 @@ func httpGetJSON(ctx context.Context, rawURL, etag string, out any) error {
 	case http.StatusNotModified:
 		return errNotModified
 	default:
-		return fmt.Errorf("daemon returned HTTP %d for %s", r.StatusCode, rawURL)
+		return &httpStatusError{code: r.StatusCode, url: rawURL, body: bodyExcerpt(r.Body)}
 	}
 	return json.NewDecoder(r.Body).Decode(out)
+}
+
+// httpStatusError keeps the status and a body excerpt so a 404 from whatever
+// happens to listen on the daemon port can be told apart from the daemon.
+type httpStatusError struct {
+	code      int
+	url, body string
+}
+
+func (e *httpStatusError) Error() string {
+	msg := fmt.Sprintf("daemon returned HTTP %d for %s", e.code, e.url)
+	if e.body != "" {
+		msg += ": " + e.body
+	}
+	return msg
+}
+
+func bodyExcerpt(r io.Reader) string {
+	b, _ := io.ReadAll(io.LimitReader(r, 200))
+	return strings.Join(strings.Fields(string(b)), " ")
+}
+
+// explainNotFound probes /version after a 404: ovn-topologyd serves every
+// /api/v1 route it knows, so a 404 usually means another service owns the port.
+func explainNotFound(ctx context.Context, daemon string, err error) error {
+	var se *httpStatusError
+	if !errors.As(err, &se) || se.code != http.StatusNotFound {
+		return err
+	}
+	var v api.VersionInfo
+	if verr := httpGetJSON(ctx, apiURL(daemon, "/version", nil), "", &v); verr != nil || v.ApiVersion == "" {
+		host := daemon
+		if u, perr := url.Parse(daemon); perr == nil && u.Host != "" {
+			host = u.Host
+		}
+		return fmt.Errorf("%w\nthe service at %s is not ovn-topologyd (check what listens on that port / your port-forward)", err, host)
+	}
+	return fmt.Errorf("%w\novn-topologyd %s (API %s) answered /version but not this route; is the TUI newer than the daemon?", err, v.Version, v.ApiVersion)
 }
 
 func apiURL(daemonURL, path string, q url.Values) string {
@@ -109,7 +148,7 @@ func (m model) fetchGraphCmd() tea.Cmd {
 			return graphUnchangedMsg{}
 		}
 		if err != nil {
-			return graphLoadedMsg{err: err}
+			return graphLoadedMsg{err: explainNotFound(ctx, daemon, err)}
 		}
 		return graphLoadedMsg{resp: &resp}
 	}

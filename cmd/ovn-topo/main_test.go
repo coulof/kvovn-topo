@@ -464,6 +464,30 @@ func TestDaemonPaginationAndETag(t *testing.T) {
 	}
 }
 
+func TestForeignServiceOn404(t *testing.T) {
+	foreign := httptest.NewServer(http.NotFoundHandler())
+	defer foreign.Close()
+	m := initialModel(foreign.URL+"/api/v1", "", "default", false, "", "")
+	msg, _ := m.fetchGraphCmd()().(graphLoadedMsg)
+	if msg.err == nil || !strings.Contains(msg.err.Error(), "404 page not found") || !strings.Contains(msg.err.Error(), "not ovn-topologyd") {
+		t.Fatalf("expected body excerpt and foreign-service hint, got %v", msg.err)
+	}
+
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/version") {
+			_ = json.NewEncoder(w).Encode(api.VersionInfo{Version: "0.1.0", ApiVersion: "v1"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer daemon.Close()
+	m = initialModel(daemon.URL+"/api/v1", "", "default", false, "", "")
+	msg, _ = m.fetchGraphCmd()().(graphLoadedMsg)
+	if msg.err == nil || !strings.Contains(msg.err.Error(), "ovn-topologyd 0.1.0") {
+		t.Fatalf("expected daemon version in the error, got %v", msg.err)
+	}
+}
+
 func TestLiveUpdatesFlashChangedRows(t *testing.T) {
 	m := loaded(t, 120, 40, false)
 	m.fixturePath = "" // behave like a live daemon
