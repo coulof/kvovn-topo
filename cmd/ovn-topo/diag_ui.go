@@ -331,6 +331,7 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.diagCancelStream = nil
 				}
 				m.diagStreaming = false
+				m.freezeFollow()
 				m.diagRunning = false
 				return m, nil
 			}
@@ -352,6 +353,7 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.diagCancelStream = nil
 				}
 				m.diagStreaming = false
+				m.freezeFollow()
 				m.diagRunning = false
 			}
 			m.diagModal = false
@@ -360,23 +362,34 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "o":
 			m.diagRawView = !m.diagRawView
 			return m, nil
-		case "down", "j":
-			m.diagScrollOffset++
-			return m, nil
-		case "up", "k":
-			if m.diagScrollOffset > 0 {
-				m.diagScrollOffset--
+		case "down", "j", "pgdown":
+			if m.diagFollow {
+				return m, nil
+			}
+			step := 1
+			if msg.String() == "pgdown" {
+				step = 8
+			}
+			m.diagScrollOffset += step
+			if mx := m.diagMaxOffset(); m.diagStreaming && m.diagScrollOffset >= mx {
+				m.diagScrollOffset = mx
+				m.diagFollow = true // back at the bottom: follow again
 			}
 			return m, nil
-		case "pgdown":
-			m.diagScrollOffset += 8
-			return m, nil
-		case "pgup":
-			if m.diagScrollOffset >= 8 {
-				m.diagScrollOffset -= 8
-			} else {
-				m.diagScrollOffset = 0
+		case "up", "k", "pgup":
+			if m.diagFollow { // leave follow mode from the bottom, not from the top
+				m.diagScrollOffset = m.diagMaxOffset()
+				m.diagFollow = false
 			}
+			step := 1
+			if msg.String() == "pgup" {
+				step = 8
+			}
+			m.diagScrollOffset = max(0, m.diagScrollOffset-step)
+			return m, nil
+		case "G", "end":
+			m.diagScrollOffset = m.diagMaxOffset()
+			m.diagFollow = m.diagStreaming
 			return m, nil
 		default:
 			return m, nil
@@ -856,6 +869,7 @@ func (m *model) executeTcpdumpStream(filter string, t diagTarget) tea.Cmd {
 	}
 	m.diagRunning = true
 	m.diagStreaming = true
+	m.diagFollow = true
 	m.diagStep = diagStepResult
 	m.diagAction = "tcpdump"
 	m.diagScrollOffset = 0
@@ -907,6 +921,82 @@ func (m *model) executeTcpdumpStream(filter string, t diagTarget) tea.Cmd {
 	}
 }
 
+// freezeFollow keeps a stopped capture scrolled to its last packets.
+func (m *model) freezeFollow() {
+	if m.diagFollow {
+		m.diagScrollOffset = m.diagMaxOffset()
+		m.diagFollow = false
+	}
+}
+
+// diagModalHead is the modal title and the target block shown on every step.
+func (m model) diagModalHead() string {
+	var box strings.Builder
+	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS - ADR-0001]") + "\n")
+	box.WriteString(m.styles.MutedText.Render("Executed inside privileged cluster pods using operator credentials") + "\n\n")
+
+	// Target: captured when the modal opened; every action below acts on exactly this.
+	t := m.diagTgt
+	for i, l := range t.describe() {
+		label := "          "
+		if i == 0 {
+			label = "  Target: "
+		}
+		st := m.styles.MutedText
+		if i == 0 {
+			st = m.styles.PortBadge
+		}
+		box.WriteString(label + st.Render(l) + "\n")
+	}
+	for _, w := range t.Warnings {
+		box.WriteString("  " + m.styles.ActiveGateway.Render("⚠ "+w) + "\n")
+	}
+	if t.Stale != "" {
+		box.WriteString("  " + m.styles.BadgeUnbound.Render("✗ "+t.Stale) + "\n")
+	}
+	box.WriteString("\n")
+	return box.String()
+}
+
+// diagResultTop is the result title and capture badge above the output.
+func (m model) diagResultTop() string {
+	var box strings.Builder
+	fmt.Fprintf(&box, "  %s\n\n", m.styles.Header.Render("Result: "+m.diagTitle))
+
+	if m.diagStreaming {
+		packetCount := 0
+		if len(m.tcpdumpPackets) > 3 {
+			packetCount = len(m.tcpdumpPackets) - 3
+		}
+		follow := "following"
+		if !m.diagFollow {
+			follow = "paused — G: follow"
+		}
+		streamBadge := fmt.Sprintf("🔴 LIVE CAPTURE ACTIVE — %d packets received, %s (Press Space or Esc to stop)", packetCount, follow)
+		box.WriteString("  " + m.styles.ActiveGateway.Render(streamBadge) + "\n\n")
+	} else if m.diagAction == "tcpdump" {
+		packetCount := 0
+		if len(m.tcpdumpPackets) > 3 {
+			packetCount = len(m.tcpdumpPackets) - 3
+		}
+		stopBadge := fmt.Sprintf("⏹ CAPTURE STOPPED — %d packets captured (Press Space or Esc: back | o: toggle raw)", packetCount)
+		box.WriteString("  " + m.styles.BadgeBound.Render(stopBadge) + "\n\n")
+	}
+	return box.String()
+}
+
+// diagVisibleLines is the height of the result viewport: what is left of the
+// modal area once its head, top, footer hint, border and padding are drawn.
+func (m model) diagVisibleLines() int {
+	used := strings.Count(m.diagModalHead()+m.diagResultTop(), "\n")
+	return max(3, m.areaH()-6-used)
+}
+
+// diagMaxOffset is the scroll offset that shows the last lines of the raw output.
+func (m model) diagMaxOffset() int {
+	return max(0, len(strings.Split(strings.TrimSpace(m.diagRawOutput), "\n"))-m.diagVisibleLines())
+}
+
 func readNextStreamLineCmd(scanner *bufio.Scanner) tea.Cmd {
 	return func() tea.Msg {
 		if scanner.Scan() {
@@ -936,29 +1026,8 @@ func (m model) getTcpdumpPresets() []TcpdumpPreset {
 func (m model) renderDiagModal() string {
 	var box strings.Builder
 
-	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS - ADR-0001]") + "\n")
-	box.WriteString(m.styles.MutedText.Render("Executed inside privileged cluster pods using operator credentials") + "\n\n")
-
-	// Target: captured when the modal opened; every action below acts on exactly this.
+	box.WriteString(m.diagModalHead())
 	t := m.diagTgt
-	for i, l := range t.describe() {
-		label := "          "
-		if i == 0 {
-			label = "  Target: "
-		}
-		st := m.styles.MutedText
-		if i == 0 {
-			st = m.styles.PortBadge
-		}
-		box.WriteString(label + st.Render(l) + "\n")
-	}
-	for _, w := range t.Warnings {
-		box.WriteString("  " + m.styles.ActiveGateway.Render("⚠ "+w) + "\n")
-	}
-	if t.Stale != "" {
-		box.WriteString("  " + m.styles.BadgeUnbound.Render("✗ "+t.Stale) + "\n")
-	}
-	box.WriteString("\n")
 
 	if m.diagStep == diagStepPickChassis {
 		box.WriteString(m.styles.Header.Render("  Distributed router port: it runs on every chassis — on which one?") + "\n")
@@ -997,7 +1066,11 @@ func (m model) renderDiagModal() string {
 
 	if m.diagRunning {
 		box.WriteString(m.styles.ActiveGateway.Render("  ⏳ Executing diagnostic command inside pod...") + "\n")
-		box.WriteString(m.styles.MutedText.Render("  Please wait while stream completes...") + "\n\n")
+		if m.diagStreaming {
+			box.WriteString(m.styles.MutedText.Render("  "+m.diagTitle) + "\n\n")
+		} else {
+			box.WriteString(m.styles.MutedText.Render("  Please wait while the command completes...") + "\n\n")
+		}
 		return m.styles.ModalBox.Render(box.String())
 	}
 
@@ -1144,23 +1217,7 @@ func (m model) renderDiagModal() string {
 	}
 
 	if m.diagRawOutput != "" || m.diagTraceRes != nil {
-		fmt.Fprintf(&box, "  %s\n\n", m.styles.Header.Render("Result: "+m.diagTitle))
-
-		if m.diagStreaming {
-			packetCount := 0
-			if len(m.tcpdumpPackets) > 3 {
-				packetCount = len(m.tcpdumpPackets) - 3
-			}
-			streamBadge := fmt.Sprintf("🔴 LIVE CAPTURE ACTIVE — %d packets received (Press Space or Esc to stop)", packetCount)
-			box.WriteString("  " + m.styles.ActiveGateway.Render(streamBadge) + "\n\n")
-		} else if m.diagAction == "tcpdump" {
-			packetCount := 0
-			if len(m.tcpdumpPackets) > 3 {
-				packetCount = len(m.tcpdumpPackets) - 3
-			}
-			stopBadge := fmt.Sprintf("⏹ CAPTURE STOPPED — %d packets captured (Press Space or Esc: back | o: toggle raw)", packetCount)
-			box.WriteString("  " + m.styles.BadgeBound.Render(stopBadge) + "\n\n")
-		}
+		box.WriteString(m.diagResultTop())
 
 		var contentText string
 		if m.diagAction == "trace" && m.diagTraceRes != nil && !m.diagRawView {
@@ -1201,16 +1258,10 @@ func (m model) renderDiagModal() string {
 		}
 
 		lines := strings.Split(strings.TrimSpace(contentText), "\n")
-		visibleLines := m.height - 16
-		if visibleLines < 10 {
-			visibleLines = 10
-		}
+		visibleLines := m.diagVisibleLines()
 
-		maxOffset := len(lines) - visibleLines
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
-		if m.diagScrollOffset > maxOffset {
+		maxOffset := max(0, len(lines)-visibleLines)
+		if m.diagScrollOffset > maxOffset || (m.diagStreaming && m.diagFollow) {
 			m.diagScrollOffset = maxOffset
 		}
 

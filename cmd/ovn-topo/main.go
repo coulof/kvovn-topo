@@ -115,6 +115,7 @@ type model struct {
 	chassisIdx        int
 	pendingAction     diagAction
 	diagStreaming     bool
+	diagFollow        bool // live capture view sticks to the newest packets
 	diagCancelStream  context.CancelFunc
 	diagRawOutput     string
 	diagRawView       bool
@@ -342,6 +343,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamDoneMsg:
 		m.diagStreaming = false
+		m.freezeFollow()
 		m.diagRunning = false
 		if msg.err != nil && !errors.Is(msg.err, context.Canceled) && !errors.Is(msg.err, io.EOF) {
 			m.diagError = msg.err
@@ -357,6 +359,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.diagStreaming { // stopped while the interface was being resolved
 			return m, nil
 		}
+		m.diagRunning = false // capture is live: show packets as they arrive
 		m.diagTitle = msg.title
 		m.tcpdumpPackets = msg.header
 		m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")

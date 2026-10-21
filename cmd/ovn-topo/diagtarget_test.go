@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -360,5 +362,57 @@ func TestDistributedRouterPortAsksWhichChassis(t *testing.T) {
 	if started.err != nil || !strings.Contains(started.title, "ovn0") || !strings.Contains(started.title, "host 100.64.0.1") ||
 		!strings.Contains(started.title, "node-2") {
 		t.Errorf("tcpdump must capture on node-2's ovn0 for the join router port: %+v", started)
+	}
+}
+
+// TestTcpdumpRendersLive: packets show while the capture runs (not when it ends),
+// and the view follows the newest ones until the user scrolls up.
+func TestTcpdumpRendersLive(t *testing.T) {
+	mock := diag.NewMockExecutor()
+	mock.StdoutMap["ovs-vsctl"] = []byte("abc123_h\n")
+	m := newClusterDiagModel(t, mock)
+	m = press(selectRow(t, m, kLSP, "app-pod-2.default"), "x")
+	m.height = 30
+
+	cmd := m.executeTcpdumpStream("icmp", m.diagTgt)
+	if v := m.View(); !strings.Contains(v, "resolving the interface of app-pod-2.default on node-2") {
+		t.Errorf("while the interface is looked up, the modal must say so:\n%s", v)
+	}
+	started, _ := cmd().(tcpdumpStartedMsg)
+	if started.err != nil {
+		t.Fatalf("tcpdump not started: %v", started.err)
+	}
+	var pkts []string
+	for i := 1; i <= 60; i++ {
+		pkts = append(pkts, fmt.Sprintf("18:00:%02d.000 IP 10.244.0.11 > 10.244.0.10: ICMP echo request, seq %d", i, i))
+	}
+	started.scanner = bufio.NewScanner(strings.NewReader(strings.Join(pkts, "\n")))
+
+	r, next := m.update(started)
+	m = r.(model)
+	if m.diagRunning || !m.diagStreaming || !strings.Contains(m.View(), "LIVE CAPTURE ACTIVE") {
+		t.Fatalf("a started capture must show the live view (running=%v streaming=%v)", m.diagRunning, m.diagStreaming)
+	}
+	for i := 0; i < 3; i++ {
+		r, next = m.update(next())
+		m = r.(model)
+	}
+	if v := m.View(); !strings.Contains(v, "seq 3") {
+		t.Errorf("packets must render as they arrive:\n%s", v)
+	}
+	for i := 3; i < 60; i++ {
+		r, next = m.update(next())
+		m = r.(model)
+	}
+	if v := m.View(); !strings.Contains(v, "seq 60") || strings.Contains(v, "18:00:01.000") || !strings.Contains(v, "following") {
+		t.Errorf("the live view must follow the newest packets:\n%s", v)
+	}
+	m = press(m, "k")
+	if m.diagFollow || !strings.Contains(m.View(), "paused") || strings.Contains(m.View(), "seq 60") {
+		t.Errorf("scrolling up must pause following, one line above the bottom")
+	}
+	m = press(m, "G")
+	if !m.diagFollow || !strings.Contains(m.View(), "seq 60") {
+		t.Errorf("G must resume following")
 	}
 }
