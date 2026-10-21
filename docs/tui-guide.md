@@ -63,7 +63,7 @@ On terminals at least 100 columns wide, the right pane describes the selection (
 
 | Selection | Pane |
 |---|---|
-| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) + the NAT trap note |
+| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) + the NAT trap note. The route, policy and NAT rows themselves are planned (ROADMAP M2, follow-up "LR routes, policies & NAT"); see §7 meanwhile |
 | Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for |
 | Switch | **Connected routers** (router, VPC, via which LRP and network) · port counts · localnet underlay |
 | Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · **Path out**: `LSP → LS → LRP gw → LR (VPC)` |
@@ -128,6 +128,13 @@ Commands come from the typed allowlist in `pkg/diag`; nothing is built from free
 
 - **VPC NAT Gateway (`Iptables*`) NAT is iptables inside a pod**, not OVN NAT — it never appears in the NB `NAT` table or in the router's `nat` count.
 - **Default-VPC `natOutgoing` in centralized mode** is an LR policy reroute plus node iptables, not NB `NAT`.
+- **Routes, policies and NAT rows are not listed yet**: the pane and `d` show counts only, and `y` on a router shows just the row UUIDs. To see the rows:
+  ```bash
+  kubectl ko nbctl lr-route-list <router>     # static routes (prefix, nexthop, output port, policy)
+  kubectl ko nbctl lr-policy-list <router>    # policies by priority
+  kubectl ko nbctl lr-nat-list <router>       # SNAT / DNAT / FIP
+  ```
+  On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`).
 - **A switch can attach to several routers** (e.g. `join`, or an external switch shared by VPCs): it is listed under *Shared & standalone switches* with `[shared by N routers]` and `router ⇢` relations to each.
 
 ---

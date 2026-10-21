@@ -144,8 +144,31 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - [x] TUI renders correctly at 80×24 and degrades (truncation, no wrap breakage). (Done 2026-10-20)
 - [x] Teatest (or equivalent) golden tests for the main screens. (Done 2026-10-20)
 - [x] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types. (Done 2026-10-20)
+- [ ] LR detail lists static routes, policies and NAT rules, not just their counts (scope item "NAT, routes and policies visible in the LR detail"). See the follow-up below.
 
 **Follow-up (2026-10-21): navigation redesign.** After comparing runnable k9s-xray and Miller-column mockups, the four fixed views were replaced by k9s-style xray trees (`:xray vpc|chassis|workload`) with relation jumps, plus the Port Matrix kept as a sortable `:ports` table with an inspector; describe uses `/node/{id}`. Fixes found while doing it: the old layout overflowed 80×24 (header scrolled off, side panel clipped), so the 80×24 item above was not actually met. Every frame is now sized to the terminal, with a test at 60×14, 80×24, 120×40 and 200×60. L2 fetches stopped at the server's default page of 50 ports and now follow all pages. The trace source came from the tree index in other views and now uses the selection. The TUI now consumes `/events` (SSE) with `If-None-Match` polling fallback. Still to do: re-run the three scenarios on a live cluster with the new navigation (verified so far on the fixture and a local fake daemon only).
+
+**Follow-up (2026-10-21): LR routes, policies & NAT (planned, not started).** On a live cluster the LR details pane shows `routes 1 · pol 10 · nat 0` but not the rows.
+- **Gap:** the daemon already monitors `Logical_Router_Static_Route`, `Logical_Router_Policy` and `NAT` (`pkg/ovsdb/syncer.go`, `Snapshot.StaticRoutes/Policies/NATs`). Only counts reach clients: the `/graph` LR properties (`pkg/graph/views.go`), and `/node/{id}`, which lists LRPs, switches and bare NAT IDs.
+- **API:** add optional arrays to `NodeDetail`, filled for LR only. Regenerate the Go and TS types in the same PR.
+  - `staticRoutes[]` (`StaticRoute`): `ipPrefix`, `nexthop`, `outputPort`, `policy` (dst-ip/src-ip), `routeTable`, `bfd`, `ecmp`.
+  - `policies[]` (`RouterPolicy`): `priority`, `match`, `action` (allow/drop/reroute), `nexthops[]`.
+  - `nats[]` (`NatRule`): `type`, `externalIp`, `logicalIp`, `logicalPort`, `externalMac`, `gatewayPort`.
+- **Daemon:**
+  - Routes are ordered by longest prefix; `ecmp` is set when a `(routeTable, policy, prefix)` repeats.
+  - Policies are ordered by priority, descending. NAT is ordered by type, then external IP.
+  - Dangling UUIDs are skipped.
+  - The existing NAT related objects get a readable name.
+- **TUI:**
+  - The LR detail is fetched lazily when the details pane is on a router, and cached per revision.
+  - The pane shows *Static routes / Policies / NAT* with about 8 rows each, then `… N more (d describe)`. It shows a loading state, and on error the equivalent `kubectl ko nbctl` command.
+  - `d` shows the full lists. A gateway LRP shows the default route that uses it.
+- **Next hops:** route nexthops and policy reroute targets are annotated with their owner when the IP is already known to the TUI (LSP addresses, LRP networks). For example, a Kube-OVN node reroute `100.64.0.2` is shown as `node hv-01`. This is an interim client-side lookup; M4's IP resolver replaces it.
+- **Modelling choice:** routes, policies and NAT stay rows of the LR detail, not nodes or edges in `/graph`, which keeps `/graph` aggregated. The `NAT`/`Route`/`Policy` node types in AGENTS.md remain addressable through `/node` until a view needs them as graph nodes (M5 path computation). This is an additive T0 field of the existing `/node` contract, so no ADR is needed.
+- **Tests:**
+  - `pkg/graph`: `GetNodeDetail` ordering and fields, on the fixture's routes and policies.
+  - TUI: the pane sections and loading state; the existing fit test covers wrapped matches.
+- **Until then:** `kubectl ko nbctl lr-route-list <lr>`, `lr-policy-list <lr>` and `lr-nat-list <lr>`; see `docs/tui-guide.md` §7.
 
 ---
 
@@ -179,7 +202,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 **Goal:** make the graph *explain* the network. Each feature lands in daemon + API + TUI + extension together.
 
 **Scope** (in this order)
-1. **IP resolver.** Every IP in the graph resolves to its owner (LSP, LRP, node join port, external), including route nexthops, policy reroute targets, NAT external/logical IPs, LB backends, and address-set members. Unresolved IPs are marked as external. This is the API `GET /resolve?ip=`, plus inline links in all clients.
+1. **IP resolver.** Every IP in the graph resolves to its owner (LSP, LRP, node join port, external), including route nexthops, policy reroute targets, NAT external/logical IPs, LB backends, and address-set members. Unresolved IPs are marked as external. This is the API `GET /resolve?ip=`, plus inline links in all clients. It replaces the TUI's interim client-side next-hop annotation from the M2 "LR routes, policies & NAT" follow-up.
 2. **ACL ↔ Port_Group ↔ Address_Set.**
    - Parse ACL `match` for `@pg` / `$as` references to build edges.
    - "Effective ACLs for this port": ordered by tier, priority and direction, with source objects (NetworkPolicy / SecurityGroup inferred from PG naming and `external_ids`).
