@@ -663,3 +663,37 @@ func TestDescribeRawIsPrettyJSON(t *testing.T) {
 		t.Errorf("describe must unfold long maps one key per line:\n%s", desc)
 	}
 }
+
+func TestChassisPaneExplainsNodeMapping(t *testing.T) {
+	m := selectRow(t, press(loaded(t, 150, 40, false), "2"), kChassis, "node-1")
+	view := ansi.Strip(m.View())
+	for _, want := range []string{"System-id      chassis-node-1", "Node           node-1  ← static mapping", "_uuid"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in the chassis pane:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "⚠") {
+		t.Errorf("a cleanly mapped chassis must not warn:\n%s", view)
+	}
+
+	// hostname-only match, duplicate hostname and an interconnect chassis are flagged
+	ch := m.selectedXNode()
+	p := *ch.gn.Properties
+	cp := map[string]interface{}{}
+	for k, v := range p {
+		cp[k] = v
+	}
+	cp["nodeMatch"], cp["hostnameShared"], cp["isInterconn"] = "hostname", 2.0, true
+	ch.gn.Properties = &cp
+	view = ansi.Strip(m.View())
+	for _, want := range []string{"matched by hostname only", "2 chassis share hostname node-1", "interconnect chassis"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected warning %q:\n%s", want, view)
+		}
+	}
+
+	m.scr, m.desc = scrDescribe, &descState{node: ch, raw: true, detail: &api.NodeDetail{Raw: map[string]interface{}{"hostname": "node-1"}}}
+	if !strings.Contains(ansi.Strip(m.View()), "SB Chassis row") {
+		t.Errorf("the raw title must name the OVSDB table")
+	}
+}

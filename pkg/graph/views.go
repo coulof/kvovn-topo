@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -458,8 +459,14 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 		}
 	}
 
-	// Include referenced Chassis nodes
-	for chassisName := range chassisReferenced {
+	// Include referenced Chassis nodes, in a stable order (map iteration is random;
+	// it made the L2 golden test flaky and reordered rows between responses).
+	referenced := make([]string, 0, len(chassisReferenced))
+	for name := range chassisReferenced {
+		referenced = append(referenced, name)
+	}
+	sort.Strings(referenced)
+	for _, chassisName := range referenced {
 		chassisID := PrefixChassis + chassisName
 		hostname := chassisName
 		if ch, ok := s.Chassis[chassisName]; ok {
@@ -504,7 +511,13 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 		seenChassis[ch.Name] = struct{}{}
 
 		chassisID := PrefixChassis + ch.Name
-		nodeName := s.NodeMapper.NodeForChassis(ch.Hostname, ch.Name)
+		nodeName, nodeMatch := s.NodeMapper.MatchChassis(ch.Hostname, ch.Name)
+		hostnameShared := 0
+		for _, other := range s.Chassis {
+			if other.Hostname == ch.Hostname {
+				hostnameShared++
+			}
+		}
 
 		// Count bindings
 		bindingCount := 0
@@ -525,11 +538,15 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 		}
 
 		props := map[string]interface{}{
-			"hostname":     ch.Hostname,
-			"nodeName":     nodeName,
-			"bindingCount": bindingCount,
-			"encaps":       encapList,
-			"uuid":         ch.UUID,
+			"hostname":       ch.Hostname,
+			"name":           ch.Name, // the OVS system-id: the chassis identity
+			"nodeName":       nodeName,
+			"nodeMatch":      nodeMatch,
+			"hostnameShared": hostnameShared,
+			"isInterconn":    ch.OtherConfig["is-interconn"] == "true",
+			"bindingCount":   bindingCount,
+			"encaps":         encapList,
+			"uuid":           ch.UUID,
 		}
 
 		nodes = append(nodes, api.GraphNode{
@@ -925,15 +942,31 @@ func (s *Snapshot) resolveChassisName(chassisID string) string {
 	return name
 }
 
+// toMap returns an OVSDB model row keyed by its OVSDB column names (the
+// `ovsdb:"…"` struct tags, e.g. _uuid, other_config), as NodeDetail.raw promises,
+// with JSON-plain values. Values that are not tagged structs keep their JSON keys.
 func toMap(v interface{}) map[string]interface{} {
+	res := make(map[string]interface{})
 	if v == nil {
-		return make(map[string]interface{})
+		return res
 	}
-	data, err := json.Marshal(v)
+	src := v
+	rv := reflect.Indirect(reflect.ValueOf(v))
+	if rv.Kind() == reflect.Struct {
+		cols := make(map[string]interface{})
+		for i := 0; i < rv.NumField(); i++ {
+			if col := strings.Split(rv.Type().Field(i).Tag.Get("ovsdb"), ",")[0]; col != "" {
+				cols[col] = rv.Field(i).Interface()
+			}
+		}
+		if len(cols) > 0 {
+			src = cols
+		}
+	}
+	data, err := json.Marshal(src)
 	if err != nil {
-		return make(map[string]interface{})
+		return res
 	}
-	var res map[string]interface{}
 	_ = json.Unmarshal(data, &res)
 	if res == nil {
 		res = make(map[string]interface{})

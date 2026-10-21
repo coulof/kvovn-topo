@@ -67,7 +67,7 @@ On terminals at least 100 columns wide, the right pane describes the selection (
 | Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for |
 | Switch | **Connected routers** (router, VPC, via which LRP and network) · port counts · localnet underlay |
 | Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · **Path out**: `LSP → LS → LRP gw → LR (VPC)` |
-| Chassis | Hostname, node, encaps, bound ports, **active gateway for** |
+| Chassis | System-id, hostname, node **and the rule that linked it** (annotation / hostname / fallback), encaps, bound ports, **active gateway for**; warnings for hostname-only matches, shared hostnames and interconnect chassis |
 | Workload | Kind, namespace, node, each NIC with IP, switch and chassis |
 | VPC | Contents and **egress** gateways |
 
@@ -152,6 +152,12 @@ The target is captured when you press `x` and shown at the top of the modal: the
   kubectl ko nbctl lr-nat-list <router>       # SNAT / DNAT / FIP
   ```
   On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`).
+- **A chassis is an `ovn-controller`, not a hostname.** Its identity is `Chassis.name`, the host's OVS `system-id`. Kube-OVN publishes it on the Node as `ovn.kubernetes.io/chassis`, and that annotation is how a chassis is mapped to a node. `Chassis.hostname` is informational and only a fallback. It is normally one chassis per host, but not always:
+  - a reinstalled host (new system-id) can leave a stale chassis with the same hostname;
+  - an OVN-IC or VTEP chassis is not a host of this cluster;
+  - a node whose `ovs-ovn` is not running has no chassis.
+
+  The chassis pane shows which rule matched and flags these cases. The raw view (`y`) is the Southbound `Chassis` row, keyed by OVSDB column names.
 - **A switch can attach to several routers** (e.g. `join`, or an external switch shared by VPCs): it is listed under *Shared & standalone switches* with `[shared by N routers]` and `router ⇢` relations to each.
 
 ---

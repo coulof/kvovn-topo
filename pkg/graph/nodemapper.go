@@ -17,9 +17,9 @@ type KubeNodeMapper struct {
 	client kubernetes.Interface
 	logger *slog.Logger
 
-	mu              sync.RWMutex
-	chassisToNode   map[string]string
-	hostnameToNode  map[string]string
+	mu             sync.RWMutex
+	chassisToNode  map[string]string
+	hostnameToNode map[string]string
 }
 
 // NewKubeNodeMapper creates a new KubeNodeMapper.
@@ -37,19 +37,26 @@ func NewKubeNodeMapper(client kubernetes.Interface, logger *slog.Logger) *KubeNo
 
 // NodeForChassis resolves a chassis name and hostname to a Kubernetes node name.
 func (m *KubeNodeMapper) NodeForChassis(hostname string, chassisID string) string {
+	node, _ := m.MatchChassis(hostname, chassisID)
+	return node
+}
+
+// MatchChassis resolves the node and reports which rule matched. The node annotation
+// (system-id) is authoritative; the hostname is informational in OVN and only a fallback.
+func (m *KubeNodeMapper) MatchChassis(hostname string, chassisID string) (string, string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if node, ok := m.chassisToNode[chassisID]; ok && node != "" {
-		return node
+		return node, "annotation"
 	}
 	if node, ok := m.hostnameToNode[hostname]; ok && node != "" {
-		return node
+		return node, "hostname"
 	}
 	if hostname != "" {
-		return hostname
+		return hostname, "fallback-hostname"
 	}
-	return chassisID
+	return chassisID, "fallback-name"
 }
 
 // Sync reads all Kubernetes nodes and updates the internal mapping table.

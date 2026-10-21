@@ -196,6 +196,12 @@ func (m model) describeLines() []string {
 	return out
 }
 
+// rawTable names the OVSDB table behind /node/{id} raw columns, per object kind.
+var rawTable = map[string]string{
+	kLR: "NB Logical_Router", kLRP: "NB Logical_Router_Port", kLS: "NB Logical_Switch",
+	kLSP: "NB Logical_Switch_Port", kChassis: "SB Chassis",
+}
+
 func (m model) describeView() []string {
 	st := m.styles
 	if m.desc == nil || m.desc.node == nil {
@@ -203,11 +209,16 @@ func (m model) describeView() []string {
 	}
 	lines := m.describeLines()
 	off := min(m.desc.off, max(len(lines)-m.bodyH(), 0))
-	verb := "Describe"
+	verb, source := "Describe", ""
 	if m.desc.raw {
 		verb = "Raw"
+		// Say what the raw data is: the OVSDB row from /node, or (no daemon detail) graph properties.
+		source = "  — graph properties"
+		if m.desc.detail != nil && rawTable[m.desc.node.kind] != "" {
+			source = "  — " + rawTable[m.desc.node.kind] + " row"
+		}
 	}
-	title := st.Label.Render(verb) + st.CIDR.Render("("+m.desc.node.kind+")") + " " + m.desc.node.name +
+	title := st.Label.Render(verb) + st.CIDR.Render("("+m.desc.node.kind+")") + " " + m.desc.node.name + st.Value.Render(source) +
 		st.MutedText.Render("  esc: back · y: raw · j/k: scroll · G: end")
 	return box(lines[off:], m.w(), m.areaH(), title, st.Border)
 }

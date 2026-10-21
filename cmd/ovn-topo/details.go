@@ -212,9 +212,41 @@ func (m model) detailLines(n *xnode, w int) []string {
 		}
 
 	case kChassis:
+		// A chassis is one ovn-controller, identified by its OVS system-id; the
+		// hostname is informational, so show which rule linked it to a node.
+		nodeLine := firstNonEmpty(pstr(p, "nodeName"), "—")
+		if how := pstr(p, "nodeMatch"); how != "" {
+			nodeLine += st.MutedText.Render("  ← " + firstNonEmpty(nodeMatchLabel[how], how))
+		}
 		out = append(out,
+			kv("System-id", firstNonEmpty(pstr(p, "name"), strings.TrimPrefix(n.id, "chassis:"))),
 			kv("Hostname", firstNonEmpty(pstr(p, "hostname"), n.name)),
-			kv("Node", firstNonEmpty(pstr(p, "nodeName"), "—")))
+			kv("Node", nodeLine))
+		if u := pstr(p, "uuid"); u != "" {
+			out = append(out, kv("_uuid", st.MutedText.Render(u)))
+		}
+		var warn []string
+		switch pstr(p, "nodeMatch") {
+		case "hostname":
+			warn = append(warn, "matched by hostname only: no node carries ovn.kubernetes.io/chassis="+pstr(p, "name"))
+		case "fallback-hostname", "fallback-name":
+			warn = append(warn, "no Kubernetes node matches this chassis")
+		}
+		if c := pint(p, "hostnameShared"); c > 1 {
+			warn = append(warn, fmt.Sprintf("%d chassis share hostname %s — stale chassis after a reinstall?", c, pstr(p, "hostname")))
+		}
+		if b, _ := p["isInterconn"].(bool); b {
+			warn = append(warn, "interconnect chassis (OVN-IC): not a host of this cluster")
+		}
+		for _, msg := range warn {
+			for i, l := range wrapText(msg, w-5) {
+				prefix := "   "
+				if i == 0 {
+					prefix = " ⚠ "
+				}
+				out = append(out, prefix+st.Warn.Render(l))
+			}
+		}
 		encaps, _ := p["encaps"].([]interface{})
 		for _, e := range encaps {
 			em, _ := e.(map[string]interface{})
@@ -327,6 +359,15 @@ func (m model) detailLines(n *xnode, w int) []string {
 	}
 	out = append(out, "")
 	return append(out, note(hint+" · i hide")...)
+}
+
+// nodeMatchLabel explains the daemon's chassis → node rule (graph.NodeMapper.MatchChassis).
+var nodeMatchLabel = map[string]string{
+	"annotation":        "node annotation ovn.kubernetes.io/chassis",
+	"hostname":          "Kubernetes node with this hostname",
+	"override":          "static mapping",
+	"fallback-hostname": "chassis hostname (no Kubernetes match)",
+	"fallback-name":     "chassis name (no Kubernetes match)",
 }
 
 var kindNoun = map[string]string{kVPC: "VPC", kLR: "router", kLRP: "router port", kLS: "switch", kLSP: "port",
