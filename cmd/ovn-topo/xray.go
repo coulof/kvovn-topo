@@ -35,7 +35,13 @@ type histEntry struct {
 	key  string
 }
 
-func defaultExpanded(n *xnode) bool {
+// defaultExpanded opens two levels: the roots and their direct children
+// (VPC xray: groups and VPCs, so routers and switches show folded).
+func defaultExpanded(r row) bool {
+	n := r.n
+	if r.depth >= 2 {
+		return false
+	}
 	switch n.kind {
 	case kGroup, kVPC, kLR:
 		return true
@@ -49,7 +55,7 @@ func (m *model) isExpanded(r row) bool {
 	if m.touched[r.key] {
 		return m.expanded[r.key]
 	}
-	return defaultExpanded(r.n)
+	return defaultExpanded(r)
 }
 
 // visibleRefs drops relations already obvious from the tree: the parent and its children.

@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/coulof/ovn-topology/pkg/api"
 	"github.com/coulof/ovn-topology/pkg/diag"
 	corev1 "k8s.io/api/core/v1"
@@ -69,6 +70,15 @@ func loaded(t *testing.T, w, h int, diagMode bool) model {
 	if m.tree == nil || len(m.rows) == 0 {
 		t.Fatalf("expected a populated xray tree, err=%v", m.err)
 	}
+	return expandAll(m)
+}
+
+// expandAll unfolds every level (the default only opens two) so tests can reach any row.
+func expandAll(m model) model {
+	for n := -1; n != len(m.rows); {
+		n = len(m.rows)
+		m = press(m, "e")
+	}
 	return m
 }
 
@@ -106,7 +116,7 @@ func assertFits(t *testing.T, label string, view string, w, h int) {
 }
 
 func TestXrayVPCTree(t *testing.T) {
-	m := loaded(t, 140, 50, false)
+	m := press(loaded(t, 140, 80, false), "i") // full-width tree with every summary
 	view := m.View()
 	for _, want := range []string{"Xray(vpc)", "VPCS", "ovn_cluster", "lrp-default", "10.244.0.1/24 → default-subnet",
 		"default-subnet", "app-pod-1.default", "@node-1", "[unbound]", "[shared by 2 routers]", "EXTERNAL NETWORKS"} {
@@ -126,6 +136,58 @@ func TestXrayVPCTree(t *testing.T) {
 	}
 	if r := m.tree.byID["lsp:lsp-def-router-uuid"]; r.health != hNone {
 		t.Errorf("router-type LSPs are infrastructure, not unbound workloads; got health %v", r.health)
+	}
+}
+
+func TestDefaultExpansionTwoLevels(t *testing.T) {
+	m := initialModel(testDaemon, "dev-fixture", "default", false, "", "")
+	m = send(m, tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = send(m, m.fetchGraphCmd()())
+	m = send(m, m.fetchChassisCmd()())
+	if rowIndex(m, kLR, "ovn_cluster", false) < 0 || rowIndex(m, kLS, "default-subnet", false) < 0 {
+		t.Fatalf("routers and switches must be visible by default")
+	}
+	if rowIndex(m, kLRP, "lrp-default", false) >= 0 || rowIndex(m, kLSP, "app-pod-1.default", false) >= 0 {
+		t.Errorf("router and switch ports must start folded (two levels open)")
+	}
+	m = press(selectRow(t, m, kLS, "default-subnet"), "l")
+	if rowIndex(m, kLSP, "app-pod-1.default", false) < 0 {
+		t.Errorf("l must unfold the switch and show its ports")
+	}
+}
+
+func TestDetailPane(t *testing.T) {
+	m := selectRow(t, loaded(t, 140, 40, false), kLR, "ovn_cluster")
+	view := ansi.Strip(m.View())
+	for _, want := range []string{"Details lr:lr-default-uuid", "Ports & interconnections (3)", "→ LS   default-subnet", "(shared interconnect)", "Active GW on node-1"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in the router's detail pane:\n%s", want, view)
+		}
+	}
+
+	m = selectRow(t, m, kLSP, "app-pod-1.default")
+	view = ansi.Strip(m.View())
+	for _, want := range []string{"Path out", "→ LS   default-subnet", "LR   ovn_cluster", "Bound on       node-1"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in the port's detail pane:\n%s", want, view)
+		}
+	}
+
+	i := rowIndex(m, kChassis, "node-1", true)
+	if i < 0 {
+		t.Fatalf("expected a bound-on ⇢ chassis relation row")
+	}
+	m.cursor = i
+	if view = ansi.Strip(m.View()); !strings.Contains(view, "Details chassis:") || !strings.Contains(view, "Encap") {
+		t.Errorf("on a ⇢ row the pane must describe the target:\n%s", view)
+	}
+
+	m = press(m, "i")
+	if view = ansi.Strip(m.View()); strings.Contains(view, "Details ") {
+		t.Errorf("i must hide the pane")
+	}
+	if small := ansi.Strip(loaded(t, 80, 24, false).View()); strings.Contains(small, "Details ") {
+		t.Errorf("no pane below %d columns", paneMinW)
 	}
 }
 

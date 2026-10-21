@@ -256,31 +256,11 @@ func (m model) inspector(r *portRow) []string {
 	k := func(s string) string { return st.Label.Render(pad(s, 15)) }
 	colW := (m.w() - 5) / 2
 	two := func(a, b string) string { return " " + fit(a, colW) + "  " + fit(b, colW) }
-
-	var routers []string
-	for _, p := range m.switchPorts[c.SwitchID] {
-		routers = append(routers, p.RouterName)
-	}
-	cidr := ""
-	if m.tree != nil {
-		if ls := m.tree.byID[c.SwitchID]; ls != nil {
-			cidr = st.MutedText.Render(ls.summary)
-		}
-	}
-	ip := ""
-	if len(c.Networks) > 0 {
-		ip = extractCleanIP(c.Networks[0])
-	}
-	mode := st.Ok.Render("Distributed — every chassis routes this subnet locally (no redirect port)")
-	explain := fmt.Sprintf("Workloads on '%s' use %s as their default gateway.", c.SwitchName, ip)
-	switch {
-	case c.ActiveGateway != "":
-		mode = st.ActiveGateway.Render("Centralized — traffic egresses via the active gateway chassis " + m.resolveNodeName(c.ActiveGateway))
-		explain = "External gateway port (EIP / SNAT); the cr-" + c.PortName + " redirect port is bound on the active chassis."
-	case c.IsShared:
-		explain = fmt.Sprintf("Interconnect: '%s' is attached to %d routers (%s).", c.SwitchName, len(routers), strings.Join(routers, ", "))
-	case c.SwitchName == "join":
-		explain = "Node transit: connects the VPC router to every node's ovn0 interface over the join switch."
+	routers, cidr, mode, explain := m.portFacts(c)
+	if c.ActiveGateway != "" {
+		mode = st.ActiveGateway.Render(mode)
+	} else {
+		mode = st.Ok.Render(mode)
 	}
 	body := []string{
 		two(k("Router")+st.Kind[kLR].Render(c.RouterName)+st.MutedText.Render("  VPC "+c.VPCName),
@@ -294,4 +274,35 @@ func (m model) inspector(r *portRow) []string {
 		" " + st.MutedText.Render("enter: open in xray · d: describe · y: raw · s/S: sort · i: hide inspector · x: diag"),
 	}
 	return box(body, m.w(), inspectorH, st.Label.Render("Inspector")+" "+c.PortName, st.Faint)
+}
+
+// portFacts explains a router port: the routers sharing its peer switch, the
+// switch summary, the routing mode and a one-line role explanation (plain text).
+// Shared by the :ports inspector and the xray detail pane.
+func (m model) portFacts(c *RouterPortConnection) (routers []string, cidr, mode, explain string) {
+	st := m.styles
+	for _, p := range m.switchPorts[c.SwitchID] {
+		routers = append(routers, p.RouterName)
+	}
+	if m.tree != nil {
+		if ls := m.tree.byID[c.SwitchID]; ls != nil {
+			cidr = st.MutedText.Render(ls.summary)
+		}
+	}
+	ip := ""
+	if len(c.Networks) > 0 {
+		ip = extractCleanIP(c.Networks[0])
+	}
+	mode = "Distributed — every chassis routes this subnet locally (no redirect port)"
+	explain = fmt.Sprintf("Workloads on '%s' use %s as their default gateway.", c.SwitchName, ip)
+	switch {
+	case c.ActiveGateway != "":
+		mode = "Centralized — traffic egresses via the active gateway chassis " + m.resolveNodeName(c.ActiveGateway)
+		explain = "External gateway port (EIP / SNAT); the cr-" + c.PortName + " redirect port is bound on the active chassis."
+	case c.IsShared:
+		explain = fmt.Sprintf("Interconnect: '%s' is attached to %d routers (%s).", c.SwitchName, len(routers), strings.Join(routers, ", "))
+	case c.SwitchName == "join":
+		explain = "Node transit: connects the VPC router to every node's ovn0 interface over the join switch."
+	}
+	return routers, cidr, mode, explain
 }

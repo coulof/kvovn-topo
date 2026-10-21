@@ -69,6 +69,7 @@ k9s-style navigation; see [`docs/tui-guide.md`](docs/tui-guide.md) for the full 
 - **`1` - `4`** (or `:xray vpc`, `:xray chassis`, `:xray workload`, `:ports`): switch between the three xray trees and the router-port table.
 - **`j`/`k`**, **`h`/`l`**, **`Space`**: move, fold/unfold, toggle. **`e`/`E`** expands/folds everything.
 - **`Enter`** on a `⇢` relation (chassis, workload, peer port…) jumps to that object; **`b`** goes back.
+- **`i`**: show/hide the right **details pane** (interconnections of the selection: router ports and peers, connected routers, path out of a subnet, gateways); the tree starts with two levels open.
 - **`/`**: filter (keeps the ancestors of every match). **`d`** describe, **`y`** raw columns.
 - **`x`**: open **Tier 1 Diagnostics** on the selection (interactive `ovn-trace` with fzf search & custom IP, live `tcpdump`, conntrack, `ovs-vsctl show`, controller logs).
 - **`r`** refresh, **`L`** pause/resume live (SSE) updates, **`t`** cycle themes, **`?`** help, **`q`** quit.

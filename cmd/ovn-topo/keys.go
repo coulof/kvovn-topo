@@ -213,6 +213,11 @@ func (m model) treeKey(s string) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.rebuildRows()
+	case "i":
+		m.pinspect = !m.pinspect
+		if m.w() < paneMinW {
+			m.setFlash(fmt.Sprintf("the details pane needs a terminal at least %d columns wide", paneMinW), false)
+		}
 	case "d":
 		if r != nil {
 			return m, m.openDescribe(r.n, false)

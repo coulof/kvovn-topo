@@ -13,28 +13,30 @@ ovn-topo --diag                                      # + Tier 1 exec diagnostics
 ## 1. Screen layout
 
 ```text
- Daemon:   http://127.0.0.1:8080/api/v1        <:>     command         <e/E>   expand/fold     <L>  live on/off
- Revision: 1842  ● live                        </>     filter          <d>     describe        <t>  theme
- Topology: 3 VPC · 9 LS · 412 LSP · 4 chassis  <1-4>   vpc/ch/wl/ports <y>     raw             <?>  help
- Diag:     DIAG ready                          <h/l>   fold/unfold     <b>     back            <q>  quit
- Theme:    SUSE                                <enter> toggle/goto     <r>     refresh
-┌──────────────────────────────────── Xray(vpc)[31] </pod> ───────────────────────────────────┐
-│ ▾      VPCS (2)                                                                              │
-│ ├─ ▾ ● VPC  default  1 router · 1 switch [default]                                           │
-│ │  ├─ ▾ ● LR   ovn_cluster  ports 3 · routes 1 · nat 0 · pol 1 · lb 1                        │
-│ │  │  ├─ ▸ ● LRP  lrp-default  10.244.0.1/24 → default-subnet                                │
-│ │  │  ├─ ▸ ● LRP  lrp-gw   [GW active node-1]                                                │
-│ │  └─ ▾ ! LS   default-subnet  10.244.0.1/24 · 4 ports · 2 bound · 1 unbound                 │
-│ │     ├─ ▾ ● LSP  app-pod-1.default  10.244.0.10 · Pod · @node-1                             │
-│ │     │  ├╌ bound on ⇢ CH   node-1 [gateway]                                                 │
-│ │     │  └╌ workload ⇢ POD  app-pod-1                                                        │
-│ │     └─ ▸ ✗ LSP  pending-pod.default  10.244.0.12 · Pod [unbound]                           │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
- xray  vpc  lsp:lsp-pod1-uuid                                        jumped to … (b: back)
+ Daemon:   http://127.0.0.1:8080/api/v1        <:>     command         <e/E>   expand/fold     <r>  refresh
+ Revision: 1842  ● live                        </>     filter          <i>     details pane    <L>  live on/off
+ Topology: 2 VPC · 4 LS · 412 LSP · 3 chassis  <1-4>   vpc/ch/wl/ports <d>     describe        <t>  theme
+ Diag:     DIAG ready                          <h/l>   fold/unfold     <y>     raw             <?>  help
+ Theme:    SUSE                                <enter> toggle/goto     <b>     back            <q>  quit
+┌──────────────────────── Xray(vpc)[18] ─────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
+│ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
+│ ├─ ▾ ● VPC  default  1 router · 1 switch [default]             ││   ports 3 · routes 1 · nat 0 · pol 1 · lb 1  │
+│ │  ├─ ▸ ● LR   ovn_cluster  ports 3 · routes 1 · nat 0 · pol 1 ││                                              │
+│ │  └─ ▸ ! LS   default-subnet  10.244.0.1/24 · 412 ports · 1 u…││ Ports & interconnections (3)                 │
+│ └─ ▾ ● VPC  custom-vpc  1 router · 1 switch                    ││ • lrp-default  10.244.0.1/24                 │
+│    ├─ ▸ ● LR   custom-vpc  ports 2 · routes 0 · nat 1 · pol 0  ││     → LS   default-subnet                    │
+│    └─ ▸ ● LS   custom-subnet  10.100.0.1/24 · 2 ports · 1 bound││ • lrp-gw                                     │
+│ ▾      SHARED & STANDALONE SWITCHES (2)                        ││     Active GW on node-1                      │
+│ └─ ▾ ● LS   join  100.64.0.2/16, 100.64.0.1/16 [shared by 2 r…]││ • lrp-join-def  100.64.0.1/16                │
+│    ├╌ router ⇢ LR   custom-vpc                                 ││     → LS   join  (shared interconnect)       │
+│    └╌ router ⇢ LR   ovn_cluster                                ││ L3  Routes 1 · Policies 1 · NAT 0 · LBs 1    │
+└────────────────────────────────────────────────────────────────┘└──────────────────────────────────────────────┘
+ xray  vpc  lr:lr-default-uuid
 ```
 
 - **Header (5 rows):** daemon, revision and live state (`● live` over SSE, `◌ polling` when the stream is unavailable, `‖ paused`, `○ offline fixture`), topology totals, diagnostics state, theme, and the hotkeys for the current screen. Terminals shorter than 18 rows get a one-line header.
 - **Main box:** title shows the screen (`Xray(vpc)`, `Ports(lrp)`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
+- **Details pane (right, 100+ columns):** explains the selected object and how it interconnects (see §2). `i` hides/shows it.
 - **Crumbs (bottom row):** `xray`/`table` › current root › selected object ID, and on the right any message (jump targets, errors, refresh failures).
 
 Every frame is laid out to exactly the terminal size: nothing scrolls off the top, long lines are truncated with `…`, and lists scroll to keep the cursor visible.
@@ -52,8 +54,24 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 - **Rows:** fold marker (`▾`/`▸`), health glyph, kind tag, name, a dim summary (CIDR, IP, `@chassis`, counts) and a badge (`[unbound]`, `[GW active hv-01]`, `[shared by 2 routers]`).
 - **Relations (`├╌ label ⇢ …`)** appear when you unfold an object. They are graph edges, not ownership: `bound on` (chassis), `workload`, `router port`, `peer switch`, `peer port`, `gateway (active)`, `localnet`, `router` (for shared switches). Relations already visible as the parent or a sibling are not repeated.
 - **`Enter` on a relation jumps** to that object in the xray where it lives (a chassis opens the chassis xray, a workload the workload xray), expanding the path to it. **`b`** returns to the exact row you left.
-- Large switches/chassis/namespaces (more than 16 children) start folded; `l`/`Space` unfolds, `e`/`E` unfolds/folds everything visible.
+- **Two levels start open:** in the VPC xray you see each VPC's routers and switches with their summaries, folded; router ports, switch ports and relations appear when you unfold (`l`/`Space`). Large switches/chassis/namespaces (more than 16 children) start folded even at the top. `e`/`E` unfolds/folds everything visible (repeat to go deeper).
 - A multi-NIC KubeVirt VM is one workload row whose children are its NICs on different switches.
+
+### Details pane
+
+On terminals at least 100 columns wide, the right pane describes the selection (on a `⇢` row: the target, i.e. where `Enter` goes). With the pane shown, port rows drop their inline summary — the pane carries it.
+
+| Selection | Pane |
+|---|---|
+| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) + the NAT trap note |
+| Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for |
+| Switch | **Connected routers** (router, VPC, via which LRP and network) · port counts · localnet underlay |
+| Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · **Path out**: `LSP → LS → LRP gw → LR (VPC)` |
+| Chassis | Hostname, node, encaps, bound ports, **active gateway for** |
+| Workload | Kind, namespace, node, each NIC with IP, switch and chassis |
+| VPC | Contents and **egress** gateways |
+
+Every pane ends with the Kubernetes identity and the object's relations (`label ⇢ object`).
 
 ### Health glyphs
 

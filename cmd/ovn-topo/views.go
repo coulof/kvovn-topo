@@ -100,7 +100,8 @@ func (m model) hotkeys() [][2]string {
 	if m.mode == modePorts {
 		keys = append(keys, [2]string{"<s/S>", "sort"}, [2]string{"<i>", "inspector"}, [2]string{"<enter>", "open in xray"})
 	} else {
-		keys = append(keys, [2]string{"<h/l>", "fold/unfold"}, [2]string{"<enter>", "toggle/goto"}, [2]string{"<e/E>", "expand/fold"})
+		keys = append(keys, [2]string{"<h/l>", "fold/unfold"}, [2]string{"<enter>", "toggle/goto"}, [2]string{"<e/E>", "expand/fold"},
+			[2]string{"<i>", "details pane"})
 	}
 	keys = append(keys, [2]string{"<d>", "describe"}, [2]string{"<y>", "raw"}, [2]string{"<b>", "back"})
 	if m.diagMode {
@@ -270,7 +271,8 @@ func (m model) badge(n *xnode) string {
 
 func (m model) treeView() []string {
 	st := m.styles
-	inner := m.w() - 2
+	tw := m.treeW()
+	inner := tw - 2
 	h := m.bodyH()
 	off := window(m.cursor, m.offset, len(m.rows), h)
 	var body []string
@@ -296,8 +298,12 @@ func (m model) treeView() []string {
 			if r.n.kind == kGroup {
 				g = ""
 			}
+			summary := r.n.summary
+			if m.showPane() && (r.n.kind == kLSP || r.n.kind == kLRP) {
+				summary = "" // the detail pane carries it; keep the tree calm
+			}
 			line = " " + st.Faint.Render(r.prefix) + fold + g + m.kind(r.n) + " " + name + "  " +
-				st.MutedText.Render(r.n.summary) + " " + m.badge(r.n)
+				st.MutedText.Render(summary) + " " + m.badge(r.n)
 		}
 		if t, ok := m.changed[r.n.id]; ok && time.Since(t) < flashFor {
 			line = solid(line, inner, st.Flash)
@@ -319,7 +325,15 @@ func (m model) treeView() []string {
 		body = append(body, "", st.MutedText.Render(msg))
 	}
 	title := st.Label.Render("Xray") + st.CIDR.Render("("+string(m.mode)+")") + st.MutedText.Render(fmt.Sprintf("[%d]", len(m.rows))) + m.filterTitle()
-	return box(body, m.w(), m.areaH(), title, st.Border)
+	tree := box(body, tw, m.areaH(), title, st.Border)
+	if !m.showPane() {
+		return tree
+	}
+	pane := m.detailPane(m.areaH())
+	for i := range tree {
+		tree[i] += pane[i]
+	}
+	return tree
 }
 
 // stateView covers loading and "daemon unreachable" before the first graph arrives.
@@ -360,6 +374,7 @@ func (m model) helpView() []string {
 		"   4  :ports          router-port matrix (table)",
 		"",
 		" " + b("INSPECT"),
+		"   i  details pane (xray) / inspector (:ports)",
 		"   d  describe (/node detail, external_ids)",
 		"   y  raw columns",
 		"   x  Tier 1 diagnostics (--diag, ADR-0001)",
@@ -373,7 +388,7 @@ func (m model) helpView() []string {
 		"   b         back after a jump",
 		" " + b("FIND & TABLE"),
 		"   /text     filter (keeps ancestors) · esc clears",
-		"   s / S     sort column / reverse · i inspector",
+		"   s / S     sort column / reverse",
 		"   r refresh · L live on/off · t theme · q quit",
 	}
 	var l []string
