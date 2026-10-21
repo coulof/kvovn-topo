@@ -408,6 +408,24 @@ func TestDiagnosticsMode(t *testing.T) {
 			t.Errorf("expected %q in picker", want)
 		}
 	}
+	// ovn0 join ports (OVN overlay) and chassis encap IPs (physical underlay) are separate categories.
+	cats := map[string]int{}
+	for _, d := range m.traceDestinations {
+		cats[d.Category]++
+		if d.Category == "Underlay" && d.IP == "192.168.1.11" && !strings.Contains(d.Label, "outside OVN") {
+			t.Errorf("underlay destination must say it is outside OVN: %q", d.Label)
+		}
+	}
+	if cats["Node"] != 0 || cats["Underlay"] == 0 {
+		t.Errorf("expected a separate Underlay category and no merged Node category, got %v", cats)
+	}
+	if !strings.Contains(picker, "[Node ovn0 (") || !strings.Contains(picker, "[Underlay (") {
+		t.Errorf("expected both Node ovn0 and Underlay tabs in the picker")
+	}
+	join := collectJoinDest(m)
+	if join.Category != "Node ovn0" {
+		t.Errorf("a node join port must be in the Node ovn0 category, got %+v", join)
+	}
 	m.traceSearchFilter = "10.144.97.201:22"
 	if f := m.filteredTraceDestinations(); len(f) == 0 || f[0].Category != "Custom" || f[0].IP != "10.144.97.201" {
 		t.Errorf("expected custom IP at top of filtered list, got %+v", f)
@@ -696,4 +714,17 @@ func TestChassisPaneExplainsNodeMapping(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.View()), "SB Chassis row") {
 		t.Errorf("the raw title must name the OVSDB table")
 	}
+}
+
+// collectJoinDest adds a node join port (node-<host> on join) to the fixture and returns its trace destination.
+func collectJoinDest(m model) TraceDestination {
+	lsID := "ls:ls-join-uuid"
+	props := map[string]interface{}{"addresses": []interface{}{"00:00:00:aa:bb:99 100.64.0.9"}, "type": ""}
+	m.switchWorkloads = map[string][]api.GraphNode{lsID: {{Id: "lsp:node-hv-09", Name: "node-hv-09", Type: api.GraphNodeTypeLSP, Properties: &props}}}
+	for _, d := range m.collectTraceDestinations(nil, "") {
+		if d.IP == "100.64.0.9" {
+			return d
+		}
+	}
+	return TraceDestination{}
 }

@@ -64,7 +64,8 @@ var TraceCategories = []string{
 	"VM",
 	"Pod",
 	"Gateway",
-	"Node",
+	"Node ovn0", // the node's ovn0 port on the join switch: inside the OVN overlay
+	"Underlay",  // the chassis tunnel/encap IP on the physical network: outside OVN
 	"Public DNS",
 }
 
@@ -531,10 +532,10 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 								}
 								if strings.HasPrefix(w.Name, "node-") || swName == "join" {
 									dests = append(dests, TraceDestination{
-										Label:    fmt.Sprintf("[Node ovn0] %s (IP: %s on join)", name, ip),
+										Label:    fmt.Sprintf("[Node ovn0] %s (IP: %s on join — OVN overlay)", name, ip),
 										IP:       ip,
 										Subnet:   swName,
-										Category: "Node",
+										Category: "Node ovn0",
 									})
 									continue
 								}
@@ -590,10 +591,10 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 						if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
 							seenIPs[encIP] = true
 							dests = append(dests, TraceDestination{
-								Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
+								Label:    fmt.Sprintf("[Underlay] %s (tunnel/encap IP: %s — outside OVN)", nodeName, encIP),
 								IP:       encIP,
 								Subnet:   "physical",
-								Category: "Node",
+								Category: "Underlay",
 							})
 						}
 					}
@@ -603,10 +604,10 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 					if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
 						seenIPs[encIP] = true
 						dests = append(dests, TraceDestination{
-							Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
+							Label:    fmt.Sprintf("[Underlay] %s (tunnel/encap IP: %s — outside OVN)", nodeName, encIP),
 							IP:       encIP,
 							Subnet:   "physical",
-							Category: "Node",
+							Category: "Underlay",
 						})
 					}
 				}
