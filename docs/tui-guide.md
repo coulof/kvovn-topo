@@ -122,6 +122,23 @@ The Port Matrix as a resource table: one row per logical router port, including 
 
 Commands come from the typed allowlist in `pkg/diag`; nothing is built from free-form strings.
 
+### What `x` acts on
+
+The target is captured when you press `x` and shown at the top of the modal: the object (kind, name, ID), its datapath, IP/MAC, and the node with **where that node comes from**. Every action runs on exactly that target. Nothing is borrowed from another object; what cannot be derived from the selection is listed as *unavailable* with the reason.
+
+| Selection | Trace from | Node actions run on | Unavailable |
+|---|---|---|---|
+| Workload port (LSP) | the port itself (its switch, IP, MAC) | its **Port_Binding chassis** | node actions if the port is unbound |
+| Infrastructure port (router / localnet) | the port, if it has an IP | — | tcpdump, conntrack, OVS port, bridges, logs |
+| Router port (LRP) | the router datapath, from this port | the **active gateway chassis** (centralized); tcpdump on `br-external` | OVS port; all node actions if distributed |
+| Chassis | — | that chassis | trace, tcpdump, OVS port |
+| Workload (VM / Pod) | its NIC; **with several NICs you pick one first** | that NIC's chassis | as for its NIC |
+| Switch, router, VPC, namespace | — | — | everything (select a port or a chassis) |
+
+- **Kubernetes vs OVN node:** if Kubernetes reports a different node than OVN's binding (e.g. during live migration), the modal warns and uses the OVN binding.
+- **Live updates while the modal is open:** they re-check the target by ID. If it disappears the modal says so and disables the actions. If it moves to another chassis you are told, and the node is updated.
+- **tcpdump and OVS port** look up the interface whose `external_ids:iface-id` is the port, on the port's node. If none exists, the action fails with that message: it never captures on `ovn0`, `br-int` or another node instead.
+
 ---
 
 ## 7. Known traps (by design, also shown in `?` help)

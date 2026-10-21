@@ -410,6 +410,7 @@ func (m *model) rebuildTree() {
 	m.markChanged(t)
 	m.tree = t
 	m.rebuildRows()
+	m.revalidateDiagTarget()
 }
 
 func (m model) edges() []api.GraphEdge {

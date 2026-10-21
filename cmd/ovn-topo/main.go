@@ -110,7 +110,8 @@ type model struct {
 	tcpdumpFilterIdx  int
 	tcpdumpCustom     string
 	tcpdumpPackets    []string
-	tcpdumpIface      string
+	diagTgt           diagTarget // captured when the modal opens (diagtarget.go)
+	nicIdx            int
 	diagStreaming     bool
 	diagCancelStream  context.CancelFunc
 	diagRawOutput     string
@@ -344,6 +345,20 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diagError = msg.err
 		}
 		return m, nil
+
+	case tcpdumpStartedMsg:
+		if msg.err != nil {
+			m.diagStreaming, m.diagRunning = false, false
+			m.diagError = fmt.Errorf("tcpdump not started: %w", msg.err)
+			return m, nil
+		}
+		if !m.diagStreaming { // stopped while the interface was being resolved
+			return m, nil
+		}
+		m.diagTitle = msg.title
+		m.tcpdumpPackets = msg.header
+		m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")
+		return m, readNextStreamLineCmd(msg.scanner)
 
 	case diagExecResultMsg:
 		m.diagRunning = false

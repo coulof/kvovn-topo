@@ -293,8 +293,32 @@ Extension: add the L2 and Chassis views here.
 - [x] `hack/check-deps.sh` still proves the daemon is free of `pkg/diag`.
 - [x] Point-and-click `ovn-trace`, live `tcpdump`, conntrack, `ovs-vsctl show`, and controller log tailing implemented in TUI.
 - [x] Layer 3 e2e for trace and tcpdump command builders verified against real Kube-OVN/OVS outputs on Harvester `hv-01`.
-- [x] Automated regression tests (`TestTargetSelectionAcrossAllViews`) prevent view and pane index mismatches.
+- [x] Automated regression tests prevent view and pane index mismatches (now `TestDiagTargetIsAlwaysTheSelection` and the executor-level tests, see the follow-up below).
 - [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
+
+**Follow-up (2026-10-21): diagnostic target audit.** The git history had a series of "the diagnostic acted on something other than the selection" fixes. An audit of the selection → command path found the root cause: the target was never captured. Every action and every modal redraw re-derived it from the cursor, through helpers with silent fallbacks.
+- **Wrong object:**
+  - A switch took its first pod; a router took its first port.
+  - A chassis traced from the cluster's first router port; a multi-NIC VM took its first NIC.
+  - A switch shared by several routers took the first router's MAC.
+  - The trace defaulted to `ovn-default` / `10.244.0.1`.
+- **Wrong host:**
+  - A port's node came from Kubernetes metadata, falling back to the gateway node.
+  - With no node, actions ran on the first cluster node or on the literal `cluster-node`.
+- **Wrong interface:** `FindOVSInterface` never failed. It fell back to `ovn0`/`br-external` (by name substring) or `br-int`, while the header still named the port.
+- **Drift:** a live update that moved the row put the cursor at the top, and the next action ran on that row.
+
+The fix:
+- **Captured target:** `cmd/ovn-topo/diagtarget.go` resolves one immutable target when `x` is pressed. It records the port, datapath, IP/MAC, and the node with its source (Port_Binding chassis, active gateway chassis or selected chassis). Every action reads only that target.
+- **No borrowing:** anything not derivable from the selected object disables the action, with the reason shown in the menu. Switches, routers and VPCs ask for a port. A multi-NIC workload asks which NIC. An ambiguous next hop is an error.
+- **Live updates:** the target is revalidated by ID. It goes stale if the object disappears, and you are told if it moves (e.g. live migration).
+- **`pkg/diag`:** the interface lookup runs only on the target's node, with a typed `BuildFindIfaceByIfaceIDCommand`, and returns `ErrIfaceNotFound` instead of guessing. Pod lookups re-check `spec.nodeName`. The tcpdump interface lookup moved off the UI goroutine.
+- **Tests:**
+  - Every row of every xray must resolve to itself.
+  - Each action is checked through `MockExecutor` for the pod, node and arguments it uses.
+  - No-guess cases are covered.
+  - Drift and the multi-NIC picker are covered.
+  - Mutation-checked: re-adding "switch → first pod" or "missing iface → ovn0" fails the suite.
 
 ---
 

@@ -1,0 +1,313 @@
+package main
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/ovn-topology/pkg/diag"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+)
+
+// ownNode is the test oracle: the node an object itself is bound to, derived
+// only from that object's own relations.
+func ownNode(m model, n *xnode) string {
+	for _, r := range n.refs {
+		if r.label == "bound on" || strings.HasPrefix(r.label, "gateway") {
+			return m.chassisNode(m.tree.byID[r.to])
+		}
+	}
+	if n.kind == kChassis {
+		return m.chassisNode(n)
+	}
+	return ""
+}
+
+func refTarget(n *xnode, label string) string {
+	for _, r := range n.refs {
+		if r.label == label {
+			return r.to
+		}
+	}
+	return ""
+}
+
+// TestDiagTargetIsAlwaysTheSelection walks every row of every xray and the
+// :ports table: the target must be built from the selected object only.
+func TestDiagTargetIsAlwaysTheSelection(t *testing.T) {
+	base := loaded(t, 140, 50, false)
+	check := func(where string, n *xnode, tg diagTarget) {
+		t.Helper()
+		obj := n
+		if n.kind == kWL && len(n.children) == 1 {
+			obj = n.children[0] // a single-NIC workload is that NIC
+		}
+		if tg.ID != obj.id {
+			t.Errorf("%s: target id %s, want %s", where, tg.ID, obj.id)
+		}
+		if tg.Node != ownNode(base, obj) {
+			t.Errorf("%s: node %q, want the object's own binding %q", where, tg.Node, ownNode(base, obj))
+		}
+		switch obj.kind {
+		case kLSP:
+			ls := base.tree.byID[refTarget(obj, "subnet")]
+			if tg.Port != obj.name || ls == nil || tg.Datapath != ls.name {
+				t.Errorf("%s: LSP target port=%q datapath=%q", where, tg.Port, tg.Datapath)
+			}
+			if ip, _ := lspAddress(obj.gn); tg.SrcIP != ip {
+				t.Errorf("%s: source IP %q, want the port's own %q", where, tg.SrcIP, ip)
+			}
+		case kLRP:
+			if tg.Port != obj.conn.PortName || tg.Datapath != obj.conn.RouterName {
+				t.Errorf("%s: LRP target port=%q datapath=%q", where, tg.Port, tg.Datapath)
+			}
+		case kChassis:
+			for _, a := range []diagAction{actTrace, actTcpdump, actOvsPort} {
+				if ok, _ := tg.can(a); ok {
+					t.Errorf("%s: %s must be disabled on a chassis", where, a)
+				}
+			}
+		case kLS, kLR, kVPC, kGroup, kNS, kExt:
+			if tg.anyEnabled() {
+				t.Errorf("%s: %s is not a diagnostic endpoint; no action may borrow one of its ports", where, obj.kind)
+			}
+		}
+		if tg.Port == "" && tg.Datapath != "" {
+			t.Errorf("%s: datapath without port", where)
+		}
+	}
+	for _, md := range []string{"1", "2", "3"} {
+		m := expandAll(press(base, md))
+		for i, r := range m.rows {
+			m.cursor = i
+			check(string(m.mode)+"/"+r.key, r.n, m.resolveDiagTarget(m.selectedXNode()))
+		}
+	}
+	m := press(base, "4")
+	for i, r := range m.portRows() {
+		m.pcur = i
+		check("ports/"+r.conn.PortName, m.selectedXNode(), m.resolveDiagTarget(m.selectedXNode()))
+	}
+}
+
+// newClusterDiagModel has one OVS and one CNI pod per node, so tests can see which node an action ran on.
+func newClusterDiagModel(t *testing.T, mock *diag.MockExecutor) model {
+	t.Helper()
+	objs := []runtime.Object{
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ovn-central-0", Namespace: "kube-system", Labels: map[string]string{"app": "ovn-central"}},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning}},
+	}
+	for _, n := range []string{"node-1", "node-2", "node-3"} {
+		objs = append(objs,
+			&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ovs-ovn-" + n, Namespace: "kube-system", Labels: map[string]string{"app": "ovs-ovn"}},
+				Spec: corev1.PodSpec{NodeName: n}, Status: corev1.PodStatus{Phase: corev1.PodRunning}},
+			&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "kube-ovn-cni-" + n, Namespace: "kube-system", Labels: map[string]string{"app": "kube-ovn-cni"}},
+				Spec: corev1.PodSpec{NodeName: n}, Status: corev1.PodStatus{Phase: corev1.PodRunning}})
+	}
+	client := fake.NewSimpleClientset(objs...)
+	mock.StdoutMap["true"] = []byte("")
+	m := loaded(t, 140, 50, true)
+	m.k8sClient = client
+	m.diagExecutor = mock
+	m.diagLocator = diag.NewPodLocator(client, "kube-system")
+	m.diagAvailable = true
+	return m
+}
+
+func lastCall(t *testing.T, mock *diag.MockExecutor) diag.MockExecCall {
+	t.Helper()
+	if len(mock.Calls) == 0 {
+		t.Fatalf("expected an exec call")
+	}
+	return mock.Calls[len(mock.Calls)-1]
+}
+
+// TestDiagActionsExecuteOnTheSelectedPort runs every action on a port bound on
+// node-2 and checks, from the executor, which pod and arguments were used.
+func TestDiagActionsExecuteOnTheSelectedPort(t *testing.T) {
+	mock := diag.NewMockExecutor()
+	mock.StdoutMap["ovs-vsctl"] = []byte("abc123_h\n")
+	m := newClusterDiagModel(t, mock)
+	m = press(selectRow(t, m, kLSP, "app-pod-2.default"), "x")
+	if !m.diagModal || m.diagTgt.Node != "node-2" || !strings.Contains(m.View(), "Port_Binding chassis node-2") {
+		t.Fatalf("modal must show the captured target and its node source:\n%s", m.View())
+	}
+
+	run := func(key string) diagExecResultMsg {
+		t.Helper()
+		mm, cmd := m.updateDiagModal(keyMsg(key))
+		if cmd == nil {
+			t.Fatalf("action %s returned no command (err=%v)", key, mm.(model).diagError)
+		}
+		res, _ := cmd().(diagExecResultMsg)
+		if res.err != nil {
+			t.Fatalf("action %s failed: %v", key, res.err)
+		}
+		return res
+	}
+	for _, key := range []string{"3", "4", "5", "6"} {
+		res := run(key)
+		if c := lastCall(t, mock); c.Pod.Name != "ovs-ovn-node-2" {
+			t.Errorf("action %s ran in %s, want the OVS pod of node-2", key, c.Pod.Name)
+		}
+		if !strings.Contains(res.title, "node-2") {
+			t.Errorf("action %s title must name the node: %q", key, res.title)
+		}
+	}
+	found := false
+	for _, c := range mock.Calls {
+		if strings.Join(c.Cmd, " ") == "ovs-vsctl --bare --columns=name find interface external_ids:iface-id=app-pod-2.default" && c.Pod.Name == "ovs-ovn-node-2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the OVS port lookup must use the selected port's iface-id on its node; calls: %+v", mock.Calls)
+	}
+
+	// trace: inport, source IP and MAC are the selected port's own.
+	res, _ := m.executeTrace("10.244.0.10", "icmp", 0)().(diagExecResultMsg)
+	if res.err != nil {
+		t.Fatalf("trace failed: %v", res.err)
+	}
+	trace := strings.Join(lastCall(t, mock).Cmd, " ")
+	if !strings.Contains(trace, `inport == "app-pod-2.default"`) || !strings.Contains(trace, "ip4.src == 10.244.0.11") ||
+		lastCall(t, mock).Pod.Name != "ovn-central-0" {
+		t.Errorf("trace must start at the selected port: %s", trace)
+	}
+
+	// tcpdump: the capture interface is looked up on the port's node, off the UI goroutine.
+	cmd := m.executeTcpdumpStream("icmp", m.diagTgt)
+	started, _ := cmd().(tcpdumpStartedMsg)
+	if started.err != nil || !strings.Contains(started.title, "abc123_h") || !strings.Contains(started.title, "node-2") {
+		t.Errorf("tcpdump must capture on the port's own interface on node-2: %+v", started)
+	}
+}
+
+// TestDiagNeverGuesses: a missing interface or node stops the action instead of
+// running it on ovn0 / br-int / the first node, as earlier versions did.
+func TestDiagNeverGuesses(t *testing.T) {
+	mock := diag.NewMockExecutor()
+	mock.StdoutMap["ovs-vsctl"] = []byte("") // iface-id not found on the node
+	m := newClusterDiagModel(t, mock)
+	m = press(selectRow(t, m, kLSP, "app-pod-2.default"), "x")
+
+	started, _ := m.executeTcpdumpStream("icmp", m.diagTgt)().(tcpdumpStartedMsg)
+	if started.err == nil || !strings.Contains(started.err.Error(), "app-pod-2.default") {
+		t.Errorf("tcpdump must fail when the port has no interface, got %+v", started)
+	}
+	for _, c := range mock.Calls {
+		if c.Cmd[0] == "tcpdump" {
+			t.Errorf("no capture may start on a guessed interface: %v", c.Cmd)
+		}
+	}
+	if res, _ := m.executeNodeDiag(actOvsPort, m.diagTgt)().(diagExecResultMsg); res.err == nil {
+		t.Errorf("OVS port telemetry must fail instead of showing br-int")
+	}
+
+	// Unbound port: node actions are disabled, nothing is executed.
+	m.diagModal, m.diagStep, m.diagStreaming = false, diagStepMenu, false
+	m = press(selectRow(t, m, kLSP, "pending-pod.default"), "x")
+	before := len(mock.Calls)
+	m = press(m, "3")
+	if len(mock.Calls) != before || m.diagError == nil || !strings.Contains(m.diagError.Error(), "not bound") {
+		t.Errorf("conntrack on an unbound port must be refused with the reason, err=%v", m.diagError)
+	}
+
+	// Chassis: no trace (it used to start from the first router port of the cluster).
+	m.diagModal = false
+	m = press(press(m, "2"), "g", "x")
+	if m.diagTgt.Kind != kChassis {
+		t.Fatalf("expected a chassis target, got %+v", m.diagTgt)
+	}
+	if _, err := m.traceRequest(m.diagTgt, "1.1.1.1", "icmp", 0); err == nil {
+		t.Errorf("a trace from a chassis must be refused")
+	}
+	if !strings.Contains(m.View(), "unavailable") {
+		t.Errorf("disabled actions must be listed with their reason:\n%s", m.View())
+	}
+
+	// Switch: no action borrows one of its pods.
+	m.diagModal = false
+	m = press(m, "1")
+	m = press(selectRow(t, m, kLS, "default-subnet"), "x")
+	if m.diagModal || !strings.Contains(m.flash, "select one of its ports") {
+		t.Errorf("x on a switch must explain instead of picking a pod, flash=%q", m.flash)
+	}
+}
+
+func TestTraceNextHopIsUnambiguous(t *testing.T) {
+	m := loaded(t, 140, 50, false)
+	tg := m.resolveDiagTarget(m.tree.byID["lsp:lsp-pod1-uuid"])
+	off, err := m.traceRequest(tg, "8.8.8.8", "icmp", 0)
+	if err != nil || off.DstMAC != tg.Gateways["ovn_cluster"] || off.DstMAC == "" {
+		t.Errorf("off-subnet traffic goes to the subnet's router MAC, got %+v (%v)", off, err)
+	}
+	on, err := m.traceRequest(tg, "10.244.0.11", "icmp", 0)
+	if err != nil || on.DstMAC == "" || on.DstMAC == off.DstMAC {
+		t.Errorf("on-subnet traffic goes to the peer's own MAC, got %+v (%v)", on, err)
+	}
+	tg.Gateways = map[string]string{"r1": "00:00:00:00:00:01", "r2": "00:00:00:00:00:02"}
+	if _, err := m.traceRequest(tg, "8.8.8.8", "icmp", 0); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("a switch with two routers must not pick one silently, err=%v", err)
+	}
+}
+
+// TestDiagTargetSurvivesLiveUpdates: the open modal follows its object by id,
+// never the cursor.
+func TestDiagTargetSurvivesLiveUpdates(t *testing.T) {
+	m := newClusterDiagModel(t, diag.NewMockExecutor())
+	m = press(selectRow(t, m, kLSP, "app-pod-2.default"), "x")
+	lsID := refTarget(m.tree.byID[m.diagTgt.ID], "subnet")
+
+	// the port moves to node-1 (e.g. live migration)
+	ports := m.switchWorkloads[lsID]
+	for i := range ports {
+		if ports[i].Name == "app-pod-2.default" {
+			p := *ports[i].Properties
+			cp := map[string]interface{}{}
+			for k, v := range p {
+				cp[k] = v
+			}
+			cp["boundChassis"] = "chassis-node-1"
+			ports[i].Properties = &cp
+		}
+	}
+	m.rebuildTree()
+	if m.diagTgt.Node != "node-1" || !strings.Contains(m.flash, "node-2 → node-1") {
+		t.Errorf("target must follow its port to node-1, got node=%q flash=%q", m.diagTgt.Node, m.flash)
+	}
+
+	// the port disappears: the target goes stale instead of jumping to another row
+	var keep []api.GraphNode
+	for _, p := range m.switchWorkloads[lsID] {
+		if p.Name != "app-pod-2.default" {
+			keep = append(keep, p)
+		}
+	}
+	m.switchWorkloads[lsID] = keep
+	m.rebuildTree()
+	if ok, why := m.diagTgt.can(actConntrack); ok || !strings.Contains(why, "no longer exists") {
+		t.Errorf("a removed target must disable every action, got ok=%v why=%q", ok, why)
+	}
+}
+
+func TestDiagMultiNICWorkloadAsksWhichNIC(t *testing.T) {
+	m := newClusterDiagModel(t, diag.NewMockExecutor())
+	m = press(m, "3")
+	wl := m.tree.byID["wl:default/Pod/app-pod-1"]
+	wl.children = append(wl.children, m.tree.byID["lsp:lsp-pod2-uuid"])
+	m = press(selectRow(t, m, kWL, "app-pod-1"), "x")
+	if len(m.diagTgt.NICs) != 2 || !strings.Contains(m.View(), "several NICs") {
+		t.Fatalf("a multi-NIC workload must ask for the NIC first:\n%s", m.View())
+	}
+	if ok, _ := m.diagTgt.can(actTrace); ok {
+		t.Errorf("no action before a NIC is chosen")
+	}
+	m = press(m, "2")
+	if m.diagTgt.Port != "app-pod-2.default" || m.diagTgt.Owner != "POD app-pod-1" {
+		t.Errorf("choosing NIC 2 must target it, got %+v", m.diagTgt)
+	}
+}

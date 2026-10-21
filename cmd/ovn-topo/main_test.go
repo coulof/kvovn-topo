@@ -338,43 +338,6 @@ func TestDescribeLoadsNodeDetail(t *testing.T) {
 	}
 }
 
-func TestTargetSelectionAcrossAllViews(t *testing.T) {
-	base := loaded(t, 140, 50, false)
-	for _, md := range []string{"1", "2", "3"} {
-		m := press(base, md, "e")
-		for i, r := range m.rows {
-			m.cursor = i
-			node, conn := m.currentSelectedTarget()
-			switch r.n.kind {
-			case kLSP, kLS, kLR, kChassis:
-				if node == nil || node.Id != r.n.id {
-					t.Errorf("%s row %d (%s %s): target %v, want %s", m.mode, i, r.n.kind, r.n.name, node, r.n.id)
-				}
-			case kLRP:
-				if conn == nil || conn.PortName != r.n.name {
-					t.Errorf("%s row %d: LRP target conn %v, want %s", m.mode, i, conn, r.n.name)
-				}
-			case kWL:
-				if node == nil || node.Type != api.GraphNodeTypeLSP {
-					t.Errorf("%s row %d: a workload must target its first NIC, got %v", m.mode, i, node)
-				}
-			}
-		}
-	}
-	m := press(base, "4")
-	for i, r := range m.portRows() {
-		m.pcur = i
-		if _, c := m.currentSelectedTarget(); c == nil || c.PortName != r.conn.PortName {
-			t.Errorf("ports row %d: target %v, want %s", i, c, r.conn.PortName)
-		}
-	}
-	m = press(base, "1")
-	m.cursor = 999
-	if n := m.selectedXNode(); n == nil {
-		t.Errorf("an out-of-range cursor must clamp, not lose the selection")
-	}
-}
-
 func newDiagModel(t *testing.T) model {
 	t.Helper()
 	fakeClient := fake.NewSimpleClientset(
@@ -430,9 +393,9 @@ func TestDiagnosticsMode(t *testing.T) {
 	assertFits(t, "diag modal", modal, 140, 50)
 
 	// The trace source is the selected port (regression: it used to come from the old tree index).
-	req := m.resolveTraceEndpoints("10.100.0.10", "icmp", 0)
-	if req.Inport != "app-pod-1.default" || req.SrcIP != "10.244.0.10" || req.Datapath != "default-subnet" {
-		t.Errorf("trace must start at the selected workload port, got %+v", req)
+	req, err := m.traceRequest(m.diagTgt, "10.100.0.10", "icmp", 0)
+	if err != nil || req.Inport != "app-pod-1.default" || req.SrcIP != "10.244.0.10" || req.Datapath != "default-subnet" {
+		t.Errorf("trace must start at the selected workload port, got %+v (%v)", req, err)
 	}
 
 	m = press(m, "1")

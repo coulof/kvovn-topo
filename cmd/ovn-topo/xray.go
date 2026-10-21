@@ -5,8 +5,6 @@ package main
 
 import (
 	"strings"
-
-	"github.com/coulof/ovn-topology/pkg/api"
 )
 
 type mode string
@@ -146,11 +144,23 @@ func (m *model) rebuildRows() {
 		}
 	}
 	walk(m.tree.roots[m.mode], nil, string(m.mode), "", 0, 0)
+	// Restore the selection by row key; if that path vanished (object re-parented),
+	// fall back to the same object elsewhere before giving up and going to the top.
 	m.cursor = 0
+	found := false
 	for i, r := range m.rows {
 		if r.key == sel {
-			m.cursor = i
+			m.cursor, found = i, true
 			break
+		}
+	}
+	if id := sel[strings.LastIndex(sel, "/")+1:]; !found && id != "" {
+		id = strings.TrimPrefix(id, "@")
+		for i, r := range m.rows {
+			if r.n.id == id {
+				m.cursor = i
+				break
+			}
 		}
 	}
 	m.offset = window(m.cursor, m.offset, len(m.rows), m.bodyH())
@@ -267,54 +277,4 @@ func (m *model) back() {
 		}
 	}
 	m.offset = window(m.cursor, m.offset, len(m.rows), m.bodyH())
-}
-
-// currentSelectedTarget maps the selection to what the Tier 1 diagnostics act on:
-// a graph node (LSP, LS, LR, chassis…) and/or the router port connection that
-// gives it a gateway MAC / subnet.
-func (m model) currentSelectedTarget() (*api.GraphNode, *RouterPortConnection) {
-	n := m.selectedXNode()
-	if n == nil {
-		return nil, nil
-	}
-	firstPort := func(ports []RouterPortConnection) *RouterPortConnection {
-		if len(ports) > 0 {
-			return &ports[0]
-		}
-		return nil
-	}
-	switch n.kind {
-	case kLRP:
-		return nil, n.conn
-	case kLSP:
-		for _, r := range n.refs {
-			if r.label == "subnet" {
-				return n.gn, firstPort(m.switchPorts[r.to])
-			}
-		}
-		return n.gn, nil
-	case kLS:
-		return n.gn, firstPort(m.switchPorts[n.id])
-	case kLR:
-		return n.gn, firstPort(m.routerPorts[n.id])
-	case kChassis, kExt, kVPC:
-		return n.gn, nil
-	case kWL:
-		if len(n.children) > 0 {
-			c := n.children[0]
-			for _, r := range c.refs {
-				if r.label == "subnet" {
-					return c.gn, firstPort(m.switchPorts[r.to])
-				}
-			}
-			return c.gn, nil
-		}
-	}
-	return nil, nil
-}
-
-// diagTargetable reports whether the selection is something diagnostics can act on.
-func (m model) diagTargetable() bool {
-	n, c := m.currentSelectedTarget()
-	return c != nil || (n != nil && n.Type != api.GraphNodeTypeVPC && n.Type != api.GraphNodeTypeExternal)
 }

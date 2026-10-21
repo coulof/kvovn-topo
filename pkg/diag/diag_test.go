@@ -2,6 +2,7 @@ package diag
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -355,5 +356,46 @@ func TestMockExecutor(t *testing.T) {
 	}
 	if mock.Calls[0].Cmd[0] != "ovn-trace" {
 		t.Errorf("expected cmd ovn-trace, got %s", mock.Calls[0].Cmd[0])
+	}
+}
+
+func TestFindOVSInterfaceNeverGuesses(t *testing.T) {
+	ctx := context.Background()
+	client := fake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "ovs-ovn-a", Namespace: "kube-system", Labels: map[string]string{"app": "ovs-ovn"}},
+			Spec:       corev1.PodSpec{NodeName: "node-a"},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "ovs-ovn-b", Namespace: "kube-system", Labels: map[string]string{"app": "ovs-ovn"}},
+			Spec:       corev1.PodSpec{NodeName: "node-b"},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+	)
+	locator := NewPodLocator(client, "kube-system")
+	exec := NewMockExecutor()
+	exec.StdoutMap["ovs-vsctl"] = []byte("4f2a_h\n")
+
+	iface, err := locator.FindOVSInterface(ctx, exec, "node-b", "app-1.default")
+	if err != nil || iface != "4f2a_h" {
+		t.Fatalf("expected the iface-id match, got %q %v", iface, err)
+	}
+	c := exec.Calls[len(exec.Calls)-1]
+	if c.Pod.Name != "ovs-ovn-b" || strings.Join(c.Cmd, " ") != "ovs-vsctl --bare --columns=name find interface external_ids:iface-id=app-1.default" {
+		t.Errorf("lookup must run on the port's node with the typed command, got %s %v", c.Pod.Name, c.Cmd)
+	}
+
+	exec.StdoutMap["ovs-vsctl"] = []byte("")
+	if _, err := locator.FindOVSInterface(ctx, exec, "node-b", "gw-external"); !errors.Is(err, ErrIfaceNotFound) {
+		t.Errorf("a port without interface must be ErrIfaceNotFound (no ovn0/br-external guess), got %v", err)
+	}
+	if _, err := locator.FindOVSInterface(ctx, exec, "", "app-1.default"); err == nil {
+		t.Errorf("an unknown node must be an error, not the first node of the cluster")
+	}
+	for _, bad := range []string{"", "a;rm -rf /", "x y", "p$(id)"} {
+		if _, err := BuildFindIfaceByIfaceIDCommand(bad); err == nil {
+			t.Errorf("port name %q must be rejected", bad)
+		}
 	}
 }

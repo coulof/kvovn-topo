@@ -273,9 +273,14 @@ func (m model) openDiag() (tea.Model, tea.Cmd) {
 		m.setFlash("Tier 1 diagnostics are off — run ovn-topo --diag (ADR-0001)", true)
 	case !m.diagAvailable:
 		m.setFlash("diagnostics unavailable: "+m.diagReason, true)
-	case !m.diagTargetable():
-		m.setFlash("select a port, switch, router, workload or chassis to run diagnostics", true)
 	default:
+		t := m.resolveDiagTarget(m.selectedXNode())
+		if !t.anyEnabled() {
+			_, why := t.can(actTrace)
+			m.setFlash("diagnostics: "+why, true)
+			break
+		}
+		m.diagTgt, m.nicIdx = t, 0
 		m.diagModal = true
 		m.diagStep = diagStepMenu
 		m.diagRawOutput = ""
