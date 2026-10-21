@@ -613,3 +613,53 @@ func TestRefetchPlanTargetsAffectedSwitches(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeRawIsPrettyJSON(t *testing.T) {
+	m := press(loaded(t, 80, 24, false), "2")
+	m = selectRow(t, m, kChassis, "node-1")
+	long := strings.Repeat("abcdefghij", 30)
+	other := map[string]interface{}{"datapath-type": "", "is-interconnection": "false", "long": long}
+	for _, k := range []string{"ct-commit-nat-v2", "ct-commit-to-zone", "ct-label-flush", "ct-next-zone", "ct-no-masked-label",
+		"ct-state-save", "fdb-timestamp", "iface-types", "mac-binding-timestamp"} {
+		other[k] = "true"
+	}
+	raw := map[string]interface{}{"OtherConfig": other, "Hostname": "node-1", "NbCfg": 42.0, "Transport": nil}
+	m.scr, m.desc = scrDescribe, &descState{node: m.selectedXNode(), raw: true, detail: &api.NodeDetail{Raw: raw}}
+
+	lines := m.describeLines()
+	var plain []string
+	for _, l := range lines {
+		s := ansi.Strip(l)
+		if strings.Contains(s, "…") {
+			t.Errorf("raw view must wrap, not truncate: %q", s)
+		}
+		if w := lipgloss.Width(l); w > m.w()-2 {
+			t.Errorf("raw line wider than the box (%d): %q", w, s)
+		}
+		plain = append(plain, s)
+	}
+	text := strings.Join(plain, "\n")
+	for _, want := range []string{`"OtherConfig": {`, `"ct-commit-nat-v2": "true",`, `"NbCfg": 42,`, `"Transport": null`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("expected %q on its own line in the raw view:\n%s", want, text)
+		}
+	}
+	// Undo the soft wraps and indentation (no value here contains spaces): the text is
+	// still valid JSON and the 300-char value is complete.
+	joined := strings.Join(strings.Fields(text), "")
+	var back map[string]interface{}
+	if err := json.Unmarshal([]byte(joined), &back); err != nil {
+		t.Fatalf("raw view must stay valid JSON once wraps are removed: %v\n%s", err, joined)
+	}
+	if got := back["OtherConfig"].(map[string]interface{})["long"]; got != long {
+		t.Errorf("long value cut: %v", got)
+	}
+
+	// The describe view unfolds a map that does not fit instead of truncating it.
+	m.desc.raw = false
+	m.desc.node.gn.Properties = &map[string]interface{}{"options": other}
+	desc := ansi.Strip(strings.Join(m.describeLines(), "\n"))
+	if strings.Contains(desc, "…") || !strings.Contains(desc, "ct-commit-nat-v2") || !strings.Contains(desc, "{12}") {
+		t.Errorf("describe must unfold long maps one key per line:\n%s", desc)
+	}
+}

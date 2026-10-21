@@ -105,9 +105,12 @@ func (m model) describeLines() []string {
 		if raw == nil {
 			return []string{"", "   " + st.MutedText.Render("no raw columns for this object")}
 		}
-		for _, k := range sortedKeys(raw) {
-			b, _ := json.Marshal(raw[k])
-			out = append(out, " "+st.CIDR.Render(k)+": "+string(b))
+		b, err := json.MarshalIndent(raw, "", "  ") // jq-style: indented, keys sorted
+		if err != nil {
+			return []string{"", "   " + st.Bad.Render("raw columns not encodable: "+err.Error())}
+		}
+		for _, l := range strings.Split(string(b), "\n") {
+			out = append(out, m.jsonLines(l, m.w()-3)...)
 		}
 		if d.loading {
 			out = append(out, "", "   "+st.MutedText.Render("loading /node detail…"))
@@ -133,7 +136,7 @@ func (m model) describeLines() []string {
 	if p := props(n.gn); len(p) > 0 {
 		out = append(out, "", section("Properties"))
 		for _, k := range sortedKeys(p) {
-			out = append(out, kv(k, fmtValue(p[k])))
+			out = append(out, m.kvBlock(k, p[k], 0)...)
 		}
 	}
 	if n.gn != nil && n.gn.K8s != nil {
@@ -180,7 +183,7 @@ func (m model) describeLines() []string {
 		if len(d.detail.ExternalIds) > 0 {
 			out = append(out, "", section("External IDs"))
 			for _, k := range sortedKeys(d.detail.ExternalIds) {
-				out = append(out, kv(k, d.detail.ExternalIds[k]))
+				out = append(out, m.kvBlock(k, d.detail.ExternalIds[k], 0)...)
 			}
 		}
 		if d.detail.Related != nil && len(*d.detail.Related) > 0 {
@@ -205,6 +208,131 @@ func (m model) describeView() []string {
 		verb = "Raw"
 	}
 	title := st.Label.Render(verb) + st.CIDR.Render("("+m.desc.node.kind+")") + " " + m.desc.node.name +
-		st.MutedText.Render("  esc: back · y: raw · j/k: scroll")
+		st.MutedText.Render("  esc: back · y: raw · j/k: scroll · G: end")
 	return box(lines[off:], m.w(), m.areaH(), title, st.Border)
+}
+
+// kvBlock renders one describe property. Values that fit stay on one line; a
+// map or list that does not fit unfolds into one indented line per entry, and a
+// long scalar wraps, so nothing is cut off with "…".
+func (m model) kvBlock(k string, v interface{}, depth int) []string {
+	st := m.styles
+	ind := 3 + 2*depth
+	lw := max(20-2*depth, 8)
+	label := strings.Repeat(" ", ind) + st.Label.Render(pad(k, lw))
+	inline := fmtValue(v)
+	avail := m.w() - 2 - ind - lw
+	if len([]rune(inline)) <= avail {
+		return []string{label + inline}
+	}
+	var out []string
+	switch x := v.(type) {
+	case map[string]interface{}:
+		out = append(out, label+st.MutedText.Render(fmt.Sprintf("{%d}", len(x))))
+		for _, kk := range sortedKeys(x) {
+			out = append(out, m.kvBlock(kk, x[kk], depth+1)...)
+		}
+		return out
+	case []interface{}:
+		out = append(out, label+st.MutedText.Render(fmt.Sprintf("[%d]", len(x))))
+		for i, e := range x {
+			out = append(out, m.kvBlock(fmt.Sprintf("[%d]", i), e, depth+1)...)
+		}
+		return out
+	}
+	for i, l := range hardWrap(inline, max(avail, 10)) {
+		if i == 0 {
+			out = append(out, label+l)
+		} else {
+			out = append(out, strings.Repeat(" ", ind+lw)+l)
+		}
+	}
+	return out
+}
+
+// hardWrap splits s into chunks of at most w runes (no word boundaries: OVSDB
+// values such as matches and option lists rarely have useful ones).
+func hardWrap(s string, w int) []string {
+	r := []rune(s)
+	var out []string
+	for len(r) > w {
+		out = append(out, string(r[:w]))
+		r = r[w:]
+	}
+	return append(out, string(r))
+}
+
+type jsonSeg struct {
+	text string
+	kind byte // k key, s string, n number/bool, z null, p punctuation/space
+}
+
+// tokenizeJSONLine splits one line of MarshalIndent output into coloured segments.
+func tokenizeJSONLine(l string) []jsonSeg {
+	var segs []jsonSeg
+	r := []rune(l)
+	for i := 0; i < len(r); {
+		switch c := r[i]; {
+		case c == '"':
+			j := i + 1
+			for j < len(r) && r[j] != '"' {
+				if r[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j = min(j+1, len(r))
+			kind := byte('s')
+			if rest := strings.TrimLeft(string(r[j:]), " "); strings.HasPrefix(rest, ":") {
+				kind = 'k'
+			}
+			segs = append(segs, jsonSeg{string(r[i:j]), kind})
+			i = j
+		case c == '-' || c >= '0' && c <= '9' || c == 't' || c == 'f' || c == 'n':
+			j := i
+			for j < len(r) && !strings.ContainsRune(",]} ", r[j]) {
+				j++
+			}
+			kind := byte('n')
+			if string(r[i:j]) == "null" {
+				kind = 'z'
+			}
+			segs = append(segs, jsonSeg{string(r[i:j]), kind})
+			i = j
+		default:
+			segs = append(segs, jsonSeg{string(c), 'p'})
+			i++
+		}
+	}
+	return segs
+}
+
+// jsonLines colours one MarshalIndent line like jq and wraps it at w cells,
+// continuing at the line's indentation + 2. Only colour is added: the text
+// itself stays valid JSON.
+func (m model) jsonLines(l string, w int) []string {
+	st := m.styles
+	style := map[byte]func(...string) string{
+		'k': st.CIDR.Render, 's': st.Ok.Render, 'n': st.ActiveGateway.Render, 'z': st.Faint.Render, 'p': st.MutedText.Render,
+	}
+	indent := len(l) - len(strings.TrimLeft(l, " "))
+	cont := strings.Repeat(" ", min(indent+2, w/2))
+	var out []string
+	cur, curW := " ", 1
+	for _, seg := range tokenizeJSONLine(l) {
+		r := []rune(seg.text)
+		for len(r) > 0 {
+			room := w - curW
+			if room <= 0 {
+				out = append(out, cur)
+				cur, curW = " "+cont, 1+len(cont)
+				continue
+			}
+			n := min(room, len(r))
+			cur += style[seg.kind](string(r[:n]))
+			curW += n
+			r = r[n:]
+		}
+	}
+	return append(out, cur)
 }
