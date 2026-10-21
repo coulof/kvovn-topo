@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -70,27 +71,36 @@ func (m *KubeNodeMapper) Sync(ctx context.Context) error {
 		return err
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.chassisToNode = make(map[string]string, len(nodes.Items))
-	m.hostnameToNode = make(map[string]string, len(nodes.Items))
-
+	ptrs := make([]*corev1.Node, len(nodes.Items))
 	for i := range nodes.Items {
-		node := &nodes.Items[i]
-		m.hostnameToNode[node.Name] = node.Name
+		ptrs[i] = &nodes.Items[i]
+	}
+	m.SetNodes(ptrs)
+	return nil
+}
 
+// SetNodes replaces the mapping tables from a full node list and reports whether
+// the chassis → node mapping changed.
+func (m *KubeNodeMapper) SetNodes(nodes []*corev1.Node) bool {
+	chassisToNode := make(map[string]string, len(nodes))
+	hostnameToNode := make(map[string]string, len(nodes))
+	for _, node := range nodes {
+		hostnameToNode[node.Name] = node.Name
 		if chassisID, ok := node.Annotations[OvnChassisAnnotation]; ok && chassisID != "" {
-			m.chassisToNode[chassisID] = node.Name
+			chassisToNode[chassisID] = node.Name
 		}
 		// Also check addresses for hostnames
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == corev1.NodeHostName && addr.Address != "" {
-				m.hostnameToNode[addr.Address] = node.Name
+				hostnameToNode[addr.Address] = node.Name
 			}
 		}
 	}
 
-	m.logger.Debug("synchronized kubernetes node chassis mappings", "node_count", len(nodes.Items))
-	return nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	changed := !maps.Equal(m.chassisToNode, chassisToNode) || !maps.Equal(m.hostnameToNode, hostnameToNode)
+	m.chassisToNode, m.hostnameToNode = chassisToNode, hostnameToNode
+	m.logger.Debug("synchronized kubernetes node chassis mappings", "node_count", len(nodes), "changed", changed)
+	return changed
 }

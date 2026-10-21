@@ -95,6 +95,23 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - [ ] Layer 3 e2e `overlay-default` green in PR CI.
 - [ ] `api/openapi.yaml` v1 frozen for M2/M3. Breaking changes after this point require an ADR.
 
+**Follow-up (2026-10-21): live data path audit.** A read of the syncer against libovsdb v0.8.1 found that the snapshot could silently diverge from OVSDB while `/readyz` stayed green.
+- **Reconnects:** with reconnect enabled, libovsdb purges and repopulates its cache with no Delete events and no `DisconnectNotify`. Rows deleted during an outage stayed forever, readiness never dropped, and the reconnect rebuild was dead code. The configured inactivity check was never passed to the client either, so half-open connections went undetected.
+- **Overflow:** a full event queue dropped events and logged a resync that did not exist.
+- **Rebuild:** the rebuild ignored `List` errors.
+- **Ignored tables:** routes, policies, gateway/HA chassis, load balancers, encaps, datapaths and BFD were monitored but ignored by incremental updates.
+- **Kubernetes:** Nodes and Pods were listed once at start.
+
+The fix:
+- **Health probe:** an `Echo` probe drives readiness and triggers a resync (a rebuild from the caches) on reconnect.
+- **Overflow:** an overflow triggers a resync that discards stale queued events.
+- **Rebuild:** the rebuild publishes nothing on error.
+- **Inactivity check:** it is now applied to both clients.
+- **Ignored tables:** all monitored tables are applied incrementally.
+- **Kubernetes:** Node/Pod informers (list + watch, pods trimmed) bump the revision when identity changes.
+- **Tests:** `pkg/ovsdb/syncer_test.go` drives a real libovsdb `TableCache` through `Populate2`/`Purge` (reconnect ghost rows, overflow, rebuild error), mutation-checked. `pkg/graph/kubewatch_test.go` covers late pods and nodes.
+- **Still open:** the layer 2 DoD above, against a real clustered `ovsdb-server`.
+
 ---
 
 ## M2 — TUI: L3 / L2 / Chassis + workload identity (T0)

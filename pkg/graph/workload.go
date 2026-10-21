@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 
@@ -124,26 +125,36 @@ func (r *KubeWorkloadResolver) Sync(ctx context.Context) error {
 		return fmt.Errorf("failed to list pods for workload resolution: %w", err)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.workloads = make(map[string]*WorkloadInfo, len(pods.Items)*2)
-
+	ptrs := make([]*corev1.Pod, len(pods.Items))
 	for i := range pods.Items {
-		pod := &pods.Items[i]
+		ptrs[i] = &pods.Items[i]
+	}
+	r.SetPods(ptrs)
+	return nil
+}
+
+// SetPods replaces the workload index from a full pod list and reports whether any
+// workload identity changed.
+func (r *KubeWorkloadResolver) SetPods(pods []*corev1.Pod) bool {
+	workloads := make(map[string]*WorkloadInfo, len(pods)*2)
+	for _, pod := range pods {
 		info := extractWorkloadFromPod(pod)
 
 		key := fmt.Sprintf("%s/%s", info.Namespace, info.PodName)
-		r.workloads[key] = info
-		r.workloads[info.PodName] = info
+		workloads[key] = info
+		workloads[info.PodName] = info
 		if info.WorkloadName != "" {
 			vmKey := fmt.Sprintf("%s/%s", info.Namespace, info.WorkloadName)
-			r.workloads[vmKey] = info
-			r.workloads[info.WorkloadName] = info
+			workloads[vmKey] = info
+			workloads[info.WorkloadName] = info
 		}
 	}
 
-	return nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := !maps.EqualFunc(r.workloads, workloads, func(a, b *WorkloadInfo) bool { return *a == *b })
+	r.workloads = workloads
+	return changed
 }
 
 func extractWorkloadFromPod(pod *corev1.Pod) *WorkloadInfo {
