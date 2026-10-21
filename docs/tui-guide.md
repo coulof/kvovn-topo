@@ -114,9 +114,9 @@ The Port Matrix as a resource table: one row per logical router port, including 
 
 ## 6. Tier 1 Diagnostics — `x` (requires `--diag`)
 
-`x` opens the diagnostics modal for the selection: an LSP (or a workload, via its first NIC), a switch, a router, a router port or a chassis. Groups, namespaces, VPCs and external networks are not diagnosable and `x` says so. Without `--diag`, or when RBAC denies `pods/exec`, `x` explains why instead of failing.
+`x` opens the diagnostics modal for the selection: a switch port (LSP), a workload (asking which NIC when it has several), a router port or a chassis. Switches, routers, groups, namespaces, VPCs and external networks are not traffic endpoints, so `x` asks you to select a port or a chassis instead (see *What `x` acts on* below). Without `--diag`, or when RBAC denies `pods/exec`, `x` explains why instead of failing.
 
-- **`[1] ovn-trace`** — destination picker with fzf-style search, custom IP (`10.144.97.201` or `10.144.97.201:22`), category tabs (`Tab`: All / VM / Pod / Gateway / Node / Public DNS) and protocol presets (`Ctrl+P`, `F1`–`F5`: ICMP, TCP 22/80/443, UDP 53). The microflow starts at the **selected** port (inport, MAC, IP); traffic leaving the subnet gets the router's gateway MAC as `eth.dst`. Output: verdict (`DELIVERED` / `DROPPED`), hop-by-hop path, evaluated pipeline stages; `o` toggles raw output.
+- **`[1] ovn-trace`** — destination picker with fzf-style search, custom IP (`10.144.97.201` or `10.144.97.201:22`), category tabs (`Tab`: All / VM / Pod / Gateway / Node ovn0 / Underlay / Public DNS; *Node ovn0* is a node's port on the join switch inside OVN, *Underlay* the chassis tunnel IP outside OVN) and protocol presets (`Ctrl+P`, `F1`–`F5`: ICMP, TCP 22/80/443, UDP 53). The microflow starts at the **selected** port (inport, MAC, IP); traffic leaving the subnet gets the router's gateway MAC as `eth.dst`. Output: verdict (`DELIVERED` / `DROPPED`), hop-by-hop path, evaluated pipeline stages; `o` toggles raw output.
 - **`[2]` live tcpdump** on the port's dedicated host veth (`<hash>_h`; `ovn0` for node ports, the external bridge for gateways), with presets or a custom BPF filter. `Space`/`Esc` stops the capture.
 - **`[3]` filtered conntrack** for the port IP · **`[4]` OVS port interface** (link state, ofport, MTU, counters) · **`[5]` `ovs-vsctl show`** on the hosting node · **`[6]` `ovn-controller` logs** (chassis UUID → node name resolved).
 
@@ -130,7 +130,8 @@ The target is captured when you press `x` and shown at the top of the modal: the
 |---|---|---|---|
 | Workload port (LSP) | the port itself (its switch, IP, MAC) | its **Port_Binding chassis** | node actions if the port is unbound |
 | Infrastructure port (router / localnet) | the port, if it has an IP | — | tcpdump, conntrack, OVS port, bridges, logs |
-| Router port (LRP) | the router datapath, from this port | the **active gateway chassis** (centralized); tcpdump on `br-external` | OVS port; all node actions if distributed |
+| Router port (LRP), centralized | the router datapath, from this port | the **active gateway chassis**; tcpdump on `br-external` | OVS port |
+| Router port (LRP), distributed | the router datapath, from this port | **the chassis you pick** (`c`, or asked on the first node action); tcpdump on that node's `ovn0` for the join port | OVS port; tcpdump for non-join ports (routed inside OVS, no host interface) |
 | Chassis | — | that chassis | trace, tcpdump, OVS port |
 | Workload (VM / Pod) | its NIC; **with several NICs you pick one first** | that NIC's chassis | as for its NIC |
 | Switch, router, VPC, namespace | — | — | everything (select a port or a chassis) |

@@ -49,6 +49,14 @@ type xnode struct {
 	refs           []xref
 }
 
+// childrenOrNil is n.children, safe on a nil node.
+func (n *xnode) childrenOrNil() []*xnode {
+	if n == nil {
+		return nil
+	}
+	return n.children
+}
+
 // sig is what a live update compares to decide whether a row changed.
 func (n *xnode) sig() string {
 	return fmt.Sprintf("%s|%s|%d|%d", n.summary, n.badge, n.health, len(n.children))

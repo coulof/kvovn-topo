@@ -112,6 +112,8 @@ type model struct {
 	tcpdumpPackets    []string
 	diagTgt           diagTarget // captured when the modal opens (diagtarget.go)
 	nicIdx            int
+	chassisIdx        int
+	pendingAction     diagAction
 	diagStreaming     bool
 	diagCancelStream  context.CancelFunc
 	diagRawOutput     string

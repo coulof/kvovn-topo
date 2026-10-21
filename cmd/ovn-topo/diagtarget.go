@@ -50,6 +50,14 @@ type diagTarget struct {
 	NodeSource string // where Node comes from, shown in the modal
 	Iface      string // host interface when it is known without a lookup
 	IfaceNote  string
+	// CapturePort is the logical port whose OVS interface tcpdump captures on, when it
+	// differs from Port (a distributed join LRP is captured on the chosen node's ovn0).
+	CapturePort string
+
+	// ChooseChassis: the object exists on every chassis (distributed router port), so
+	// node-scoped actions first ask which chassis to run on. Chassis holds the choice.
+	ChooseChassis bool
+	Chassis       string
 
 	Warnings []string
 	Disabled map[diagAction]string
@@ -80,6 +88,11 @@ func (t diagTarget) can(a diagAction) (bool, string) {
 		return false, r
 	}
 	return true, ""
+}
+
+// needsChassis reports whether action a must first ask which chassis to run on.
+func (t diagTarget) needsChassis(a diagAction) bool {
+	return t.ChooseChassis && t.Chassis == "" && a != actTrace
 }
 
 func (t diagTarget) anyEnabled() bool {
@@ -219,7 +232,12 @@ func (m model) resolveLRP(t *diagTarget, n *xnode) {
 	}
 	t.disable("router ports have no OVS interface — select a switch port", actOvsPort)
 	if t.Node == "" {
-		t.disable("distributed router port runs on every chassis — select a chassis", nodeActions...)
+		// Distributed: the port is instantiated on every chassis. Node actions run on
+		// the chassis the user picks (withChassis), never on an implicit one.
+		t.ChooseChassis = true
+		if t.SrcIP == "" {
+			t.disable("router port has no IP", actConntrack)
+		}
 		return
 	}
 	t.Iface, t.IfaceNote = "br-external", "Kube-OVN default provider bridge on the gateway chassis (assumed)"
@@ -246,6 +264,13 @@ func (m *model) revalidateDiagTarget() {
 	}
 	nt := m.resolveDiagTarget(n)
 	nt.Owner = old.Owner
+	if old.Chassis != "" && nt.ChooseChassis { // keep the chassis the user picked
+		if ch := m.tree.byID[old.Chassis]; ch != nil {
+			nt = m.withChassis(nt, ch)
+		} else {
+			m.setFlash("the chosen chassis is gone — choose another", true)
+		}
+	}
 	if old.Node != "" && nt.Node != old.Node {
 		m.setFlash(fmt.Sprintf("%s moved: %s → %s", old.Label, old.Node, firstNonEmpty(nt.Node, "unbound")), true)
 	}
@@ -341,4 +366,33 @@ func (t diagTarget) describe() []string {
 		lines = append(lines, "iface "+t.Iface+"  ← "+t.IfaceNote)
 	}
 	return lines
+}
+
+// withChassis pins a distributed router port's node-scoped actions to one chassis.
+// tcpdump needs a host interface: on the join switch that is the chosen node's
+// ovn0 (its node-<host> port, looked up by iface-id); other distributed ports are
+// routed inside OVS and have none, so the capture stays unavailable.
+func (m model) withChassis(t diagTarget, ch *xnode) diagTarget {
+	t.Chassis = ch.id
+	t.Node, t.NodeSource = m.chassisNode(ch), "chosen chassis "+ch.name+" (distributed port)"
+	lrp := m.tree.byID[t.ID]
+	if lrp == nil || lrp.conn == nil {
+		t.disable("router port no longer exists", actTcpdump)
+		return t
+	}
+	for _, c := range m.tree.byID[lrp.conn.SwitchID].childrenOrNil() {
+		if c.kind != kLSP || !strings.HasPrefix(c.name, "node-") {
+			continue
+		}
+		for _, r := range c.refs {
+			if r.label == "bound on" && r.to == ch.id {
+				t.CapturePort = c.name
+				t.IfaceNote = "ovn0 of " + t.Node + " (join port " + c.name + ")"
+			}
+		}
+	}
+	if t.CapturePort == "" {
+		t.disable("routed inside OVS: no host interface — capture on a switch port", actTcpdump)
+	}
+	return t
 }

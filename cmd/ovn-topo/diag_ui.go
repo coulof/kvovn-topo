@@ -26,6 +26,7 @@ const (
 	diagStepPickDest
 	diagStepPickTcpdump
 	diagStepResult
+	diagStepPickChassis // distributed router port: which chassis node actions run on
 )
 
 // TcpdumpPreset defines a selectable BPF filter preset for tcpdump.
@@ -104,6 +105,29 @@ func (m model) probeDiagCmd() tea.Cmd {
 
 // updateDiagModal handles keys while the diagnostics modal is open.
 func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.diagStep == diagStepPickChassis {
+		chs := m.tree.roots[modeChassis]
+		k := msg.String()
+		switch {
+		case k == "esc":
+			m.diagStep, m.pendingAction = diagStepMenu, ""
+		case k == "up" || k == "k":
+			m.chassisIdx = max(m.chassisIdx-1, 0)
+		case k == "down" || k == "j":
+			m.chassisIdx = min(m.chassisIdx+1, len(chs)-1)
+		case len(k) == 1 && k[0] >= '1' && k[0] <= '9' && int(k[0]-'1') < len(chs):
+			m.chassisIdx = int(k[0] - '1')
+			fallthrough
+		case k == "enter" && len(chs) > 0:
+			m.diagTgt = m.withChassis(m.diagTgt, chs[min(m.chassisIdx, len(chs)-1)])
+			m.diagStep = diagStepMenu
+			if a := m.pendingAction; a != "" {
+				m.pendingAction = ""
+				return m.runDiagAction(a)
+			}
+		}
+		return m, nil
+	}
 	if len(m.diagTgt.NICs) > 0 && m.diagStep == diagStepMenu {
 		nics := m.diagTgt.NICs
 		k := msg.String()
@@ -372,6 +396,11 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "1", "2", "3", "4", "5", "6":
 		return m.runDiagAction(diagActions[msg.String()[0]-'1'])
+	case "c":
+		if m.diagTgt.ChooseChassis {
+			m.diagStep, m.pendingAction, m.chassisIdx = diagStepPickChassis, "", 0
+		}
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -379,6 +408,11 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // runDiagAction starts an action on the captured target, or explains why it cannot run.
 func (m model) runDiagAction(a diagAction) (tea.Model, tea.Cmd) {
+	if m.diagTgt.needsChassis(a) {
+		m.diagStep, m.pendingAction, m.chassisIdx = diagStepPickChassis, a, 0
+		m.diagError = nil
+		return m, nil
+	}
 	if ok, why := m.diagTgt.can(a); !ok {
 		m.diagError = fmt.Errorf("%s: %s", a, why)
 		return m, nil
@@ -826,7 +860,8 @@ func (m *model) executeTcpdumpStream(filter string, t diagTarget) tea.Cmd {
 	m.diagAction = "tcpdump"
 	m.diagScrollOffset = 0
 	m.diagError = nil
-	m.diagTitle = fmt.Sprintf("Live tcpdump: resolving the interface of %s on %s…", t.Port, t.Node)
+	capture := firstNonEmpty(t.CapturePort, t.Port)
+	m.diagTitle = fmt.Sprintf("Live tcpdump: resolving the interface of %s on %s…", capture, t.Node)
 	m.tcpdumpPackets = nil
 	m.diagRawOutput = ""
 
@@ -837,14 +872,14 @@ func (m *model) executeTcpdumpStream(filter string, t diagTarget) tea.Cmd {
 	return func() tea.Msg {
 		iface, how := t.Iface, t.IfaceNote
 		if iface == "" {
-			found, err := loc.FindOVSInterface(ctx, exec, t.Node, t.Port)
+			found, err := loc.FindOVSInterface(ctx, exec, t.Node, capture)
 			if err != nil {
 				return tcpdumpStartedMsg{err: err}
 			}
-			iface, how = found, "OVS iface-id "+t.Port
+			iface, how = found, firstNonEmpty(t.IfaceNote, "OVS iface-id "+capture)
 		}
 		effectiveFilter := filter
-		if t.Iface != "" && t.SrcIP != "" && !strings.Contains(filter, "host") {
+		if (t.Iface != "" || t.CapturePort != "") && t.SrcIP != "" && !strings.Contains(filter, "host") {
 			effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, t.SrcIP) // shared bridge: keep it to this port
 		}
 		pod, err := loc.FindNodeCNIPod(ctx, t.Node)
@@ -924,6 +959,20 @@ func (m model) renderDiagModal() string {
 		box.WriteString("  " + m.styles.BadgeUnbound.Render("✗ "+t.Stale) + "\n")
 	}
 	box.WriteString("\n")
+
+	if m.diagStep == diagStepPickChassis {
+		box.WriteString(m.styles.Header.Render("  Distributed router port: it runs on every chassis — on which one?") + "\n")
+		for i, ch := range m.tree.roots[modeChassis] {
+			line := fmt.Sprintf("[%d] %s  %s", i+1, ch.name, ch.summary)
+			if i == m.chassisIdx {
+				box.WriteString("  " + m.styles.SelectedNode.Render("► "+line) + "\n")
+			} else {
+				box.WriteString("    " + m.styles.Node.Render(line) + "\n")
+			}
+		}
+		box.WriteString("\n" + m.styles.MutedText.Render("  ↑/↓ + Enter or 1-9: choose chassis | Esc: back"))
+		return m.styles.ModalBox.Render(box.String())
+	}
 
 	if len(t.NICs) > 0 && m.diagStep == diagStepMenu {
 		box.WriteString(m.styles.Header.Render("  This workload has several NICs — which one?") + "\n")
@@ -1056,7 +1105,7 @@ func (m model) renderDiagModal() string {
 	if m.diagStep == diagStepPickTcpdump {
 		box.WriteString(m.styles.Header.Render("Live tcpdump: Select Capture Filter") + "\n\n")
 
-		iface := firstNonEmpty(t.Iface, "OVS interface with iface-id "+t.Port)
+		iface := firstNonEmpty(t.Iface, t.IfaceNote, "OVS interface with iface-id "+t.Port)
 		fmt.Fprintf(&box, "  Capture on: %s on node %s\n\n",
 			m.styles.PortBadge.Render(iface), m.styles.SelectedNode.Render(t.Node))
 
@@ -1180,7 +1229,10 @@ func (m model) renderDiagModal() string {
 	}
 
 	on := " on node " + t.Node
-	if t.Node == "" {
+	switch {
+	case t.ChooseChassis && t.Node == "":
+		on = " — asks which chassis"
+	case t.Node == "":
 		on = ""
 	}
 	menu := map[diagAction]string{
@@ -1199,7 +1251,11 @@ func (m model) renderDiagModal() string {
 			box.WriteString(m.styles.MutedText.Render(fmt.Sprintf("    [%d] %s — unavailable: %s", i+1, strings.SplitN(menu[a], "(", 2)[0], why)) + "\n")
 		}
 	}
-	box.WriteString("\n" + m.styles.MutedText.Render("  Press 1-6 to execute | Esc or x to cancel"))
+	hint := "  Press 1-6 to execute | Esc or x to cancel"
+	if t.ChooseChassis {
+		hint = "  Press 1-6 to execute | c: choose chassis | Esc or x to cancel"
+	}
+	box.WriteString("\n" + m.styles.MutedText.Render(hint))
 
 	return m.styles.ModalBox.Render(box.String())
 }

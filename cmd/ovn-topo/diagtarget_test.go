@@ -311,3 +311,54 @@ func TestDiagMultiNICWorkloadAsksWhichNIC(t *testing.T) {
 		t.Errorf("choosing NIC 2 must target it, got %+v", m.diagTgt)
 	}
 }
+
+// TestDistributedRouterPortAsksWhichChassis: a distributed LRP exists on every
+// chassis, so node actions ask for one instead of being refused (or guessed).
+func TestDistributedRouterPortAsksWhichChassis(t *testing.T) {
+	mock := diag.NewMockExecutor()
+	mock.StdoutMap["ovs-vsctl"] = []byte("ovn0\n")
+	m := newClusterDiagModel(t, mock)
+	m = press(selectRow(t, m, kLRP, "lrp-join-def"), "x")
+	if !m.diagTgt.ChooseChassis || m.diagTgt.Node != "" || !strings.Contains(m.View(), "asks which chassis") {
+		t.Fatalf("a distributed LRP must offer a chassis choice:\n%s", m.View())
+	}
+	if ok, _ := m.diagTgt.can(actTrace); !ok {
+		t.Errorf("trace needs no chassis")
+	}
+
+	// [3] conntrack → chassis picker → [2] node-2 → runs on node-2 only
+	m = press(m, "3")
+	if m.diagStep != diagStepPickChassis || !strings.Contains(m.View(), "on which one?") {
+		t.Fatalf("a node action must open the chassis picker:\n%s", m.View())
+	}
+	r, cmd := m.updateDiagModal(keyMsg("2"))
+	m = r.(model)
+	if m.diagTgt.Node != "node-2" || cmd == nil {
+		t.Fatalf("choosing chassis 2 must pin node-2 and run the pending action, node=%q", m.diagTgt.Node)
+	}
+	if res, _ := cmd().(diagExecResultMsg); res.err != nil || lastCall(t, mock).Pod.Name != "ovs-ovn-node-2" {
+		t.Errorf("conntrack must run on the chosen chassis, got %s (%v)", lastCall(t, mock).Pod.Name, res.err)
+	}
+
+	// No join port of node-2 yet: tcpdump has no host interface and says so.
+	if ok, why := m.diagTgt.can(actTcpdump); ok || !strings.Contains(why, "no host interface") {
+		t.Errorf("tcpdump without a node join port must be unavailable, got ok=%v %q", ok, why)
+	}
+
+	// node-2's ovn0 join port appears (live update): the chosen chassis is kept and
+	// tcpdump captures on that node's ovn0, filtered on the router port IP.
+	props := map[string]interface{}{"addresses": []interface{}{"00:00:00:aa:bb:92 100.64.0.12"}, "type": "",
+		"boundChassis": "chassis-node-2", "boundState": "bound"}
+	m.switchWorkloads["ls:ls-join-uuid"] = append(m.switchWorkloads["ls:ls-join-uuid"],
+		api.GraphNode{Id: "lsp:node-node-2", Name: "node-node-2", Type: api.GraphNodeTypeLSP, Properties: &props})
+	m.diagModal, m.diagStep = true, diagStepMenu
+	m.rebuildTree()
+	if m.diagTgt.Node != "node-2" || m.diagTgt.CapturePort != "node-node-2" {
+		t.Fatalf("live update must keep the chosen chassis and find its join port, got %+v", m.diagTgt)
+	}
+	started, _ := m.executeTcpdumpStream("icmp", m.diagTgt)().(tcpdumpStartedMsg)
+	if started.err != nil || !strings.Contains(started.title, "ovn0") || !strings.Contains(started.title, "host 100.64.0.1") ||
+		!strings.Contains(started.title, "node-2") {
+		t.Errorf("tcpdump must capture on node-2's ovn0 for the join router port: %+v", started)
+	}
+}
