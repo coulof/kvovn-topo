@@ -9,8 +9,8 @@ KUBECONFIG = "{{env.KUBECONFIG | default(value=env.HOME ~ '/.kube/hv-01.yaml')}}
 RANCHER_API = "https://10.144.98.13.sslip.io/"
 NB_PORT = "6641"
 SB_PORT = "6642"
-DAEMON_PORT = "8080"
-DAEMON_URL = "http://127.0.0.1:8080/api/v1"
+DAEMON_PORT = "8888"
+DAEMON_URL = "http://127.0.0.1:8888/api/v1"
 PROXY_POD = "ovn-topology-proxy"
 PROXY_NAMESPACE = "kube-system"
 
