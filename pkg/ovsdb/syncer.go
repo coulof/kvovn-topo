@@ -270,10 +270,14 @@ func (s *Syncer) watchHealth(ctx context.Context) {
 	}
 }
 
-// listInto reads every row of the model's table from the client cache into m.
-func listInto[T any](ctx context.Context, c client.Client, m map[string]*T, key func(*T) []string) error {
+// lister reads every row of a table into result, a pointer to a slice of models
+// (the shape of client.Client.List).
+type lister func(ctx context.Context, result any) error
+
+// listInto reads every row of the model's table into m.
+func listInto[T any](ctx context.Context, list lister, m map[string]*T, key func(*T) []string) error {
 	var rows []T
-	if err := c.List(ctx, &rows); err != nil {
+	if err := list(ctx, &rows); err != nil {
 		return fmt.Errorf("list %T: %w", rows, err)
 	}
 	for i := range rows {
@@ -284,11 +288,8 @@ func listInto[T any](ctx context.Context, c client.Client, m map[string]*T, key 
 	return nil
 }
 
-// rebuildFullSnapshot replaces the snapshot with the content of both caches. It
-// publishes nothing if any table cannot be read, so a partial graph is never served.
-func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
-	next := graph.NewEmptySnapshot(0, nil)
-	nb, sb := s.nbClient, s.sbClient
+// fillSnapshot reads every monitored NB and SB table into the entity maps of next.
+func fillSnapshot(ctx context.Context, nb, sb lister, next *graph.Snapshot) error {
 	errs := []error{
 		listInto(ctx, nb, next.LogicalRouters, func(r *nbmodel.LogicalRouter) []string { return []string{r.UUID} }),
 		listInto(ctx, nb, next.LogicalRouterPorts, func(r *nbmodel.LogicalRouterPort) []string { return []string{r.UUID} }),
@@ -311,6 +312,16 @@ func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// rebuildFullSnapshot replaces the snapshot with the content of both caches. It
+// publishes nothing if any table cannot be read, so a partial graph is never served.
+func (s *Syncer) rebuildFullSnapshot(ctx context.Context) error {
+	next := graph.NewEmptySnapshot(0, nil)
+	if err := fillSnapshot(ctx, s.nbClient.List, s.sbClient.List, next); err != nil {
+		return err
 	}
 
 	s.store.Apply(func(draft *graph.Snapshot) []string {

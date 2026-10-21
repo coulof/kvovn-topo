@@ -3,7 +3,6 @@ package ovsdb
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"sort"
 	"sync/atomic"
@@ -76,19 +75,11 @@ func (f *fakeClient) setDown(down bool) {
 }
 
 // List mirrors libovsdb's cache-backed List: result is a pointer to a slice of models.
-func (f *fakeClient) List(_ context.Context, result any) error {
+func (f *fakeClient) List(ctx context.Context, result any) error {
 	if e := f.listErr.Load(); e != nil {
 		return *e
 	}
-	slice := reflect.ValueOf(result).Elem()
-	table := f.dbModel.FindTable(reflect.PointerTo(slice.Type().Elem()))
-	if table == "" {
-		return fmt.Errorf("no table for %s", slice.Type())
-	}
-	for _, m := range f.tc.Table(table).Rows() {
-		slice.Set(reflect.Append(slice, reflect.ValueOf(m).Elem()))
-	}
-	return nil
+	return cacheLister(f.tc, f.dbModel)(ctx, result)
 }
 
 // apply feeds a monitor update; kind is "initial", "insert" or "modify".
