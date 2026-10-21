@@ -145,6 +145,8 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 - [x] Teatest (or equivalent) golden tests for the main screens. (Done 2026-10-20)
 - [x] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types. (Done 2026-10-20)
 
+**Follow-up (2026-10-21): navigation redesign.** After comparing runnable k9s-xray and Miller-column mockups, the four fixed views were replaced by k9s-style xray trees (`:xray vpc|chassis|workload`) with relation jumps, plus the Port Matrix kept as a sortable `:ports` table with an inspector; describe uses `/node/{id}`. Fixes found while doing it: the old layout overflowed 80×24 (header scrolled off, side panel clipped), so the 80×24 item above was not actually met. Every frame is now sized to the terminal, with a test at 60×14, 80×24, 120×40 and 200×60. L2 fetches stopped at the server's default page of 50 ports and now follow all pages. The trace source came from the tree index in other views and now uses the selection. The TUI now consumes `/events` (SSE) with `If-None-Match` polling fallback. Still to do: re-run the three scenarios on a live cluster with the new navigation (verified so far on the fixture and a local fake daemon only).
+
 ---
 
 ## M3 — Rancher extension: L3 view, side panel, live updates (T0) — *parallel with M2*

@@ -1,0 +1,1489 @@
+package main
+
+// Tier 1 diagnostics UI (ADR-0001): modal, trace/tcpdump/OVS actions and the
+// selection helpers that turn the current TUI selection into a diagnostic target.
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"strconv"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/ovn-topology/pkg/diag"
+	"github.com/coulof/ovn-topology/pkg/graph"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+type diagStep int
+
+const (
+	diagStepMenu diagStep = iota
+	diagStepPickDest
+	diagStepPickTcpdump
+	diagStepResult
+)
+
+// TcpdumpPreset defines a selectable BPF filter preset for tcpdump.
+type TcpdumpPreset struct {
+	Name   string
+	Label  string
+	Filter string
+}
+
+// TraceDestination represents an interactive target candidate for ovn-trace.
+type TraceDestination struct {
+	Label    string
+	IP       string
+	Subnet   string
+	Category string
+}
+
+// TraceProtocolOption defines a selectable protocol and port for ovn-trace.
+type TraceProtocolOption struct {
+	Name     string
+	Protocol string
+	Port     int
+	Label    string
+}
+
+var AvailableTraceProtocols = []TraceProtocolOption{
+	{Name: "icmp", Protocol: "icmp", Port: 0, Label: "ICMP (Ping)"},
+	{Name: "ssh", Protocol: "tcp", Port: 22, Label: "TCP 22 (SSH)"},
+	{Name: "http", Protocol: "tcp", Port: 80, Label: "TCP 80 (HTTP)"},
+	{Name: "https", Protocol: "tcp", Port: 443, Label: "TCP 443 (HTTPS)"},
+	{Name: "dns", Protocol: "udp", Port: 53, Label: "UDP 53 (DNS)"},
+}
+
+var TraceCategories = []string{
+	"All",
+	"VM",
+	"Pod",
+	"Gateway",
+	"Node",
+	"Public DNS",
+}
+
+func (m model) probeDiagCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		if err != nil {
+			return diagProbeMsg{
+				available: false,
+				reason:    fmt.Sprintf("ovn-central pod not found: %v", err),
+			}
+		}
+
+		allowed, reason, err := diag.CheckExecAccess(ctx, m.diagExecutor, centralPod)
+		if err != nil {
+			return diagProbeMsg{
+				available: false,
+				reason:    fmt.Sprintf("probe error: %v", err),
+			}
+		}
+
+		if allowed && m.diagLocator != nil && m.diagExecutor != nil {
+			m.diagLocator.PopulateChassisUUIDs(ctx, m.diagExecutor)
+		}
+
+		return diagProbeMsg{
+			available:  allowed,
+			reason:     reason,
+			centralPod: centralPod,
+		}
+	}
+}
+
+// updateDiagModal handles keys while the diagnostics modal is open.
+func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.diagStep == diagStepPickDest {
+		switch msg.String() {
+		case "esc":
+			if m.traceSearchFilter != "" {
+				m.traceSearchFilter = ""
+				m.selectedDestIdx = 0
+				return m, nil
+			}
+			m.diagStep = diagStepMenu
+			m.selectedDestIdx = 0
+			return m, nil
+		case "ctrl+c":
+			m.diagModal = false
+			m.diagStep = diagStepMenu
+			return m, nil
+		case "tab":
+			m.traceCategoryIdx = (m.traceCategoryIdx + 1) % len(TraceCategories)
+			m.selectedDestIdx = 0
+			return m, nil
+		case "shift+tab":
+			m.traceCategoryIdx = (m.traceCategoryIdx - 1 + len(TraceCategories)) % len(TraceCategories)
+			m.selectedDestIdx = 0
+			return m, nil
+		case "ctrl+p":
+			m.traceProtoIdx = (m.traceProtoIdx + 1) % len(AvailableTraceProtocols)
+			m.traceProtocol = AvailableTraceProtocols[m.traceProtoIdx].Protocol
+			m.tracePort = AvailableTraceProtocols[m.traceProtoIdx].Port
+			return m, nil
+		case "f1":
+			m.traceProtoIdx = 0
+			m.traceProtocol = AvailableTraceProtocols[0].Protocol
+			m.tracePort = AvailableTraceProtocols[0].Port
+			return m, nil
+		case "f2":
+			m.traceProtoIdx = 1
+			m.traceProtocol = AvailableTraceProtocols[1].Protocol
+			m.tracePort = AvailableTraceProtocols[1].Port
+			return m, nil
+		case "f3":
+			m.traceProtoIdx = 2
+			m.traceProtocol = AvailableTraceProtocols[2].Protocol
+			m.tracePort = AvailableTraceProtocols[2].Port
+			return m, nil
+		case "f4":
+			m.traceProtoIdx = 3
+			m.traceProtocol = AvailableTraceProtocols[3].Protocol
+			m.tracePort = AvailableTraceProtocols[3].Port
+			return m, nil
+		case "f5":
+			m.traceProtoIdx = 4
+			m.traceProtocol = AvailableTraceProtocols[4].Protocol
+			m.tracePort = AvailableTraceProtocols[4].Port
+			return m, nil
+		case "backspace":
+			if len(m.traceSearchFilter) > 0 {
+				m.traceSearchFilter = m.traceSearchFilter[:len(m.traceSearchFilter)-1]
+				m.selectedDestIdx = 0
+			}
+			return m, nil
+		case "ctrl+u":
+			m.traceSearchFilter = ""
+			m.selectedDestIdx = 0
+			return m, nil
+		case "up", "ctrl+k":
+			if m.selectedDestIdx > 0 {
+				m.selectedDestIdx--
+			}
+			return m, nil
+		case "down", "ctrl+j":
+			filtered := m.filteredTraceDestinations()
+			if m.selectedDestIdx < len(filtered)-1 {
+				m.selectedDestIdx++
+			}
+			return m, nil
+		case "enter":
+			filtered := m.filteredTraceDestinations()
+			if len(filtered) > 0 && m.selectedDestIdx < len(filtered) {
+				chosenDest := filtered[m.selectedDestIdx]
+				proto := m.traceProtocol
+				port := m.tracePort
+				if chosenDest.Category == "Custom" && strings.Contains(m.traceSearchFilter, ":") {
+					parts := strings.Split(m.traceSearchFilter, ":")
+					if len(parts) == 2 {
+						if pNum, err := strconv.Atoi(parts[1]); err == nil && pNum > 0 {
+							proto = "tcp"
+							port = pNum
+						}
+					}
+				}
+				m.diagRunning = true
+				m.diagStep = diagStepResult
+				m.diagScrollOffset = 0
+				return m, m.executeTrace(chosenDest.IP, proto, port)
+			}
+			return m, nil
+		default:
+			s := msg.String()
+			if len(s) == 1 {
+				ch := s[0]
+				if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+					ch == '.' || ch == ':' || ch == '-' || ch == '_' || ch == '/' {
+					m.traceSearchFilter += s
+					m.selectedDestIdx = 0
+					return m, nil
+				}
+			}
+			return m, nil
+		}
+	}
+
+	if m.diagStep == diagStepPickTcpdump {
+		switch msg.String() {
+		case "esc":
+			m.diagStep = diagStepMenu
+			m.tcpdumpCustom = ""
+			m.tcpdumpFilterIdx = 0
+			return m, nil
+		case "ctrl+c":
+			m.diagModal = false
+			m.diagStep = diagStepMenu
+			return m, nil
+		case "up", "ctrl+k":
+			if m.tcpdumpFilterIdx > 0 {
+				m.tcpdumpFilterIdx--
+			}
+			return m, nil
+		case "down", "ctrl+j":
+			presets := m.getTcpdumpPresets()
+			if m.tcpdumpFilterIdx < len(presets) {
+				m.tcpdumpFilterIdx++
+			}
+			return m, nil
+		case "1", "2", "3", "4", "5", "6":
+			idx := int(msg.String()[0] - '1')
+			presets := m.getTcpdumpPresets()
+			if idx < len(presets) {
+				m.tcpdumpFilterIdx = idx
+				preset := presets[idx]
+				nodeName := m.selectedNodeName()
+				portName := m.selectedPortName()
+				targetIP := m.selectedTargetIP()
+				return m, m.executeTcpdumpStream(preset.Filter, nodeName, portName, targetIP)
+			}
+			return m, nil
+		case "backspace":
+			if len(m.tcpdumpCustom) > 0 {
+				m.tcpdumpCustom = m.tcpdumpCustom[:len(m.tcpdumpCustom)-1]
+			}
+			return m, nil
+		case "enter":
+			presets := m.getTcpdumpPresets()
+			filter := ""
+			if m.tcpdumpFilterIdx < len(presets) && m.tcpdumpCustom == "" {
+				filter = presets[m.tcpdumpFilterIdx].Filter
+			} else if m.tcpdumpCustom != "" {
+				filter = m.tcpdumpCustom
+			} else {
+				filter = presets[0].Filter
+			}
+			nodeName := m.selectedNodeName()
+			portName := m.selectedPortName()
+			targetIP := m.selectedTargetIP()
+			return m, m.executeTcpdumpStream(filter, nodeName, portName, targetIP)
+		default:
+			s := msg.String()
+			if len(s) == 1 {
+				ch := s[0]
+				if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+					ch == '.' || ch == ' ' || ch == '-' || ch == '_' || ch == '=' || ch == '(' || ch == ')' {
+					m.tcpdumpCustom += s
+					m.tcpdumpFilterIdx = len(m.getTcpdumpPresets())
+					return m, nil
+				}
+			}
+			return m, nil
+		}
+	}
+
+	if m.diagStep == diagStepResult {
+		switch msg.String() {
+		case " ", "esc":
+			if m.diagStreaming {
+				if m.diagCancelStream != nil {
+					m.diagCancelStream()
+					m.diagCancelStream = nil
+				}
+				m.diagStreaming = false
+				m.diagRunning = false
+				return m, nil
+			}
+			switch m.diagAction {
+			case "trace":
+				m.diagStep = diagStepPickDest
+			case "tcpdump":
+				m.diagStep = diagStepPickTcpdump
+			default:
+				m.diagStep = diagStepMenu
+			}
+			m.diagRawOutput = ""
+			m.diagTraceRes = nil
+			return m, nil
+		case "x", "ctrl+c":
+			if m.diagStreaming {
+				if m.diagCancelStream != nil {
+					m.diagCancelStream()
+					m.diagCancelStream = nil
+				}
+				m.diagStreaming = false
+				m.diagRunning = false
+			}
+			m.diagModal = false
+			m.diagStep = diagStepMenu
+			return m, nil
+		case "o":
+			m.diagRawView = !m.diagRawView
+			return m, nil
+		case "down", "j":
+			m.diagScrollOffset++
+			return m, nil
+		case "up", "k":
+			if m.diagScrollOffset > 0 {
+				m.diagScrollOffset--
+			}
+			return m, nil
+		case "pgdown":
+			m.diagScrollOffset += 8
+			return m, nil
+		case "pgup":
+			if m.diagScrollOffset >= 8 {
+				m.diagScrollOffset -= 8
+			} else {
+				m.diagScrollOffset = 0
+			}
+			return m, nil
+		default:
+			return m, nil
+		}
+	}
+
+	// Main Diagnostics Menu (diagStepMenu)
+	switch msg.String() {
+	case "esc", "x", "ctrl+c":
+		m.diagModal = false
+		m.diagStep = diagStepMenu
+		m.diagRawOutput = ""
+		m.diagTraceRes = nil
+		m.diagError = nil
+		m.diagRunning = false
+		m.diagScrollOffset = 0
+		return m, nil
+	case "1":
+		m.diagStep = diagStepPickDest
+		m.selectedDestIdx = 0
+		m.traceSearchFilter = ""
+		m.traceCategoryIdx = 0
+		m.traceProtoIdx = 0
+		m.traceProtocol = AvailableTraceProtocols[0].Protocol
+		m.tracePort = AvailableTraceProtocols[0].Port
+		selNode, _ := m.currentSelectedTarget()
+		srcIP := m.selectedTargetIP()
+		m.traceDestinations = m.collectTraceDestinations(selNode, srcIP)
+		return m, nil
+	case "2":
+		m.diagStep = diagStepPickTcpdump
+		m.tcpdumpFilterIdx = 0
+		m.tcpdumpCustom = ""
+		return m, nil
+	case "3":
+		if m.diagRunning {
+			return m, nil
+		}
+		m.diagRunning = true
+		m.diagStep = diagStepResult
+		m.diagError = nil
+		m.diagScrollOffset = 0
+		nodeName := m.selectedNodeName()
+		targetIP := m.selectedTargetIP()
+		return m, m.executeNodeDiag("conntrack", nodeName, targetIP)
+	case "4":
+		if m.diagRunning {
+			return m, nil
+		}
+		m.diagRunning = true
+		m.diagStep = diagStepResult
+		m.diagError = nil
+		m.diagScrollOffset = 0
+		nodeName := m.selectedNodeName()
+		return m, m.executeNodeDiag("ovs-port", nodeName, "")
+	case "5":
+		if m.diagRunning {
+			return m, nil
+		}
+		m.diagRunning = true
+		m.diagStep = diagStepResult
+		m.diagError = nil
+		m.diagScrollOffset = 0
+		nodeName := m.selectedNodeName()
+		return m, m.executeNodeDiag("ovs-iface", nodeName, "")
+	case "6":
+		if m.diagRunning {
+			return m, nil
+		}
+		m.diagRunning = true
+		m.diagStep = diagStepResult
+		m.diagError = nil
+		m.diagScrollOffset = 0
+		nodeName := m.selectedNodeName()
+		return m, m.executeNodeDiag("logs", nodeName, "")
+	default:
+		return m, nil
+	}
+}
+
+func extractCleanIP(raw string) string {
+	parts := strings.Fields(raw)
+	for _, part := range parts {
+		if part == "router" || part == "unknown" || part == "dynamic" {
+			continue
+		}
+		if parsed := net.ParseIP(part); parsed != nil {
+			return parsed.String()
+		}
+		if strings.Contains(part, "/") {
+			ipPart := strings.Split(part, "/")[0]
+			if parsed := net.ParseIP(ipPart); parsed != nil {
+				return parsed.String()
+			}
+		}
+	}
+	return ""
+}
+
+func extractCleanMAC(raw string) string {
+	parts := strings.Fields(raw)
+	for _, part := range parts {
+		if _, err := net.ParseMAC(part); err == nil {
+			return part
+		}
+	}
+	return ""
+}
+
+func (m model) resolveNodeName(candidate string) string {
+	if candidate == "" {
+		return ""
+	}
+	if m.diagLocator != nil {
+		if host := m.diagLocator.ResolveChassisUUID(candidate); host != "" {
+			return host
+		}
+	}
+	// Check if candidate matches any chassis hostname or nodeName in chassisNodes
+	for _, ch := range m.chassisNodes {
+		if ch.Id == candidate || ch.Name == candidate || strings.TrimPrefix(ch.Id, graph.PrefixChassis) == candidate {
+			if ch.Properties != nil {
+				p := *ch.Properties
+				if nodeName, ok := p["nodeName"].(string); ok && nodeName != "" {
+					return nodeName
+				}
+				if host, ok := p["hostname"].(string); ok && host != "" {
+					return host
+				}
+			}
+			return ch.Name
+		}
+		if ch.Properties != nil {
+			p := *ch.Properties
+			if u, ok := p["uuid"].(string); ok && u == candidate {
+				if nodeName, ok := p["nodeName"].(string); ok && nodeName != "" {
+					return nodeName
+				}
+				return ch.Name
+			}
+		}
+	}
+	// Check if candidate matches nodeName in nodeList
+	for _, n := range m.nodeList {
+		if n.Type == api.GraphNodeTypeChassis {
+			if n.Id == candidate || strings.TrimPrefix(n.Id, graph.PrefixChassis) == candidate {
+				return n.Name
+			}
+		}
+	}
+	// Check in nodeMap
+	if n, ok := m.nodeMap[graph.PrefixChassis+candidate]; ok {
+		return n.Name
+	}
+	if n, ok := m.nodeMap[candidate]; ok && n.Type == api.GraphNodeTypeChassis {
+		return n.Name
+	}
+	return candidate
+}
+
+func (m model) selectedNodeName() string {
+	raw := m.rawSelectedNodeName()
+	return m.resolveNodeName(raw)
+}
+
+func (m model) rawSelectedNodeName() string {
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
+		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.Node != nil && *node.K8s.Node != "" {
+			return *node.K8s.Node
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			workloads := m.switchWorkloads[node.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType == "router" {
+						continue
+					}
+				}
+				if w.K8s != nil && w.K8s.Node != nil && *w.K8s.Node != "" {
+					return *w.K8s.Node
+				}
+			}
+			if len(workloads) > 0 && workloads[0].K8s != nil && workloads[0].K8s.Node != nil && *workloads[0].K8s.Node != "" {
+				return *workloads[0].K8s.Node
+			}
+		}
+		if node.Type == api.GraphNodeTypeChassis {
+			if node.Properties != nil {
+				p := *node.Properties
+				if n, ok := p["nodeName"].(string); ok && n != "" {
+					return n
+				}
+			}
+			return node.Name
+		}
+	}
+	if conn != nil && conn.ActiveGateway != "" {
+		return conn.ActiveGateway
+	}
+	return ""
+}
+
+func (m model) selectedTargetIP() string {
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
+		if node.Type == api.GraphNodeTypeLSP && node.Properties != nil {
+			p := *node.Properties
+			if addrs, ok := p["addresses"].([]interface{}); ok {
+				for _, a := range addrs {
+					if s, ok := a.(string); ok {
+						if ip := extractCleanIP(s); ip != "" {
+							return ip
+						}
+					}
+				}
+			}
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			if conn != nil && len(conn.Networks) > 0 {
+				return extractCleanIP(conn.Networks[0])
+			}
+			workloads := m.switchWorkloads[node.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType == "router" {
+						continue
+					}
+					if addrs, ok := p["addresses"].([]interface{}); ok {
+						for _, a := range addrs {
+							if s, ok := a.(string); ok {
+								if ip := extractCleanIP(s); ip != "" {
+									return ip
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if conn != nil && len(conn.Networks) > 0 {
+		return extractCleanIP(conn.Networks[0])
+	}
+	return ""
+}
+
+func (m model) selectedPortName() string {
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
+		if node.Type == api.GraphNodeTypeLSP {
+			return node.Name
+		}
+		if node.Type == api.GraphNodeTypeLS {
+			workloads := m.switchWorkloads[node.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType != "router" {
+						return w.Name
+					}
+				}
+			}
+			if len(workloads) > 0 {
+				return workloads[0].Name
+			}
+		}
+	}
+	if conn != nil {
+		if conn.PeerPortName != "" {
+			return conn.PeerPortName
+		}
+		return conn.PortName
+	}
+	return ""
+}
+
+func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP string) []TraceDestination {
+	var dests []TraceDestination
+	seenIPs := make(map[string]bool)
+	if sourceIP != "" {
+		seenIPs[sourceIP] = true
+	}
+
+	// 1. Workload Destinations (VMs and Pods across all subnets)
+	for lsID, workloads := range m.switchWorkloads {
+		swName := lsID
+		if node, ok := m.nodeMap[lsID]; ok {
+			swName = node.Name
+		}
+		for _, w := range workloads {
+			if w.Properties != nil {
+				p := *w.Properties
+				portType, _ := p["type"].(string)
+				if portType == "router" {
+					continue
+				}
+				if addrs, ok := p["addresses"].([]interface{}); ok {
+					for _, a := range addrs {
+						if s, ok := a.(string); ok {
+							ip := extractCleanIP(s)
+							if ip != "" && !seenIPs[ip] {
+								seenIPs[ip] = true
+								kind := "Pod"
+								category := "Pod"
+								name := w.Name
+								if w.K8s != nil {
+									if w.K8s.WorkloadKind != nil && *w.K8s.WorkloadKind != "" {
+										kind = *w.K8s.WorkloadKind
+										if strings.EqualFold(kind, "VirtualMachine") || strings.EqualFold(kind, "VM") {
+											category = "VM"
+										}
+									}
+									if w.K8s.WorkloadName != nil && *w.K8s.WorkloadName != "" {
+										name = *w.K8s.WorkloadName
+									}
+								}
+								if strings.HasPrefix(w.Name, "node-") || swName == "join" {
+									dests = append(dests, TraceDestination{
+										Label:    fmt.Sprintf("[Node ovn0] %s (IP: %s on join)", name, ip),
+										IP:       ip,
+										Subnet:   swName,
+										Category: "Node",
+									})
+									continue
+								}
+								dests = append(dests, TraceDestination{
+									Label:    fmt.Sprintf("[%s] %s (IP: %s on %s)", kind, name, ip, swName),
+									IP:       ip,
+									Subnet:   swName,
+									Category: category,
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Gateway Destinations (Logical Router Ports)
+	for _, conn := range m.portList {
+		for _, netCIDR := range conn.Networks {
+			ip := extractCleanIP(netCIDR)
+			if ip != "" && !seenIPs[ip] {
+				seenIPs[ip] = true
+				category := "Subnet Gateway"
+				role := conn.RouterName
+				if conn.ActiveGateway != "" {
+					category = "External Gateway"
+					role = fmt.Sprintf("%s (Active: %s)", conn.RouterName, conn.ActiveGateway)
+				}
+				dests = append(dests, TraceDestination{
+					Label:    fmt.Sprintf("%s: %s (IP: %s on %s)", category, role, ip, conn.SwitchName),
+					IP:       ip,
+					Subnet:   conn.SwitchName,
+					Category: "Gateway",
+				})
+			}
+		}
+	}
+
+	// 3. Cluster Nodes / Physical Hosts
+	for _, ch := range m.chassisNodes {
+		nodeName := ch.Name
+		if ch.Properties != nil {
+			p := *ch.Properties
+			if n, ok := p["nodeName"].(string); ok && n != "" {
+				nodeName = n
+			} else if h, ok := p["hostname"].(string); ok && h != "" {
+				nodeName = h
+			}
+			if encaps, ok := p["encaps"].([]interface{}); ok {
+				for _, enc := range encaps {
+					if encMap, ok := enc.(map[string]interface{}); ok {
+						if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
+							seenIPs[encIP] = true
+							dests = append(dests, TraceDestination{
+								Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
+								IP:       encIP,
+								Subnet:   "physical",
+								Category: "Node",
+							})
+						}
+					}
+				}
+			} else if encMaps, ok := p["encaps"].([]map[string]interface{}); ok {
+				for _, encMap := range encMaps {
+					if encIP, ok := encMap["ip"].(string); ok && encIP != "" && !seenIPs[encIP] {
+						seenIPs[encIP] = true
+						dests = append(dests, TraceDestination{
+							Label:    fmt.Sprintf("[Node underlay/mgmt] %s (IP: %s)", nodeName, encIP),
+							IP:       encIP,
+							Subnet:   "physical",
+							Category: "Node",
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Well-known Public Internet & DNS
+	dests = append(dests,
+		TraceDestination{
+			Label:    "Cloudflare Public DNS: 1.1.1.1",
+			IP:       "1.1.1.1",
+			Subnet:   "external",
+			Category: "Public DNS",
+		},
+		TraceDestination{
+			Label:    "Google Public DNS: 8.8.8.8",
+			IP:       "8.8.8.8",
+			Subnet:   "external",
+			Category: "Public DNS",
+		},
+		TraceDestination{
+			Label:    "Quad9 Public DNS: 9.9.9.9",
+			IP:       "9.9.9.9",
+			Subnet:   "external",
+			Category: "Public DNS",
+		},
+	)
+
+	return dests
+}
+
+func (m model) filteredTraceDestinations() []TraceDestination {
+	var list []TraceDestination
+	cleanTyped := strings.TrimSpace(m.traceSearchFilter)
+	query := strings.ToLower(cleanTyped)
+
+	catFilter := "All"
+	if m.traceCategoryIdx >= 0 && m.traceCategoryIdx < len(TraceCategories) {
+		catFilter = TraceCategories[m.traceCategoryIdx]
+	}
+
+	// 1. If user typed an IP address, offer it as Custom Destination at the top
+	typedHost := cleanTyped
+	if strings.Contains(cleanTyped, ":") {
+		typedHost = strings.Split(cleanTyped, ":")[0]
+	}
+	if parsed := net.ParseIP(typedHost); parsed != nil {
+		list = append(list, TraceDestination{
+			Label:    fmt.Sprintf("⚡ Custom IP Target: %s (press Enter to trace)", cleanTyped),
+			IP:       parsed.String(),
+			Subnet:   "custom",
+			Category: "Custom",
+		})
+	}
+
+	for _, d := range m.traceDestinations {
+		if catFilter != "All" && d.Category != catFilter {
+			continue
+		}
+		if query != "" {
+			labelMatch := strings.Contains(strings.ToLower(d.Label), query)
+			ipMatch := strings.Contains(d.IP, query)
+			subMatch := strings.Contains(strings.ToLower(d.Subnet), query)
+			catMatch := strings.Contains(strings.ToLower(d.Category), query)
+			if !labelMatch && !ipMatch && !subMatch && !catMatch {
+				continue
+			}
+		}
+		list = append(list, d)
+	}
+
+	return list
+}
+
+func (m model) resolveTraceEndpoints(targetDstIP string, proto string, dstPort int) diag.TraceRequest {
+	req := diag.TraceRequest{
+		Datapath: "ovn-default",
+		Inport:   "",
+		SrcIP:    "10.244.0.1",
+		DstIP:    targetDstIP,
+		Protocol: proto,
+		DstPort:  dstPort,
+	}
+
+	selectedNode, conn := m.currentSelectedTarget()
+	var selectedWorkload *api.GraphNode
+	var switchID string
+	var switchName string
+
+	if selectedNode != nil {
+		if selectedNode.Type == api.GraphNodeTypeLSP {
+			selectedWorkload = selectedNode
+			// Find which switch this workload is on
+			for lsID, workloads := range m.switchWorkloads {
+				for _, w := range workloads {
+					if w.Id == selectedNode.Id || w.Name == selectedNode.Name {
+						switchID = lsID
+						if sn, ok := m.nodeMap[lsID]; ok {
+							switchName = sn.Name
+						}
+						break
+					}
+				}
+				if switchID != "" {
+					break
+				}
+			}
+			if switchID != "" && len(m.switchPorts[switchID]) > 0 && conn == nil {
+				conn = &m.switchPorts[switchID][0]
+			}
+		} else if selectedNode.Type == api.GraphNodeTypeLS {
+			switchID = selectedNode.Id
+			switchName = selectedNode.Name
+			workloads := m.switchWorkloads[selectedNode.Id]
+			for _, w := range workloads {
+				if w.Properties != nil {
+					p := *w.Properties
+					if portType, _ := p["type"].(string); portType != "router" {
+						selectedWorkload = &w
+						break
+					}
+				}
+			}
+			if len(m.switchPorts[selectedNode.Id]) > 0 && conn == nil {
+				conn = &m.switchPorts[selectedNode.Id][0]
+			}
+		}
+	}
+
+	if conn == nil && len(m.portList) > 0 {
+		conn = &m.portList[0]
+	}
+
+	if switchName == "" && conn != nil {
+		switchName = conn.SwitchName
+	}
+	if switchID == "" && conn != nil {
+		switchID = conn.SwitchID
+	}
+
+	if selectedWorkload == nil && switchID != "" {
+		for _, w := range m.switchWorkloads[switchID] {
+			if w.Properties != nil {
+				p := *w.Properties
+				if portType, _ := p["type"].(string); portType != "router" {
+					selectedWorkload = &w
+					break
+				}
+			}
+		}
+	}
+
+	// 2. Resolve Gateway MAC from conn
+	var gwMAC string
+	if conn != nil {
+		gwMAC = extractCleanMAC(conn.MAC)
+		if switchName == "" {
+			switchName = conn.SwitchName
+		}
+	}
+
+	// 3. If we have a source workload (VM or Pod):
+	if selectedWorkload != nil {
+		req.Inport = selectedWorkload.Name
+		if switchName != "" {
+			req.Datapath = switchName
+		} else if conn != nil && conn.SwitchName != "" {
+			req.Datapath = conn.SwitchName
+		}
+
+		if selectedWorkload.Properties != nil {
+			p := *selectedWorkload.Properties
+			if addrs, ok := p["addresses"].([]interface{}); ok {
+				for _, a := range addrs {
+					if s, ok := a.(string); ok {
+						if mac := extractCleanMAC(s); mac != "" && req.SrcMAC == "" {
+							req.SrcMAC = mac
+						}
+						if ip := extractCleanIP(s); ip != "" && (req.SrcIP == "" || req.SrcIP == "10.244.0.1") {
+							req.SrcIP = ip
+						}
+					}
+				}
+			}
+		}
+
+		// Destination MAC:
+		// Check if destination IP belongs to the same local subnet
+		var sameSubnet bool
+		if conn != nil && len(conn.Networks) > 0 {
+			for _, netCIDR := range conn.Networks {
+				if _, ipNet, err := net.ParseCIDR(netCIDR); err == nil {
+					if ipNet.Contains(net.ParseIP(req.DstIP)) {
+						sameSubnet = true
+						break
+					}
+				}
+			}
+		}
+
+		if sameSubnet {
+			// Find peer workload on this switch
+			if switchID != "" {
+				for _, w := range m.switchWorkloads[switchID] {
+					if w.Properties != nil {
+						p := *w.Properties
+						if addrs, ok := p["addresses"].([]interface{}); ok {
+							for _, a := range addrs {
+								if s, ok := a.(string); ok {
+									if extractCleanIP(s) == req.DstIP {
+										req.DstMAC = extractCleanMAC(s)
+										break
+									}
+								}
+							}
+						}
+					}
+					if req.DstMAC != "" {
+						break
+					}
+				}
+			}
+		} else {
+			// Remote subnet or external internet: must route through the Subnet Gateway!
+			req.DstMAC = gwMAC
+		}
+		if req.DstMAC == "" && gwMAC != "" {
+			req.DstMAC = gwMAC
+		}
+	} else if conn != nil {
+		// Pure router port or no workload on switch: trace from router datapath directly!
+		req.Datapath = conn.RouterName
+		req.Inport = conn.PortName
+		req.SrcMAC = extractCleanMAC(conn.MAC)
+		if len(conn.Networks) > 0 {
+			req.SrcIP = extractCleanIP(conn.Networks[0])
+		}
+		req.DstMAC = req.SrcMAC // In OVN, lr_in_admission table 0 requires eth.dst == router_mac
+	}
+
+	if req.DstIP == "" {
+		req.DstIP = "1.1.1.1"
+	}
+	if req.Protocol == "" {
+		req.Protocol = "icmp"
+	}
+
+	return req
+}
+
+func (m model) executeTrace(targetDstIP string, proto string, dstPort int) tea.Cmd {
+	return func() tea.Msg {
+		if m.diagExecutor == nil || m.diagLocator == nil {
+			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		if err != nil {
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate ovn-central leader pod: %w", err)}
+		}
+
+		req := m.resolveTraceEndpoints(targetDstIP, proto, dstPort)
+
+		cmd, err := diag.BuildTraceCommand(req)
+		if err != nil {
+			return diagExecResultMsg{err: err}
+		}
+
+		stdout, stderr, err := m.diagExecutor.Exec(ctx, centralPod, cmd)
+		if err != nil {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return diagExecResultMsg{err: fmt.Errorf("ovn-trace failed: %s", errMsg)}
+		}
+
+		traceRes := diag.ParseTraceOutput(string(stdout))
+		traceParams := fmt.Sprintf("Source (From):      [Datapath %s] inport '%s' (IP: %s, MAC: %s)\nDestination (To):   IP: %s (MAC: %s)\nProtocol Match:     %s (ip.ttl=255, 4x --ct=new)",
+			req.Datapath, req.Inport, req.SrcIP, req.SrcMAC, req.DstIP, req.DstMAC, strings.ToUpper(req.Protocol))
+
+		return diagExecResultMsg{
+			action:      "trace",
+			title:       fmt.Sprintf("ovn-trace: %s -> %s via %s", req.SrcIP, req.DstIP, req.Inport),
+			traceRes:    &traceRes,
+			traceParams: traceParams,
+			rawOutput:   string(stdout),
+		}
+	}
+}
+
+func (m model) executeNodeDiag(action string, nodeName string, targetIP string) tea.Cmd {
+	return func() tea.Msg {
+		if m.diagExecutor == nil || m.diagLocator == nil {
+			return diagExecResultMsg{err: fmt.Errorf("diagnostics executor not initialized")}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if nodeName == "" && m.k8sClient != nil {
+			nodes, err := m.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+			if err == nil && len(nodes.Items) > 0 {
+				nodeName = nodes.Items[0].Name
+			}
+		}
+		if nodeName == "" {
+			nodeName = "cluster-node"
+		}
+
+		pod, err := m.diagLocator.FindNodeOVSPod(ctx, nodeName)
+		if err != nil {
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate OVS pod on node %s: %w", nodeName, err)}
+		}
+
+		var cmd []string
+		var title string
+
+		switch action {
+		case "conntrack":
+			cmd = diag.BuildConntrackDumpCommand(0)
+			title = fmt.Sprintf("Conntrack Table on node %s (IP: %s)", nodeName, targetIP)
+		case "ovs-port":
+			portName := m.selectedPortName()
+			_, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, nodeName, portName)
+			if err != nil || iface == "" {
+				iface = "br-int"
+			}
+			cmd, err = diag.BuildOvsIfaceDetailCommand(iface)
+			if err != nil {
+				return diagExecResultMsg{err: err}
+			}
+			title = fmt.Sprintf("OVS Port Interface & Telemetry: %s (%s on %s)", iface, portName, nodeName)
+		case "ovs-iface":
+			cmd = diag.BuildOvsVsctlShowCommand()
+			title = fmt.Sprintf("OVS Bridges & Interfaces (ovs-vsctl show) on node %s", nodeName)
+		case "logs":
+			cmd = diag.BuildOvnControllerLogTail(50)
+			title = fmt.Sprintf("ovn-controller logs on node %s", nodeName)
+		default:
+			return diagExecResultMsg{err: fmt.Errorf("unknown diagnostic action: %s", action)}
+		}
+
+		stdout, stderr, err := m.diagExecutor.Exec(ctx, pod, cmd)
+		if err != nil {
+			errMsg := string(stderr)
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return diagExecResultMsg{err: fmt.Errorf("%s failed: %s", action, errMsg)}
+		}
+
+		out := string(stdout)
+		switch action {
+		case "conntrack":
+			out = diag.FormatConntrackOutput(out, targetIP)
+		case "ovs-port":
+			portName := m.selectedPortName()
+			_, iface, _ := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, nodeName, portName)
+			out = diag.FormatOvsIfaceOutput(out, iface)
+		}
+
+		return diagExecResultMsg{
+			action:    action,
+			title:     title,
+			rawOutput: out,
+		}
+	}
+}
+
+func (m *model) executeTcpdumpStream(filter string, hintNode string, portName string, portIP string) tea.Cmd {
+	m.diagRunning = true
+	m.diagStreaming = true
+	m.diagStep = diagStepResult
+	m.diagAction = "tcpdump"
+	m.diagScrollOffset = 0
+	m.tcpdumpPackets = nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	m.diagCancelStream = cancel
+
+	nodeName, iface, err := m.diagLocator.FindOVSInterface(ctx, m.diagExecutor, hintNode, portName)
+	if err != nil || nodeName == "" {
+		if hintNode != "" {
+			nodeName = hintNode
+		} else {
+			nodeName = "cluster-node"
+		}
+		if iface == "" {
+			iface = "br-int"
+		}
+	}
+
+	effectiveFilter := filter
+	if iface == "br-int" && portIP != "" && !strings.Contains(filter, "host") {
+		effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, portIP)
+	}
+
+	m.tcpdumpIface = iface
+	m.diagTitle = fmt.Sprintf("Live tcpdump on %s (node: %s, filter: %s)", iface, nodeName, effectiveFilter)
+	m.tcpdumpPackets = []string{
+		fmt.Sprintf("Listening on interface '%s' (port: %s on node %s)", iface, portName, nodeName),
+		fmt.Sprintf("Filter: %s", effectiveFilter),
+		"",
+	}
+	m.diagRawOutput = strings.Join(m.tcpdumpPackets, "\n")
+
+	pr, pw := io.Pipe()
+
+	go func() {
+		pod, err := m.diagLocator.FindNodeCNIPod(ctx, nodeName)
+		if err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+
+		req := diag.TcpdumpRequest{
+			Interface: iface,
+			Filter:    effectiveFilter,
+			Count:     500,
+		}
+		cmd, err := diag.BuildTcpdumpStreamCommand(req)
+		if err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+
+		_ = m.diagExecutor.Stream(ctx, pod, cmd, nil, pw, pw)
+		_ = pw.Close()
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	return readNextStreamLineCmd(scanner)
+}
+
+func readNextStreamLineCmd(scanner *bufio.Scanner) tea.Cmd {
+	return func() tea.Msg {
+		if scanner.Scan() {
+			return streamLineMsg{line: scanner.Text(), scanner: scanner}
+		}
+		return streamDoneMsg{err: scanner.Err()}
+	}
+}
+
+func (m model) getTcpdumpPresets() []TcpdumpPreset {
+	targetIP := m.selectedTargetIP()
+	ipFilter := "ip"
+	if targetIP != "" && net.ParseIP(targetIP) != nil {
+		ipFilter = fmt.Sprintf("host %s", targetIP)
+	}
+
+	return []TcpdumpPreset{
+		{Name: "ip", Label: fmt.Sprintf("Port IP Traffic (%s)", ipFilter), Filter: ipFilter},
+		{Name: "icmp", Label: "ICMP (Ping / Echo requests & replies)", Filter: "icmp or icmp6"},
+		{Name: "tcp", Label: "TCP (All TCP connections)", Filter: "tcp"},
+		{Name: "ssh", Label: "TCP 22 (SSH)", Filter: "tcp port 22"},
+		{Name: "web", Label: "Web Traffic (HTTP 80 / HTTPS 443)", Filter: "tcp port 80 or tcp port 443"},
+		{Name: "dns", Label: "DNS Traffic (UDP 53)", Filter: "udp port 53"},
+	}
+}
+
+func (m model) renderDiagModal() string {
+	var box strings.Builder
+
+	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS - ADR-0001]") + "\n")
+	box.WriteString(m.styles.MutedText.Render("Executed inside privileged cluster pods using operator credentials") + "\n\n")
+
+	// Target context
+	targetDesc := "Cluster Core"
+	node, conn := m.currentSelectedTarget()
+	if node != nil {
+		if node.Type == api.GraphNodeTypeLSP && node.K8s != nil && node.K8s.WorkloadName != nil {
+			targetDesc = fmt.Sprintf("[%s] %s (IP: %s, Node: %s)",
+				*node.K8s.WorkloadKind, *node.K8s.WorkloadName, m.selectedTargetIP(), m.selectedNodeName())
+		} else if node.Type == api.GraphNodeTypeLS {
+			targetDesc = fmt.Sprintf("Subnet: %s (Gateway: %s, Node: %s)", node.Name, m.selectedTargetIP(), m.selectedNodeName())
+		} else {
+			targetDesc = fmt.Sprintf("Node: %s (Type: %s)", node.Name, node.Type)
+		}
+	} else if conn != nil {
+		targetDesc = fmt.Sprintf("Port: %s (Router: %s, Switch: %s, IP: %s)",
+			conn.PortName, conn.RouterName, conn.SwitchName, strings.Join(conn.Networks, ", "))
+	}
+
+	fmt.Fprintf(&box, "  Target: %s\n\n", m.styles.PortBadge.Render(targetDesc))
+
+	if m.diagRunning {
+		box.WriteString(m.styles.ActiveGateway.Render("  ⏳ Executing diagnostic command inside pod...") + "\n")
+		box.WriteString(m.styles.MutedText.Render("  Please wait while stream completes...") + "\n\n")
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	if m.diagError != nil {
+		box.WriteString(m.styles.BadgeUnbound.Render(fmt.Sprintf("  ❌ Diagnostic Error: %v", m.diagError)) + "\n\n")
+	}
+
+	if m.diagStep == diagStepPickDest {
+		box.WriteString(m.styles.Header.Render("Choose Destination Target:") + "\n\n")
+
+		// 1. Search / Custom IP Input Bar
+		searchPrompt := "  Search / Custom IP: "
+		cursorStr := "█"
+		inputDisplay := m.traceSearchFilter
+		if inputDisplay == "" {
+			inputDisplay = m.styles.MutedText.Render("(type any IP address, node name, or keyword...)") + cursorStr
+		} else {
+			inputDisplay = m.styles.SelectedNode.Render(inputDisplay) + cursorStr
+		}
+		box.WriteString(m.styles.Header.Render(searchPrompt) + inputDisplay + "\n\n")
+
+		// 2. Category Badges Bar
+		counts := make(map[string]int)
+		counts["All"] = len(m.traceDestinations)
+		for _, d := range m.traceDestinations {
+			counts[d.Category]++
+		}
+
+		var catBadges []string
+		for i, cat := range TraceCategories {
+			count := counts[cat]
+			label := fmt.Sprintf("[%s (%d)]", cat, count)
+			if i == m.traceCategoryIdx {
+				catBadges = append(catBadges, m.styles.TabActive.Render(label))
+			} else {
+				catBadges = append(catBadges, m.styles.TabInactive.Render(label))
+			}
+		}
+		box.WriteString("  Category: " + strings.Join(catBadges, " ") + "\n\n")
+
+		// 3. Filtered Destinations List
+		filtered := m.filteredTraceDestinations()
+		if len(filtered) == 0 {
+			box.WriteString(m.styles.MutedText.Render("    (no destinations matching filter; type an IP to trace directly)") + "\n\n")
+		} else {
+			if m.selectedDestIdx >= len(filtered) {
+				m.selectedDestIdx = len(filtered) - 1
+			}
+			if m.selectedDestIdx < 0 {
+				m.selectedDestIdx = 0
+			}
+
+			visibleLimit := 10
+			startIdx := 0
+			if m.selectedDestIdx >= visibleLimit {
+				startIdx = m.selectedDestIdx - visibleLimit + 1
+			}
+			endIdx := startIdx + visibleLimit
+			if endIdx > len(filtered) {
+				endIdx = len(filtered)
+			}
+
+			currentCat := ""
+			for i := startIdx; i < endIdx; i++ {
+				d := filtered[i]
+				if d.Category != currentCat && (TraceCategories[m.traceCategoryIdx] == "All" || d.Category == "Custom") {
+					currentCat = d.Category
+					box.WriteString(m.styles.MutedText.Render(fmt.Sprintf("  ── %s ──", currentCat)) + "\n")
+				}
+
+				isSel := i == m.selectedDestIdx
+				cursor := "  "
+				if isSel {
+					cursor = "► "
+				}
+				line := fmt.Sprintf("%s[%d] %s", cursor, i+1, d.Label)
+				if isSel {
+					box.WriteString("  " + m.styles.SelectedNode.Render(line) + "\n")
+				} else {
+					box.WriteString("  " + m.styles.Node.Render(line) + "\n")
+				}
+			}
+			if len(filtered) > visibleLimit {
+				box.WriteString(m.styles.MutedText.Render(fmt.Sprintf("    ... (showing %d-%d of %d matches)", startIdx+1, endIdx, len(filtered))) + "\n")
+			}
+		}
+
+		// 4. Protocol Selector Bar
+		var protoBadges []string
+		for i, opt := range AvailableTraceProtocols {
+			label := fmt.Sprintf("[%d] %s", i+1, opt.Label)
+			if i == m.traceProtoIdx {
+				protoBadges = append(protoBadges, m.styles.ActiveGateway.Render("► "+label))
+			} else {
+				protoBadges = append(protoBadges, m.styles.MutedText.Render(label))
+			}
+		}
+
+		box.WriteString("\n  Protocol: " + strings.Join(protoBadges, " | ") + "\n\n")
+		box.WriteString(m.styles.MutedText.Render("  [Type: filter / enter IP | Tab: category | Ctrl+P or F1-F5: proto | Enter: trace | Esc: back]"))
+
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	if m.diagStep == diagStepPickTcpdump {
+		box.WriteString(m.styles.Header.Render("Live tcpdump: Select Capture Filter") + "\n\n")
+
+		portName := m.selectedPortName()
+		nodeName := m.selectedNodeName()
+		fmt.Fprintf(&box, "  Interface Host: Node %s (Port: %s)\n\n",
+			m.styles.SelectedNode.Render(nodeName), m.styles.PortBadge.Render(portName))
+
+		box.WriteString(m.styles.Header.Render("  Choose a Protocol Preset or Filter:") + "\n")
+		presets := m.getTcpdumpPresets()
+		for i, p := range presets {
+			isSel := i == m.tcpdumpFilterIdx && m.tcpdumpCustom == ""
+			cursor := "  "
+			if isSel {
+				cursor = "► "
+			}
+			line := fmt.Sprintf("%s[%d] %s", cursor, i+1, p.Label)
+			if isSel {
+				box.WriteString("  " + m.styles.SelectedNode.Render(line) + "\n")
+			} else {
+				box.WriteString("  " + m.styles.Node.Render(line) + "\n")
+			}
+		}
+
+		// Custom filter option
+		isCustomSel := m.tcpdumpFilterIdx == len(presets) || m.tcpdumpCustom != ""
+		cursor := "  "
+		if isCustomSel {
+			cursor = "► "
+		}
+		customDisplay := m.tcpdumpCustom
+		if customDisplay == "" {
+			customDisplay = m.styles.MutedText.Render("(type any custom BPF filter e.g. 'tcp port 22 or icmp')")
+		} else {
+			customDisplay = m.styles.SelectedNode.Render(customDisplay)
+		}
+		fmt.Fprintf(&box, "  %s[7] Custom Filter: %s█\n\n", cursor, customDisplay)
+
+		box.WriteString(m.styles.MutedText.Render("  [↑/↓: select filter | 1-6: run preset | Type: custom filter | Enter: start live capture | Esc: back]"))
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	if m.diagRawOutput != "" || m.diagTraceRes != nil {
+		fmt.Fprintf(&box, "  %s\n\n", m.styles.Header.Render("Result: "+m.diagTitle))
+
+		if m.diagStreaming {
+			packetCount := 0
+			if len(m.tcpdumpPackets) > 3 {
+				packetCount = len(m.tcpdumpPackets) - 3
+			}
+			streamBadge := fmt.Sprintf("🔴 LIVE CAPTURE ACTIVE — %d packets received (Press Space or Esc to stop)", packetCount)
+			box.WriteString("  " + m.styles.ActiveGateway.Render(streamBadge) + "\n\n")
+		} else if m.diagAction == "tcpdump" {
+			packetCount := 0
+			if len(m.tcpdumpPackets) > 3 {
+				packetCount = len(m.tcpdumpPackets) - 3
+			}
+			stopBadge := fmt.Sprintf("⏹ CAPTURE STOPPED — %d packets captured (Press Space or Esc: back | o: toggle raw)", packetCount)
+			box.WriteString("  " + m.styles.BadgeBound.Render(stopBadge) + "\n\n")
+		}
+
+		var contentText string
+		if m.diagAction == "trace" && m.diagTraceRes != nil && !m.diagRawView {
+			var traceContent strings.Builder
+			tr := m.diagTraceRes
+			verdictStyle := m.styles.BadgeBound
+			if tr.Verdict != "delivered" {
+				verdictStyle = m.styles.BadgeUnbound
+			}
+			fmt.Fprintf(&traceContent, "Verdict: %s\n", verdictStyle.Render(strings.ToUpper(tr.Verdict)))
+			fmt.Fprintf(&traceContent, "Summary: %s\n\n", tr.Summary)
+
+			if m.diagTraceParams != "" {
+				traceContent.WriteString("Simulation Endpoints:\n")
+				for _, pLine := range strings.Split(m.diagTraceParams, "\n") {
+					traceContent.WriteString("  • " + pLine + "\n")
+				}
+				traceContent.WriteString("\n")
+			}
+
+			if tr.HopPath != "" {
+				traceContent.WriteString("Hop-by-Hop Flow Path:\n")
+				traceContent.WriteString("  " + m.styles.ActiveGateway.Render(tr.HopPath) + "\n\n")
+			}
+
+			traceContent.WriteString("Pipeline Stages Evaluated:\n")
+			for _, st := range tr.Stages {
+				fmt.Fprintf(&traceContent, "  • [%s table %d] %-24s ➔ %s\n",
+					st.Pipeline, st.Table, st.Name, truncate(st.Action, 48))
+			}
+			contentText = traceContent.String()
+		} else {
+			rawText := m.diagRawOutput
+			if m.diagRawView {
+				rawText = diag.FormatJsonOutput(rawText)
+			}
+			contentText = rawText
+		}
+
+		lines := strings.Split(strings.TrimSpace(contentText), "\n")
+		visibleLines := m.height - 16
+		if visibleLines < 10 {
+			visibleLines = 10
+		}
+
+		maxOffset := len(lines) - visibleLines
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.diagScrollOffset > maxOffset {
+			m.diagScrollOffset = maxOffset
+		}
+
+		endIdx := m.diagScrollOffset + visibleLines
+		if endIdx > len(lines) {
+			endIdx = len(lines)
+		}
+
+		displayedLines := lines[m.diagScrollOffset:endIdx]
+		box.WriteString("  " + strings.Join(displayedLines, "\n  ") + "\n\n")
+
+		scrollHint := fmt.Sprintf("  [Lines %d-%d of %d | ↑/↓ or j/k: scroll | o: toggle raw | 1-6: run action | Esc/x: close]",
+			m.diagScrollOffset+1, endIdx, len(lines))
+		box.WriteString(m.styles.MutedText.Render(scrollHint))
+		return m.styles.ModalBox.Render(box.String())
+	}
+
+	targetIP := m.selectedTargetIP()
+	nodeName := m.selectedNodeName()
+	targetNodeLabel := "local node"
+	if nodeName != "" {
+		targetNodeLabel = fmt.Sprintf("node '%s'", nodeName)
+	}
+
+	box.WriteString(m.styles.Header.Render("  Choose a Diagnostic Action:") + "\n")
+	box.WriteString("    [1] ovn-trace            (Microflow simulation through OVN logical pipeline)\n")
+	fmt.Fprintf(&box, "    [2] Live tcpdump         (Real-time packet capture on %s with protocol presets)\n", targetNodeLabel)
+	fmt.Fprintf(&box, "    [3] Filtered Conntrack   (Active flows for port IP %s on %s)\n", targetIP, targetNodeLabel)
+	box.WriteString("    [4] Port OVS Interface   (Contextual link state, ofport number, MTU & rx/tx telemetry)\n")
+	fmt.Fprintf(&box, "    [5] Physical Bridges     (ovs-vsctl show bridge & tunnel layout on %s)\n", targetNodeLabel)
+	fmt.Fprintf(&box, "    [6] Tail Controller Logs (on %s)\n\n", targetNodeLabel)
+
+	box.WriteString(m.styles.MutedText.Render("  Press 1-6 to execute | Esc or x to cancel"))
+
+	return m.styles.ModalBox.Render(box.String())
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) > maxLen {
+		if maxLen > 3 {
+			return s[:maxLen-3] + "..."
+		}
+		return s[:maxLen]
+	}
+	return s
+}

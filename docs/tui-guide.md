@@ -1,156 +1,132 @@
 # OVN Topology TUI Guide (`ovn-topo`)
 
-This guide explains how to navigate and interpret the `ovn-topo` terminal visualizer, read network topology relationships, and capture screenshots covering all core OVN and Kube-OVN architectural concepts.
+`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **xray trees** (objects and what they contain) and a **`:ports` table** (the router-port matrix), follow **relations** (`⇢`) between objects, and run Tier 1 diagnostics on whatever is selected.
+
+```bash
+ovn-topo --daemon-url http://127.0.0.1:8080/api/v1   # live daemon (mise run tui)
+ovn-topo --fixture                                   # bundled dataset, offline (run from the repo root)
+ovn-topo --diag                                      # + Tier 1 exec diagnostics (ADR-0001)
+```
 
 ---
 
-## 1. Views & Navigation
-
-The TUI provides four operational views, switchable via number keys **`1` - `4`** or the bottom navigation bar:
-
-### View 1: Topology Tree (`1. L3 Tree`)
-Hierarchical layout grouped by VPC boundaries:
-- **Compound VPC Box**: Groups a Logical Router (`LR`) and its attached Logical Switches (`LS`).
-- **Branch Port Indicators**:
-  - `├──` / `└──`: Logical Router Port (LRP) connecting the router to an internal subnet or transit network.
-  - `[GW IP: 10.54.0.1/16]`: Distributed default gateway interface for pods and VMs in that subnet.
-  - `[Transit IP: 100.64.0.1/16]`: Multi-VPC interconnection interface.
-  - `[EIP: 10.144.124.13/27] [GW: hv-01]`: Centralized external gateway interface (External IP) active on the designated chassis node (highlighted in Persimmon `#fe7c3f`).
-- **Workload Expansion (`Space` / `Enter`)**: Subnets are collapsed by default. Press **`Space`** on any switch to toggle its workload pods and KubeVirt VMs.
-- **Interconnects Box**: Displays shared switches (such as `join`) that attach to multiple Logical Routers across distinct VPCs.
-- **External Provider Underlays Box**: Displays provider networks attached via `localnet` switch ports to physical bridges.
-- **Side Panel (Right)**: Shows full metadata of the currently highlighted entity (IDs, route counts, NAT rules, policy counts, bound/unbound port tallies, and Kubernetes annotations).
-
-### View 2: L2 Subnets Explorer (`2. L2 Subnets`)
-Interactive dual-pane broadcast domain explorer:
-- **Left Pane (Subnets)**: Scroll through all subnets in the cluster with bound/unbound port counts.
-- **Right Pane (Workload Cards)**: Press **`Tab`**, **`→`**, or **`Enter`** to move focus into the workload cards for that subnet.
-  - Scroll through specific VMs and Pods with **`j` / `k`** or **`↑` / `↓`**.
-  - Each card shows port name, IP/MAC, hosting cluster node, and KubeVirt VMI identity.
-  - Press **`x`** on any card to run diagnostics directly against that specific workload!
-  - Press **`←`** or **`Tab`** to return focus to the Subnets list.
-
-### View 3: Chassis Explorer (`3. Chassis`)
-Split-pane physical node and tunnel inspector:
-- **Left Pane (Nodes)**: List of physical cluster nodes (`hv-01` .. `hv-04`) with total OVN port bindings.
-- **Right Pane (Details)**: Encap tunnel IP, tunnel type (`geneve`/`vxlan`), active gateway roles, and chassis UUID.
-
-### View 4: Port Matrix (`4. Port Matrix`)
-Tabular inventory of all L3 interconnects in the cluster:
-- **Columns**: `VPC/ROUTER`, `PORT (LRP)`, `INTERFACE IP (CIDR)`, `TARGET SWITCH`, `MAC`, `GATEWAY STATUS`.
-- **Shared Indicator (`*`)**: Marks switches attached to more than one Logical Router.
-- **Port Inspector Box (Bottom)**: Detailed inspection card for the highlighted router port.
-
----
-
-## 2. k9s-Style Bottom Navigation Dock
-
-`ovn-topo` features an uncluttered top header and a dedicated 2-row bottom status and hotkey bar:
+## 1. Screen layout
 
 ```text
-───────────────────────────────────────────────────────────────────────────────────────────────────────
- ● Connected to http://127.0.0.1:8080 │ Rev 8 │ 12 nodes, 7 edges │ Theme: [suse]
- <1-4> Views  <Space> Expand  <Tab/←/→> Pane  <x> Diag  <t> Theme  <j/k/↑/↓> Nav  <r> Refresh  <q> Quit
+ Daemon:   http://127.0.0.1:8080/api/v1        <:>     command         <e/E>   expand/fold     <L>  live on/off
+ Revision: 1842  ● live                        </>     filter          <d>     describe        <t>  theme
+ Topology: 3 VPC · 9 LS · 412 LSP · 4 chassis  <1-4>   vpc/ch/wl/ports <y>     raw             <?>  help
+ Diag:     DIAG ready                          <h/l>   fold/unfold     <b>     back            <q>  quit
+ Theme:    SUSE                                <enter> toggle/goto     <r>     refresh
+┌──────────────────────────────────── Xray(vpc)[31] </pod> ───────────────────────────────────┐
+│ ▾      VPCS (2)                                                                              │
+│ ├─ ▾ ● VPC  default  1 router · 1 switch [default]                                           │
+│ │  ├─ ▾ ● LR   ovn_cluster  ports 3 · routes 1 · nat 0 · pol 1 · lb 1                        │
+│ │  │  ├─ ▸ ● LRP  lrp-default  10.244.0.1/24 → default-subnet                                │
+│ │  │  ├─ ▸ ● LRP  lrp-gw   [GW active node-1]                                                │
+│ │  └─ ▾ ! LS   default-subnet  10.244.0.1/24 · 4 ports · 2 bound · 1 unbound                 │
+│ │     ├─ ▾ ● LSP  app-pod-1.default  10.244.0.10 · Pod · @node-1                             │
+│ │     │  ├╌ bound on ⇢ CH   node-1 [gateway]                                                 │
+│ │     │  └╌ workload ⇢ POD  app-pod-1                                                        │
+│ │     └─ ▸ ✗ LSP  pending-pod.default  10.244.0.12 · Pod [unbound]                           │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+ xray  vpc  lsp:lsp-pod1-uuid                                        jumped to … (b: back)
 ```
-- **Row 1**: Real-time connection indicator, daemon URL, topology revision, graph totals, and current active color theme.
-- **Row 2**: Context-sensitive hotkey badges formatted with theme accents.
+
+- **Header (5 rows):** daemon, revision and live state (`● live` over SSE, `◌ polling` when the stream is unavailable, `‖ paused`, `○ offline fixture`), topology totals, diagnostics state, theme, and the hotkeys for the current screen. Terminals shorter than 18 rows get a one-line header.
+- **Main box:** title shows the screen (`Xray(vpc)`, `Ports(lrp)`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
+- **Crumbs (bottom row):** `xray`/`table` › current root › selected object ID, and on the right any message (jump targets, errors, refresh failures).
+
+Every frame is laid out to exactly the terminal size: nothing scrolls off the top, long lines are truncated with `…`, and lists scroll to keep the cursor visible.
 
 ---
 
-## 3. Visual Palette & Semantic Colors
+## 2. Xray trees — `1` `2` `3`
 
-| Element | Color | Role |
+| Key | Root | Tree |
 |---|---|---|
-| **Gateways, EIPs & Alerts** | **Persimmon** (`#fe7c3f`) | Centralized HA gateways, EIP interfaces, active chassis roles |
-| **CIDRs & Network IPs** | **Mint** / Cyan (`#90ebcd`) | Subnet IP prefixes, interface IPs, and transit ranges |
-| **Router Ports (LRPs)** | **Waterhole** / Blue (`#2453ff`) | LRP and LSP port identifier badges |
-| **Bound / Healthy Ports** | **Jungle** / Green (`#30ba78`) | Bound ports, delivered packet trace verdicts, active statuses |
-| **Unbound Ports & Errors** | **Red** (`#ff5555`) | Unbound logical ports, dropped packets, connection errors |
-| **Compound VPC Boxes** | **Primary Theme Accent** | VPC container boundary and header banners |
+| `1` / `:xray vpc` | VPCs, shared & standalone switches, external networks | VPC → LR → LRP · VPC → LS → LSP |
+| `2` / `:xray chassis` | chassis | chassis → LSPs bound there (+ active gateway roles) |
+| `3` / `:xray workload` | Kubernetes namespaces | namespace → VM / Pod / Node → its NICs (LSPs) |
+
+- **Rows:** fold marker (`▾`/`▸`), health glyph, kind tag, name, a dim summary (CIDR, IP, `@chassis`, counts) and a badge (`[unbound]`, `[GW active hv-01]`, `[shared by 2 routers]`).
+- **Relations (`├╌ label ⇢ …`)** appear when you unfold an object. They are graph edges, not ownership: `bound on` (chassis), `workload`, `router port`, `peer switch`, `peer port`, `gateway (active)`, `localnet`, `router` (for shared switches). Relations already visible as the parent or a sibling are not repeated.
+- **`Enter` on a relation jumps** to that object in the xray where it lives (a chassis opens the chassis xray, a workload the workload xray), expanding the path to it. **`b`** returns to the exact row you left.
+- Large switches/chassis/namespaces (more than 16 children) start folded; `l`/`Space` unfolds, `e`/`E` unfolds/folds everything visible.
+- A multi-NIC KubeVirt VM is one workload row whose children are its NICs on different switches.
+
+### Health glyphs
+
+| Glyph | Meaning |
+|---|---|
+| `●` (green) | OK: port bound, switch fully bound, chassis present |
+| `!` (yellow) | Degraded: switch with unbound ports, disabled port |
+| `✗` (red) | Unbound port (no `Port_Binding.chassis`) or a workload with such a NIC |
+| `·` (dim) | Infrastructure port (`router`, `localnet`, …) — never reported as unbound |
+
+Shapes and colours both carry the state, so it stays readable without colour.
 
 ---
 
-## 4. Tier 1 Diagnostics (`x` key)
+## 3. Router-port table — `4` / `:ports`
 
-When started with `--diag`, pressing **`x`** opens the diagnostics menu for the currently highlighted entity:
+The Port Matrix as a resource table: one row per logical router port, including gateway ports known only from the router's properties.
 
-### `[1] ovn-trace` (Interactive Simulation)
-Opens the Destination Picker Dialog:
-- **Search & Custom IP Bar**: Type any text to filter candidates in real-time, or type an arbitrary IP address (e.g. `10.144.97.201` or `10.144.97.201:22`) to trace to custom endpoints outside OVN!
-- **Category Tabs**: Press **`Tab`** to filter by `[All]`, `[VM]`, `[Pod]`, `[Gateway]`, `[Node]`, or `[Public DNS]`.
-- **Protocol Selection**: Press **`Ctrl+P`** or **`F1` - `F5`** to toggle:
-  - `[1]` ICMP (Ping)
-  - `[2]` TCP 22 (SSH)
-  - `[3]` TCP 80 (HTTP)
-  - `[4]` TCP 443 (HTTPS)
-  - `[5]` UDP 53 (DNS)
-- **Automatic Gateway MAC**: When tracing from a VM to an external destination, `ovn-topo` automatically injects the subnet router's Gateway MAC (`eth.dst`), ensuring seamless traversal through logical routers to `localnet.external`.
-- **Trace Output**: Visual **Hop-by-Hop Flow Path**, `DELIVERED` / `DROPPED` verdict, and pipeline stage inspector.
-
-### `[2] - [4] Live tcpdump`
-Real-time packet capture on the selected port's **dedicated host veth interface** (`<hash>_h` for VMs/Pods, `ovn0` for node ports, `br-external` for gateways). Includes safe 5-second execution timeout and `-l` line-buffering.
-
-### `[5] Filtered Conntrack`
-Connection tracking table filtered specifically for the active port IP, removing loopback and control-plane noise.
-
-### `[6] OVS Physical Bridges & Ports`
-Runs `ovs-vsctl show` on the hosting node, displaying bridges, port types (`vxlan`, `internal`, `patch`), tunnel endpoints, and BFD statuses.
-
-### `[7] Tail Controller Logs`
-Tails local `ovn-controller` logs on the target node with automatic chassis UUID $\rightarrow$ node name translation.
+- **Columns:** VPC, router port, networks, peer switch (`*` = shared by more than one router), MAC, gateway (`distributed` or `active <chassis>`), role (`subnet gateway`, `node transit (join)`, `interconnect`, `external gateway`). On narrow terminals MAC, then ROLE, then NETWORKS are hidden instead of wrapping.
+- **`s` / `S`** cycles the sort column / reverses it (the header shows `↑`/`↓`). **`/`** filters across all columns.
+- **Inspector (bottom):** router and VPC, peer switch and its summary, peer LSP, routers on that switch, gateway, the routing mode (distributed vs centralized) and a one-line explanation of the port's role. It docks when the terminal is tall enough; **`i`** toggles it.
+- **`Enter`** opens the port in the VPC xray, **`b`** comes back to the same table row. **`d`** / **`y`** describe it.
 
 ---
 
-## 4. Recommended Screenshot Catalog
+## 4. Describe & raw — `d` / `y`
 
-To build complete documentation, capture screenshots of the following 10 architectural scenarios:
+`d` opens everything known about the selected object: graph properties, Kubernetes identity (namespace, owner, VMI, node, NAD), its relations and children, plus the daemon's `/node/{id}` detail (external_ids, related objects). `y` toggles the raw OVSDB columns. `j`/`k` scroll, `Esc` returns.
 
-### Screenshot 1: Compound VPC Container
-- **View**: Topology Tree View (`Tab`).
-- **Focus**: The `VPC: ovn-cluster` or custom VPC box.
-- **Shows**: The logical router at the top (`▼ [Router] ovn_cluster`), its attached logical switches (`[Switch] default-subnet`), and its branch port tree (`├── (lrp-default) [GW IP: 10.54.0.1/16] ──► [Switch] default-subnet`).
+---
 
-### Screenshot 2: Multi-VPC Transit Switch (Interconnect)
-- **View**: Topology Tree View (`Tab`).
-- **Focus**: The `Interconnects (Multi-LR Subnets)` box.
-- **Shows**: Switch `join` with multiple branch lines connecting into different VPC routers (e.g., `ovn-cluster` and `custom-vpc`).
+## 5. Filter, commands, live updates
 
-### Screenshot 3: Centralized HA Gateway & EIPs
-- **View**: Port Interconnection Matrix (`Tab`).
-- **Focus**: A row with gateway role (e.g. `vpc-onewater-external`).
-- **Shows**: Persimmon highlight `Active: hv-01`, gateway role `External EIP Gateway`, and the Port Inspector showing redirect port `cr-vpc-onewater-external`.
+- **`/text`**: substring filter on name, summary and badge. Matching rows are shown with all their ancestors, so you keep the context (`/pod-2` shows `VPCs › default › default-subnet › app-pod-2.default`). `Esc` clears it.
+- **`:`**: command prompt with `Tab` completion — `xray vpc|chassis|workload`, `ports` (`lrp`, `matrix`), `theme <name>`, `quit`.
+- **Live updates:** the TUI subscribes to `/events` (SSE). Each event refetches the L3 graph and only the switches whose ports changed (falling back to all switches for unknown IDs). If the stream breaks it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE. Rows whose content changed flash for 3 s. `L` pauses/resumes; `r` forces a full reload.
+- **Ports are fetched completely:** L2 pages (200 ports each) are followed until the last one.
 
-### Screenshot 4: Distributed Subnet Gateway (East-West)
-- **View**: Port Interconnection Matrix (`Tab`).
-- **Focus**: A standard workload subnet row (e.g. `subnet-onewater`).
-- **Shows**: Distributed status, gateway IP, and Port Inspector role `Default Gateway for subnet-onewater`.
+---
 
-### Screenshot 5: External Provider Underlay (Localnet / VLAN)
-- **View**: Topology Tree View (`Tab`).
-- **Focus**: `External Provider Underlays` box.
-- **Shows**: `[EXT] provider-ext` or `external` switch mapped to physical NIC bridge `br-external`.
+## 6. Tier 1 Diagnostics — `x` (requires `--diag`)
 
-### Screenshot 6: Port Interconnection Inspector
-- **View**: Port Interconnection Matrix (`Tab`).
-- **Focus**: Bottom inspection box for an interconnect or gateway port.
-- **Shows**: MAC address, subnet prefix, interface IP, peer LSP name, routing mode, and interconnected peer routers list.
+`x` opens the diagnostics modal for the selection: an LSP (or a workload, via its first NIC), a switch, a router, a router port or a chassis. Groups, namespaces, VPCs and external networks are not diagnosable and `x` says so. Without `--diag`, or when RBAC denies `pods/exec`, `x` explains why instead of failing.
 
-### Screenshot 7: Tier 1 `ovn-trace` Simulation (Delivered Flow)
-- **View**: Diagnostics Modal (`x` ➔ `1`).
-- **Focus**: Trace result for an inter-VPC or pod-to-gateway flow.
-- **Shows**: Simulation endpoints (Source, Destination, Protocol), green `DELIVERED` badge, visual Hop-by-Hop Flow Path (`ovn-default ──► ovn-cluster ──► join ──► Port 'node-hv-01'`), and evaluated pipeline stages.
+- **`[1] ovn-trace`** — destination picker with fzf-style search, custom IP (`10.144.97.201` or `10.144.97.201:22`), category tabs (`Tab`: All / VM / Pod / Gateway / Node / Public DNS) and protocol presets (`Ctrl+P`, `F1`–`F5`: ICMP, TCP 22/80/443, UDP 53). The microflow starts at the **selected** port (inport, MAC, IP); traffic leaving the subnet gets the router's gateway MAC as `eth.dst`. Output: verdict (`DELIVERED` / `DROPPED`), hop-by-hop path, evaluated pipeline stages; `o` toggles raw output.
+- **`[2]` live tcpdump** on the port's dedicated host veth (`<hash>_h`; `ovn0` for node ports, the external bridge for gateways), with presets or a custom BPF filter. `Space`/`Esc` stops the capture.
+- **`[3]` filtered conntrack** for the port IP · **`[4]` OVS port interface** (link state, ofport, MTU, counters) · **`[5]` `ovs-vsctl show`** on the hosting node · **`[6]` `ovn-controller` logs** (chassis UUID → node name resolved).
 
-### Screenshot 8: Tier 1 `ovn-trace` (Dropped by ACL)
-- **View**: Diagnostics Modal (`x` ➔ `1`).
-- **Focus**: Trace hitting a deny ACL rule or unroutable destination.
-- **Shows**: Red `DROPPED` badge, summary `Packet dropped by rule or ACL`, and the specific ACL table entry evaluated.
+Commands come from the typed allowlist in `pkg/diag`; nothing is built from free-form strings.
 
-### Screenshot 9: Live `tcpdump` on Dedicated Host VETH
-- **View**: Diagnostics Modal (`x` ➔ `2` or `4`).
-- **Focus**: Live capture on workload port (e.g., `vm-onewater`).
-- **Shows**: Header `Captured on dedicated interface '4e3b7_37a8eec_h' (port: vm-onewater on node hv-03)` and packet summaries.
+---
 
-### Screenshot 10: OVS Physical Bridges & Tunnels (`ovs-vsctl show`)
-- **View**: Diagnostics Modal (`x` ➔ `6`).
-- **Focus**: Physical interface inspection.
-- **Shows**: Indented bridge tree showing `br-int`, `br-external`, tunnel endpoints (`vxlan/geneve`, `remote_ip`), and BFD session states, with the line counter `[Lines 1-18 of 45 | ↑/↓ or j/k: scroll]`.
+## 7. Known traps (by design, also shown in `?` help)
+
+- **VPC NAT Gateway (`Iptables*`) NAT is iptables inside a pod**, not OVN NAT — it never appears in the NB `NAT` table or in the router's `nat` count.
+- **Default-VPC `natOutgoing` in centralized mode** is an LR policy reroute plus node iptables, not NB `NAT`.
+- **A switch can attach to several routers** (e.g. `join`, or an external switch shared by VPCs): it is listed under *Shared & standalone switches* with `[shared by N routers]` and `router ⇢` relations to each.
+
+---
+
+## 8. Screenshot catalog
+
+Capture these to document every core OVN / Kube-OVN concept:
+
+1. **Compound VPC** — `1`, a VPC unfolded: LR with its LRPs and the VPC's switches.
+2. **Multi-VPC shared switch** — `1`, *Shared & standalone switches*, `join` with `[shared by 2 routers]` and its `router ⇢` relations.
+3. **Centralized HA gateway & EIP** — `4`, a row with `active <chassis>`; inspector showing *Centralized* routing and the `cr-` redirect port.
+4. **Distributed subnet gateway** — `4`, a subnet-gateway row; inspector *Distributed* routing and the default-gateway sentence.
+5. **External underlay (localnet)** — `1`, *External networks*, the provider network with its `localnet from ⇢` switch.
+6. **Port relations & jump** — `1`, an LSP unfolded showing `bound on ⇢ CH` and `workload ⇢`, then `Enter` on the chassis relation (chassis xray, crumbs message).
+7. **Chassis view** — `2`, chassis with bound ports and `active gateway for ⇢ LRP`.
+8. **Multi-NIC VM** — `3`, a VirtualMachine with its NICs on two switches.
+9. **Describe & raw** — `d` then `y` on an LSP: properties, Kubernetes identity, external_ids, raw columns.
+10. **Tier 1 `ovn-trace` delivered / dropped** — `x` → `1` from a workload port: verdict, hop-by-hop path, stages.
+11. **Live tcpdump on the dedicated veth** — `x` → `2`: header `Listening on interface '<hash>_h'` and packets.
+12. **`ovs-vsctl show`** — `x` → `5`: bridges, tunnels and BFD, with the line counter.

@@ -64,14 +64,14 @@ mise run pf-stop
 
 ## TUI Controls (`ovn-topo`)
 
-- **`1` - `4`**: Switch operational views (**`1. L3 Tree`**, **`2. L2 Subnets`**, **`3. Chassis`**, **`4. Port Matrix`**).
-- **`Space` / `Enter`**: Expand/collapse workload Pods and VMs on logical switches (in L3 Tree) or toggle pane focus (in L2 Subnets).
-- **`Tab` / `←` / `→`**: Switch between Subnets list and individual Workload cards (in L2 Subnets view).
-- **`x`**: Open **Tier 1 Diagnostics** modal (interactive `ovn-trace` with fzf search & custom IP, live `tcpdump`, conntrack, `ovs-vsctl show`, controller logs).
-- **`t`**: Cycle color themes live (**SUSE**, **Dracula**, **Nord**, **Tokyo Night**, **Catppuccin Mocha**, **Default**).
-- **`j` / `k`** or **`↓` / `↑`**: Move selection across routers, subnets, and workloads.
-- **`r`**: Refresh topology from the daemon.
-- **`q`**: Quit.
+k9s-style navigation; see [`docs/tui-guide.md`](docs/tui-guide.md) for the full guide.
+
+- **`1` - `4`** (or `:xray vpc`, `:xray chassis`, `:xray workload`, `:ports`): switch between the three xray trees and the router-port table.
+- **`j`/`k`**, **`h`/`l`**, **`Space`**: move, fold/unfold, toggle. **`e`/`E`** expands/folds everything.
+- **`Enter`** on a `⇢` relation (chassis, workload, peer port…) jumps to that object; **`b`** goes back.
+- **`/`**: filter (keeps the ancestors of every match). **`d`** describe, **`y`** raw columns.
+- **`x`**: open **Tier 1 Diagnostics** on the selection (interactive `ovn-trace` with fzf search & custom IP, live `tcpdump`, conntrack, `ovs-vsctl show`, controller logs).
+- **`r`** refresh, **`L`** pause/resume live (SSE) updates, **`t`** cycle themes, **`?`** help, **`q`** quit.
 
 Launch with Tier 1 diagnostics enabled:
 ```bash
@@ -105,7 +105,7 @@ Available diagnostic actions from the TUI (`x` key):
 3. **OVS interfaces**: inspect physical interfaces and port bindings via `ovs-vsctl`.
 4. **Controller logs**: tail `ovn-controller` logs on the target node.
 
-If RBAC denies `pods/exec`, the TUI displays a `DIAG DEGRADED` badge and falls back to passive mode without crashing.
+If RBAC denies `pods/exec`, the TUI header shows the `DIAG` badge as degraded with the reason and falls back to passive mode without crashing.
 
 ## Rancher and Harvester UI Extension
 
