@@ -41,7 +41,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           cache: true
 
       - name: Compile multi-arch binaries
@@ -63,11 +63,20 @@ jobs:
             done
           done
 
+          # Windows: the TUI only (the daemon targets in-cluster Linux).
+          for ARCH in amd64 arm64; do
+            echo "Building ovn-topo for windows/${ARCH}..."
+            CGO_ENABLED=0 GOOS=windows GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo.exe ./cmd/ovn-topo
+            (cd dist && zip -q ovn-topo_${VERSION}_windows_${ARCH}.zip ovn-topo.exe && rm ovn-topo.exe)
+          done
+
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
 
   build-and-push-image:
     needs: prepare-version
@@ -222,6 +231,7 @@ jobs:
           name: Release v${{ needs.prepare-version.outputs.version }}
           files: |
             release-assets/*.tar.gz
+            release-assets/*.zip
             release-assets/*.tgz
             release-assets/hauler.yaml
           generate_release_notes: true

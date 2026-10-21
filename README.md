@@ -133,7 +133,7 @@ Every version tag (`vX.Y.Z`) publishes:
 | **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:vX.Y.Z` | Multi-arch (`linux/amd64`, `linux/arm64`) distroless daemon |
 | **Daemon Chart** | `oci://ghcr.io/coulof/charts/ovn-topology:X.Y.Z` | OCI Helm chart for downstream clusters |
 | **Extension Catalog Image (ECI)** | `ghcr.io/coulof/ovn-topology-ui:vX.Y.Z` | Rancher Extension Catalog container |
-| **Binaries** | GitHub Releases | Static `ovn-topologyd` and `ovn-topo` archives for Linux/macOS |
+| **Binaries** | GitHub Releases | Static `ovn-topologyd` + `ovn-topo` archives for Linux/macOS (amd64, arm64); `ovn-topo` zip for Windows (amd64, arm64) |
 
 ### Air-Gapped Environments (Hauler)
 
