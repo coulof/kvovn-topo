@@ -137,7 +137,7 @@ func TestParseTraceOutput(t *testing.T) {
  8. ls_out_port_sec_l2 (ovn-northd.c:7531): outport == "pod2.default", priority 100, uuid c12fbc90
     output("pod2.default");
 `
-	res := ParseTraceOutput(deliveredSample)
+	res := ParseTraceOutput(deliveredSample, TraceExpect{Port: "pod2.default"})
 	if res.Verdict != "delivered" {
 		t.Errorf("expected verdict delivered, got %s", res.Verdict)
 	}
@@ -153,9 +153,70 @@ func TestParseTraceOutput(t *testing.T) {
  2. ls_in_acl: ip4 && tcp.dst == 22, priority 2000, uuid abc
     drop;
 `
-	dropRes := ParseTraceOutput(dropSample)
+	dropRes := ParseTraceOutput(dropSample, TraceExpect{})
 	if dropRes.Verdict != "dropped" {
 		t.Errorf("expected verdict dropped, got %s", dropRes.Verdict)
+	}
+}
+
+// A cross-switch trace in ovn-trace's detailed format: the packet crosses two patch
+// ports (switch → router → switch) and ends on the destination VIF.
+const crossSwitchTrace = `
+ingress(dp="ls-a", inport="pod1.default")
+-----------------------------------------
+24. ls_in_l2_lkup (northd.c:7930): eth.dst == 00:00:00:00:00:01, priority 50, uuid 2f4b1a5f
+    outport = "ls-a-lr";
+    output;
+
+egress(dp="ls-a", inport="pod1.default", outport="ls-a-lr")
+-----------------------------------------------------------
+ 9. ls_out_port_sec_l2 (northd.c:5704): outport == "ls-a-lr", priority 50, uuid 0c1e
+    output;
+    /* output to "ls-a-lr", type "patch" */
+
+ingress(dp="lr", inport="lr-ls-a")
+----------------------------------
+13. lr_in_ip_routing (northd.c:9200): ip4.dst == 10.0.2.0/24, priority 49, uuid 5c3a
+    outport = "lr-ls-b";
+    next;
+EGRESS
+
+egress(dp="ls-b", inport="ls-b-lr", outport="pod2.default")
+-----------------------------------------------------------
+ 9. ls_out_port_sec_l2 (northd.c:5704): outport == "pod2.default", priority 50, uuid 1d2f
+    output;
+    /* output to "pod2.default", type "" */
+`
+
+// TestTraceVerdictChecksDestination: the verdict is about reaching the chosen
+// destination, not about reaching some port.
+func TestTraceVerdictChecksDestination(t *testing.T) {
+	routerDrop := strings.Replace(crossSwitchTrace, `    outport = "lr-ls-b";
+    next;
+EGRESS`, "    drop;", 1)
+	routerDrop = routerDrop[:strings.Index(routerDrop, "\negress(dp=\"ls-b\"")]
+	delivered := strings.Replace(crossSwitchTrace, "EGRESS\n", "", 1)
+
+	cases := []struct {
+		name, raw, verdict, final string
+		expect                    TraceExpect
+	}{
+		{"reaches the destination across a router", delivered, "delivered", "pod2.default", TraceExpect{Port: "pod2.default"}},
+		{"reaches another port", delivered, "misrouted", "pod2.default", TraceExpect{Port: "vm1.ns"}},
+		{"patch hop then dropped by the router", routerDrop, "dropped", "", TraceExpect{Port: "pod2.default"}},
+		{"patch hop then dropped, unchecked", routerDrop, "dropped", "", TraceExpect{}},
+		{"unchecked destination", delivered, "delivered", "pod2.default", TraceExpect{}},
+		{"external leaves via localnet", `/* output to "localnet.external", type "localnet" */`, "delivered", "localnet.external", TraceExpect{Egress: true}},
+		{"external leaves via a node ovn0", `/* output to "node-hv-01", type "" */`, "delivered", "node-hv-01", TraceExpect{Egress: true}},
+		{"external reaches a pod", `/* output to "pod2.default", type "" */`, "misrouted", "pod2.default", TraceExpect{Egress: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res := ParseTraceOutput(c.raw, c.expect)
+			if res.Verdict != c.verdict || res.FinalPort != c.final {
+				t.Errorf("verdict %q final %q, want %q %q (%s)", res.Verdict, res.FinalPort, c.verdict, c.final, res.Summary)
+			}
+		})
 	}
 }
 

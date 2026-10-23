@@ -42,6 +42,7 @@ type TraceDestination struct {
 	IP       string
 	Subnet   string
 	Category string
+	Port     string // logical port owning IP, when the destination is an OVN port
 }
 
 // TraceProtocolOption defines a selectable protocol and port for ovn-trace.
@@ -243,7 +244,7 @@ func (m model) updateDiagModal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.diagRunning = true
 				m.diagStep = diagStepResult
 				m.diagScrollOffset = 0
-				return m, m.executeTrace(chosenDest.IP, proto, port)
+				return m, m.executeTrace(chosenDest.IP, m.traceExpect(chosenDest), proto, port)
 			}
 			return m, nil
 		default:
@@ -583,6 +584,7 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 										IP:       ip,
 										Subnet:   swName,
 										Category: "Node ovn0",
+										Port:     w.Name,
 									})
 									continue
 								}
@@ -591,6 +593,7 @@ func (m model) collectTraceDestinations(sourceNode *api.GraphNode, sourceIP stri
 									IP:       ip,
 									Subnet:   swName,
 									Category: category,
+									Port:     w.Name,
 								})
 							}
 						}
@@ -730,7 +733,28 @@ func (m model) filteredTraceDestinations() []TraceDestination {
 	return list
 }
 
-func (m model) executeTrace(targetDstIP string, proto string, dstPort int) tea.Cmd {
+// traceExpect is where a trace to dest must end for the verdict to be "delivered".
+// A custom IP that belongs to a known destination takes its expectation. Router
+// port IPs and unknown custom IPs are not checked.
+func (m model) traceExpect(dest TraceDestination) diag.TraceExpect {
+	if dest.Category == "Custom" {
+		for _, d := range m.traceDestinations {
+			if d.IP == dest.IP {
+				return m.traceExpect(d)
+			}
+		}
+		return diag.TraceExpect{}
+	}
+	switch {
+	case dest.Port != "":
+		return diag.TraceExpect{Port: dest.Port}
+	case dest.Category == "Underlay" || dest.Category == "Public DNS":
+		return diag.TraceExpect{Egress: true}
+	}
+	return diag.TraceExpect{}
+}
+
+func (m model) executeTrace(targetDstIP string, expect diag.TraceExpect, proto string, dstPort int) tea.Cmd {
 	t := m.diagTgt
 	req, reqErr := m.traceRequest(t, targetDstIP, proto, dstPort)
 	return func() tea.Msg {
@@ -763,7 +787,7 @@ func (m model) executeTrace(targetDstIP string, proto string, dstPort int) tea.C
 			return diagExecResultMsg{err: fmt.Errorf("ovn-trace failed: %s", errMsg)}
 		}
 
-		traceRes := diag.ParseTraceOutput(string(stdout))
+		traceRes := diag.ParseTraceOutput(string(stdout), expect)
 		traceParams := fmt.Sprintf("Source (From):      [Datapath %s] inport '%s' (IP: %s, MAC: %s)\nDestination (To):   IP: %s (MAC: %s)\nProtocol Match:     %s (ip.ttl=255, 4x --ct=new)\nExecuted in:        pod %s",
 			req.Datapath, req.Inport, req.SrcIP, req.SrcMAC, req.DstIP, req.DstMAC, strings.ToUpper(req.Protocol), centralPod)
 
@@ -1228,7 +1252,12 @@ func (m model) renderDiagModal() string {
 				verdictStyle = m.styles.BadgeUnbound
 			}
 			fmt.Fprintf(&traceContent, "Verdict: %s\n", verdictStyle.Render(strings.ToUpper(tr.Verdict)))
-			fmt.Fprintf(&traceContent, "Summary: %s\n\n", tr.Summary)
+			fmt.Fprintf(&traceContent, "Summary: %s\n", tr.Summary)
+			expected := tr.Expected
+			if expected == "" {
+				expected = "not checked (router port or unknown IP)"
+			}
+			fmt.Fprintf(&traceContent, "Expected: %s\n\n", expected)
 
 			if m.diagTraceParams != "" {
 				traceContent.WriteString("Simulation Endpoints:\n")

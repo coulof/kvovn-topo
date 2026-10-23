@@ -170,7 +170,7 @@ func TestDiagActionsExecuteOnTheSelectedPort(t *testing.T) {
 	}
 
 	// trace: inport, source IP and MAC are the selected port's own.
-	res, _ := m.executeTrace("10.244.0.10", "icmp", 0)().(diagExecResultMsg)
+	res, _ := m.executeTrace("10.244.0.10", diag.TraceExpect{}, "icmp", 0)().(diagExecResultMsg)
 	if res.err != nil {
 		t.Fatalf("trace failed: %v", res.err)
 	}

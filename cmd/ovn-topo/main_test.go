@@ -432,7 +432,11 @@ func TestDiagnosticsMode(t *testing.T) {
 	}
 	m.traceSearchFilter = ""
 
-	res, ok := m.executeTrace(m.traceDestinations[0].IP, "icmp", 0)().(diagExecResultMsg)
+	dest := m.traceDestinations[0]
+	if mock, ok := m.diagExecutor.(*diag.MockExecutor); ok && dest.Port != "" {
+		mock.StdoutMap["ovn-trace"] = []byte(`/* output to "` + dest.Port + `", type "" */` + "\n")
+	}
+	res, ok := m.executeTrace(dest.IP, m.traceExpect(dest), "icmp", 0)().(diagExecResultMsg)
 	if !ok || res.err != nil {
 		t.Fatalf("unexpected trace result %+v", res)
 	}
