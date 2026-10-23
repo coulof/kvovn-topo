@@ -1,0 +1,6 @@
+{
+ "scenario": "kubevirt-multinic",
+ "captured": "2026-10-23T06:35:06Z",
+ "ovnCentralImage": "docker.io/kubeovn/kube-ovn:v1.16.2",
+ "ovnVersion": "ovn-nbctl 25.03.4"
+}
