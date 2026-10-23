@@ -57,7 +57,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | A6 | SSE has no heartbeat; idle streams may be cut by proxies. | M3 |
 | E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). | before M5 |
 | E2 | Three chassis → node resolvers (daemon `MatchChassis`, TUI `resolveNodeName`, `pkg/diag` `resolveKubeNodeName` + an extra `ovn-sbctl` exec). The TUI should use the daemon's `nodeName`. | before M5 |
-| E3 | `ovn-trace` output parsed with regexes. | M5 |
+| E3 | `ovn-trace` output parsed with regexes (`ofproto/trace` and `ovn-detrace` will add two more formats). | M5 / M6 detrace follow-up |
 | F1 | Version `0.1.0` everywhere; no release has run end to end. | M7 |
 
 ---
@@ -331,7 +331,7 @@ Extension: add the L2 and Chassis views here.
 - **Relationship with `kubectl ko` (`pkg/ko`)**:
   Rather than importing `github.com/kubeovn/kube-ovn` as a Go module (which would violate `AGENTS.md` by pulling in GoBGP, Calico/Felix, and querying CRDs), `pkg/diag` adopts the proven command patterns from `pkg/ko` directly:
   - **`ovn-trace` formula**: Matches `pkg/ko/trace.go` using `ip.ttl == 255`, protocol matchers, and 4x `--ct=new` for multi-tier NAT/ACL conntrack simulation.
-  - **Physical OpenFlow trace**: Supports `ovs-appctl ofproto/trace br-int in_port=<ofport>...` on the node.
+  - **Physical OpenFlow trace**: *Not implemented* (correction 2026-10-23: `pkg/diag` has no `ofproto/trace` builder). Planned in the follow-up below.
   - **Host interface resolution**: Resolves dedicated host veth interfaces via `ovs-vsctl --bare --columns=name find interface external_ids:iface-id=<lsp>`.
   - **Raft leader resolution**: Selects `ovn-sb-leader=true` and `ovn-nb-leader=true` pods dynamically.
   - **Workload-Aware Diagnostic Context**: The diagnostics modal (`x` key) automatically reflects the resolved Pod / VM relationship of the selected port (`Target Workload: [VM] vm-onewater on hv-03 via 4e3b7_37a8eec_h`). `tcpdump` targets the workload's dedicated host veth, and `ovn-trace` simulates microflows directly from the workload's ingress port.
@@ -369,6 +369,22 @@ The fix:
   - No-guess cases are covered.
   - Drift and the multi-NIC picker are covered.
   - Mutation-checked: re-adding "switch → first pod" or "missing iface → ovn0" fails the suite.
+
+**Planned follow-up (2026-10-23): OpenFlow trace + `ovn-detrace`.** Not started; needs Q11 answered first.
+
+`ovn-trace` simulates the logical pipeline from NB/SB: it says what the *configuration* does, not whether `ovn-controller` installed those flows on the node. Add two steps to the trace action:
+- `ovs-appctl ofproto/trace br-int` in the source node's `ovs-ovn`, with the same microflow as the `ovn-trace` match (`in_port=<host veth>` from the captured target, `dl_src/dst`, `nw_src/dst`, `nw_ttl`, ports). Typed builder, no shell.
+- `ovn-detrace`, fed the `ofproto/trace` output on stdin (`Executor.Stream`). It maps each OpenFlow `cookie` to the SB `Logical_Flow` and the NB object behind it (ACL, LB, route, NAT), so a drop names its ACL.
+
+Each tool gets its own verdict, derived from the expected chassis/port in the graph. A logical-vs-physical disagreement (stale `ovn-controller`, missing flows) is shown as a banner, not averaged. If `ovn-detrace` is absent from the image it is disabled with the reason; nothing is installed at runtime (air-gap, read-only).
+
+*DoD (when scheduled)*
+- [ ] Q11 answered on `hv-01` with evidence.
+- [ ] `BuildOfprotoTraceCommand` and `BuildDetraceCommand` are typed, with exact-argv tests including hostile names.
+- [ ] The trace result shows logical (`ovn-trace`), physical (`ofproto/trace`) and annotated (`ovn-detrace`) outputs, one verdict per tool, and the disagreement banner.
+- [ ] Parser tests on outputs captured from `hv-01` (see E3).
+- [ ] Missing `ovn-detrace` disables only that step, with the reason.
+- [ ] `hack/check-deps.sh` still clean; nothing added to the daemon.
 
 ---
 
@@ -504,7 +520,7 @@ The fix:
 
 ## Backlog (not scheduled — do not start without an explicit task)
 
-- **ACL hit counters (T1):** OpenFlow cookie → logical flow → ACL, aggregated across nodes (`ovn-detrace`-style).
+- **ACL hit counters (T1):** OpenFlow cookie → logical flow → ACL, aggregated across nodes (`ovn-detrace`-style). Builds on the M6 `ovn-detrace` follow-up.
 - **OVN-IC:** two-cluster interconnect view (`icnbctl`/`icsbctl` databases as an additional monitor).
 - **Prometheus overlay (T0):** chassis up, raft health, `subnet_used_ip_count`, pinger loss/latency, OVS interface rx/tx on LSP edges. Optional; requires Rancher Monitoring.
 - **History archival/export:** periodic checkpoint + change upload to S3-compatible storage for long retention (ADR-0002 follow-up).
@@ -560,3 +576,4 @@ Record answers here with evidence (date, link to test run or doc).
 | Q8 | Measured monitor churn per table (to set the ADR-0002 noise denylist and checkpoint cadence) | M8 | open; measure on `overlay-default` + `kubevirt-multinic` |
 | Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | open |
 | Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |
+| Q11 | Is `ovn-detrace` (and its python `ovs` bindings) shipped in the Kube-OVN images on Harvester, and in which pod can it reach NB, SB and the node's OVS db? Candidates: `ovs-ovn` (local OVS db; NB/SB over the `ovn-nb`/`ovn-sb` services, TLS?) or `ovn-central` (NB/SB sockets; `--ovsdb` only names ports?). | M6 detrace follow-up | open; check `which ovn-detrace` and a dry run in both pods on `hv-01` |
