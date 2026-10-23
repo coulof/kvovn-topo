@@ -20,10 +20,13 @@ import (
 
 // Fixture file names in a scenario directory, as written by hack/capture-fixtures.sh.
 const (
-	FixtureNB    = "ovn-nb.json"
-	FixtureSB    = "ovn-sb.json"
+	FixtureNB   = "ovn-nb.json"
+	FixtureSB   = "ovn-sb.json"
 	FixtureNodes = "nodes.json"
-	FixturePods  = "pods.json"
+	FixturePods = "pods.json"
+	FixtureVMs  = "virtualmachines.json"
+	FixtureVMIs = "virtualmachineinstances.json"
+	FixtureNADs = "network-attachment-definitions.json"
 )
 
 // fixtureDB is the on-disk shape: {"<db name>": {"<table>": {"<uuid>": <row>}}}, rows

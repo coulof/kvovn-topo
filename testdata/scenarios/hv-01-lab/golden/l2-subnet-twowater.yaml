@@ -43,9 +43,11 @@ nodes:
   type: LSP
 - id: lsp:b0baa84d-11b4-4733-a0aa-ba56a4b8cb7e
   k8s:
+    namespace: default
+    networkAttachment: twowater/twowater
     node: hv-01
     owner: VirtualMachine/test-2-nics-2-vpc
-    pod: default/test-2-nics-2-vpc
+    pod: test-2-nics-2-vpc
     subnet: subnet-twowater
     vendor: kube-ovn
     vmi: test-2-nics-2-vpc
@@ -63,9 +65,11 @@ nodes:
   type: LSP
 - id: lsp:cb452200-3d95-423d-89cb-58aa51d32789
   k8s:
+    namespace: twowater
+    networkAttachment: twowater/twowater
     node: hv-02
     owner: VirtualMachine/vm-twowater
-    pod: twowater/vm-twowater
+    pod: vm-twowater
     subnet: subnet-twowater
     vendor: kube-ovn
     vmi: vm-twowater

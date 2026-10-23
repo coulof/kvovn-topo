@@ -37,9 +37,11 @@ nodes:
   type: LS
 - id: lsp:1fd5de58-d6df-4c00-bb6e-dddb1f77d2d0
   k8s:
+    namespace: default
+    networkAttachment: onewater/onewater
     node: hv-01
     owner: VirtualMachine/test-2-nics-2-vpc
-    pod: default/test-2-nics-2-vpc
+    pod: test-2-nics-2-vpc
     subnet: subnet-onewater
     vendor: kube-ovn
     vmi: test-2-nics-2-vpc
@@ -57,9 +59,11 @@ nodes:
   type: LSP
 - id: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
   k8s:
+    namespace: onewater
+    networkAttachment: onewater/onewater
     node: hv-04
     owner: VirtualMachine/vm-2
-    pod: onewater/vm-2
+    pod: vm-2
     subnet: subnet-onewater
     vendor: kube-ovn
     vmi: vm-2
@@ -77,9 +81,11 @@ nodes:
   type: LSP
 - id: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
   k8s:
+    namespace: onewater
+    networkAttachment: onewater/onewater
     node: hv-03
     owner: VirtualMachine/vm-onewater
-    pod: onewater/vm-onewater
+    pod: vm-onewater
     subnet: subnet-onewater
     vendor: kube-ovn
     vmi: vm-onewater

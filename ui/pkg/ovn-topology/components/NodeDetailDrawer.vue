@@ -213,6 +213,14 @@ export default defineComponent({
             <span class="key">Node:</span>
             <span class="val">{{ node.k8s.node }}</span>
           </template>
+          <template v-if="node.k8s.workloadName">
+            <span class="key">{{ node.k8s.workloadKind || 'Workload' }}:</span>
+            <span class="val">{{ node.k8s.workloadName }}</span>
+          </template>
+          <template v-if="node.k8s.networkAttachment">
+            <span class="key">Attachment:</span>
+            <span class="val mono">{{ node.k8s.networkAttachment }}</span>
+          </template>
         </div>
       </div>
 

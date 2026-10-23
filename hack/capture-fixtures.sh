@@ -101,24 +101,32 @@ query_db "${SB_SERVER}" OVN_Southbound "${OUT}/ovn-sb.json" "${SB_TABLES[@]}"
 echo "==> reading Kubernetes nodes and pods"
 "${KUBECTL[@]}" get nodes -o json > "${TMP}/nodes.json"
 "${KUBECTL[@]}" get pods -A -o json > "${TMP}/pods.json"
-python3 - "${TMP}/nodes.json" "${TMP}/pods.json" "${OUT}" <<'PY'
-import json, sys
-nodes_in, pods_in, out = sys.argv[1:]
+"${KUBECTL[@]}" get virtualmachines.kubevirt.io -A -o json > "${TMP}/vms.json" 2>/dev/null || true
+"${KUBECTL[@]}" get virtualmachineinstances.kubevirt.io -A -o json > "${TMP}/vmis.json" 2>/dev/null || true
+"${KUBECTL[@]}" get net-attach-def -A -o json > "${TMP}/nads.json" 2>/dev/null || true
+
+python3 - "${TMP}/nodes.json" "${TMP}/pods.json" "${TMP}/vms.json" "${TMP}/vmis.json" "${TMP}/nads.json" "${OUT}" <<'PY'
+import json, os, sys
+nodes_in, pods_in, vms_in, vmis_in, nads_in, out = sys.argv[1:]
 KEEP_NODE_ANN = {"ovn.kubernetes.io/chassis"}
 KEEP_POD_ANN = {"k8s.v1.cni.cncf.io/network-status"}
-def meta(m, keep_ann):
+def meta(m, keep_ann=None):
     r = {"name": m["name"]}
     if "namespace" in m:
         r["namespace"] = m["namespace"]
     if m.get("labels"):
         r["labels"] = m["labels"]
-    ann = {k: v for k, v in (m.get("annotations") or {}).items() if k in keep_ann}
-    if ann:
-        r["annotations"] = ann
+    if keep_ann is not None:
+        ann = {k: v for k, v in (m.get("annotations") or {}).items() if k in keep_ann}
+        if ann:
+            r["annotations"] = ann
+    elif m.get("annotations"):
+        r["annotations"] = m["annotations"]
     if m.get("ownerReferences"):
         r["ownerReferences"] = [{k: o[k] for k in ("apiVersion", "kind", "name", "uid") if k in o}
                                 for o in m["ownerReferences"]]
     return r
+
 nodes = [{"metadata": meta(n["metadata"], KEEP_NODE_ANN),
           "status": {"addresses": [a for a in n["status"].get("addresses", []) if a["type"] == "Hostname"]}}
          for n in json.load(open(nodes_in))["items"]]
@@ -128,7 +136,48 @@ nodes.sort(key=lambda n: n["metadata"]["name"])
 pods.sort(key=lambda p: (p["metadata"]["namespace"], p["metadata"]["name"]))
 json.dump(nodes, open(f"{out}/nodes.json", "w"), indent=1, sort_keys=True)
 json.dump(pods, open(f"{out}/pods.json", "w"), indent=1, sort_keys=True)
-print(f"    {len(nodes)} nodes, {len(pods)} pods")
+msg = f"    {len(nodes)} nodes, {len(pods)} pods"
+
+if os.path.exists(vms_in) and os.path.getsize(vms_in) > 0:
+    raw = json.load(open(vms_in)).get("items", [])
+    vms = [{"metadata": meta(v["metadata"]),
+            "spec": {"running": v.get("spec", {}).get("running"),
+                     "runStrategy": v.get("spec", {}).get("runStrategy"),
+                     "template": {"spec": {
+                         "networks": v.get("spec", {}).get("template", {}).get("spec", {}).get("networks", []),
+                         "domain": {"devices": {"interfaces": v.get("spec", {}).get("template", {}).get("spec", {}).get("domain", {}).get("devices", {}).get("interfaces", [])}}
+                     }}},
+            "status": {"printableStatus": v.get("status", {}).get("printableStatus"),
+                       "ready": v.get("status", {}).get("ready", False)}}
+           for v in raw]
+    vms.sort(key=lambda v: (v["metadata"].get("namespace", ""), v["metadata"]["name"]))
+    json.dump(vms, open(f"{out}/virtualmachines.json", "w"), indent=1, sort_keys=True)
+    msg += f", {len(vms)} VMs"
+
+if os.path.exists(vmis_in) and os.path.getsize(vmis_in) > 0:
+    raw = json.load(open(vmis_in)).get("items", [])
+    vmis = [{"metadata": meta(v["metadata"]),
+             "spec": {"nodeName": v.get("spec", {}).get("nodeName", ""),
+                      "networks": v.get("spec", {}).get("networks", []),
+                      "domain": {"devices": {"interfaces": v.get("spec", {}).get("domain", {}).get("devices", {}).get("interfaces", [])}}},
+             "status": {"phase": v.get("status", {}).get("phase", ""),
+                        "nodeName": v.get("status", {}).get("nodeName", ""),
+                        "interfaces": v.get("status", {}).get("interfaces", [])}}
+            for v in raw]
+    vmis.sort(key=lambda v: (v["metadata"].get("namespace", ""), v["metadata"]["name"]))
+    json.dump(vmis, open(f"{out}/virtualmachineinstances.json", "w"), indent=1, sort_keys=True)
+    msg += f", {len(vmis)} VMIs"
+
+if os.path.exists(nads_in) and os.path.getsize(nads_in) > 0:
+    raw = json.load(open(nads_in)).get("items", [])
+    nads = [{"metadata": meta(n["metadata"]),
+             "spec": {"config": n.get("spec", {}).get("config", "")}}
+            for n in raw]
+    nads.sort(key=lambda n: (n["metadata"].get("namespace", ""), n["metadata"]["name"]))
+    json.dump(nads, open(f"{out}/network-attachment-definitions.json", "w"), indent=1, sort_keys=True)
+    msg += f", {len(nads)} NADs"
+
+print(msg)
 PY
 
 IMAGE=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pod "${POD}" -o jsonpath='{.spec.containers[?(@.name=="ovn-central")].image}')

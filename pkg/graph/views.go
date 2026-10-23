@@ -363,71 +363,7 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 			"up":           lsp.Up != nil && *lsp.Up,
 		}
 
-		k8sMeta := ExtractK8sMetadata(lsp.ExternalIDs)
-		if boundChassis != "" {
-			if k8sMeta == nil {
-				k8sMeta = &api.K8sMetadata{}
-			}
-			if k8sMeta.Node == nil {
-				hostname := ""
-				if ch, ok := s.Chassis[boundChassis]; ok {
-					hostname = ch.Hostname
-				}
-				mappedNode := s.NodeMapper.NodeForChassis(hostname, boundChassis)
-				if mappedNode != "" {
-					k8sMeta.Node = &mappedNode
-				} else if hostname != "" {
-					k8sMeta.Node = &hostname
-				}
-			}
-		}
-
-		// Node join port resolution (node-<hostname>)
-		if strings.HasPrefix(lsp.Name, "node-") {
-			if k8sMeta == nil {
-				k8sMeta = &api.K8sMetadata{}
-			}
-			nodeName := strings.TrimPrefix(lsp.Name, "node-")
-			k8sMeta.Node = &nodeName
-			kind := "Node"
-			k8sMeta.WorkloadKind = &kind
-			k8sMeta.WorkloadName = &nodeName
-			owner := "Node/" + nodeName
-			k8sMeta.Owner = &owner
-		} else if s.WorkloadResolver != nil && k8sMeta != nil {
-			ns := ""
-			if k8sMeta.Namespace != nil {
-				ns = *k8sMeta.Namespace
-			}
-			pod := ""
-			if k8sMeta.Pod != nil {
-				pod = *k8sMeta.Pod
-			} else {
-				pod = lsp.Name
-			}
-			if strings.Contains(pod, "/") {
-				parts := strings.SplitN(pod, "/", 2)
-				if ns == "" {
-					ns = parts[0]
-				}
-				pod = parts[1]
-			}
-
-			if wl := s.WorkloadResolver.Resolve(ns, pod); wl != nil {
-				k8sMeta.WorkloadKind = &wl.Kind
-				k8sMeta.WorkloadName = &wl.WorkloadName
-				k8sMeta.Owner = &wl.Owner
-				if wl.VMI != "" {
-					k8sMeta.Vmi = &wl.VMI
-				}
-				if wl.NetworkAttachment != "" {
-					k8sMeta.NetworkAttachment = &wl.NetworkAttachment
-				}
-				if wl.Node != "" && k8sMeta.Node == nil {
-					k8sMeta.Node = &wl.Node
-				}
-			}
-		}
+		k8sMeta := s.enrichLSPK8s(lsp, boundChassis)
 
 		nodes = append(nodes, api.GraphNode{
 			Id:         lspID,
@@ -635,6 +571,100 @@ func filterGraphByFocus(nodes map[string]api.GraphNode, edges map[string]api.Gra
 	return filteredNodes, filteredEdges
 }
 
+func (s *Snapshot) enrichLSPK8s(lsp *nbmodel.LogicalSwitchPort, boundChassis string) *api.K8sMetadata {
+	k8sMeta := ExtractK8sMetadata(lsp.ExternalIDs)
+	if boundChassis != "" {
+		if k8sMeta == nil {
+			k8sMeta = &api.K8sMetadata{}
+		}
+		if k8sMeta.Node == nil {
+			hostname := ""
+			if ch, ok := s.Chassis[boundChassis]; ok {
+				hostname = ch.Hostname
+			}
+			mappedNode := s.NodeMapper.NodeForChassis(hostname, boundChassis)
+			if mappedNode != "" {
+				k8sMeta.Node = &mappedNode
+			} else if hostname != "" {
+				k8sMeta.Node = &hostname
+			}
+		}
+	}
+
+	// Node join port resolution (node-<hostname>)
+	if strings.HasPrefix(lsp.Name, "node-") {
+		if k8sMeta == nil {
+			k8sMeta = &api.K8sMetadata{}
+		}
+		nodeName := strings.TrimPrefix(lsp.Name, "node-")
+		k8sMeta.Node = &nodeName
+		kind := "Node"
+		k8sMeta.WorkloadKind = &kind
+		k8sMeta.WorkloadName = &nodeName
+		owner := "Node/" + nodeName
+		k8sMeta.Owner = &owner
+	} else if s.WorkloadResolver != nil {
+		ns := ""
+		pod := ""
+		if k8sMeta != nil {
+			if k8sMeta.Namespace != nil {
+				ns = *k8sMeta.Namespace
+			}
+			if k8sMeta.Pod != nil {
+				pod = *k8sMeta.Pod
+			}
+		}
+		if pod == "" {
+			pod = lsp.Name
+		}
+		if strings.Contains(pod, "/") {
+			parts := strings.SplitN(pod, "/", 2)
+			if ns == "" {
+				ns = parts[0]
+			}
+			pod = parts[1]
+		}
+
+		if wl := s.WorkloadResolver.Resolve(ns, pod); wl != nil {
+			if k8sMeta == nil {
+				k8sMeta = &api.K8sMetadata{}
+			}
+			k8sMeta.WorkloadKind = &wl.Kind
+			k8sMeta.WorkloadName = &wl.WorkloadName
+			k8sMeta.Owner = &wl.Owner
+			if wl.VMI != "" {
+				k8sMeta.Vmi = &wl.VMI
+			}
+			if k8sMeta.Namespace == nil && wl.Namespace != "" {
+				k8sMeta.Namespace = &wl.Namespace
+			}
+			var lspMAC string
+			var lspIPs []string
+			for _, addr := range lsp.Addresses {
+				parts := strings.Fields(addr)
+				if len(parts) >= 1 && strings.Contains(parts[0], ":") {
+					lspMAC = parts[0]
+				}
+				if len(parts) >= 2 {
+					lspIPs = append(lspIPs, parts[1:]...)
+				}
+			}
+			subnetName := ""
+			if k8sMeta.Subnet != nil {
+				subnetName = *k8sMeta.Subnet
+			}
+			attName := wl.MatchAttachment(lspMAC, lspIPs, subnetName)
+			if attName != "" {
+				k8sMeta.NetworkAttachment = &attName
+			}
+			if wl.Node != "" && k8sMeta.Node == nil {
+				k8sMeta.Node = &wl.Node
+			}
+		}
+	}
+	return k8sMeta
+}
+
 // GetNodeDetail returns the full details for a single node.
 func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 	var rawObj interface{}
@@ -642,6 +672,7 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 	var nodeType string
 	var nodeName string
 	var related []api.RelatedObject
+	var detailK8s *api.K8sMetadata
 
 	switch {
 	case strings.HasPrefix(id, PrefixLR):
@@ -739,7 +770,9 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		nodeType = "LSP"
 		nodeName = lsp.Name
 
+		boundChassis := ""
 		if pb, ok := s.PortBindingByPort[lsp.Name]; ok && pb.Chassis != nil {
+			boundChassis = *pb.Chassis
 			chassisID := PrefixChassis + *pb.Chassis
 			related = append(related, api.RelatedObject{
 				Id:           chassisID,
@@ -748,6 +781,7 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 				Name:         pb.Chassis,
 			})
 		}
+		detailK8s = s.enrichLSPK8s(lsp, boundChassis)
 
 	case strings.HasPrefix(id, PrefixLRP):
 		uuid := strings.TrimPrefix(id, PrefixLRP)
@@ -810,13 +844,17 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 
 	rawMap := toMap(rawObj)
 
+	if detailK8s == nil {
+		detailK8s = ExtractK8sMetadata(extIds)
+	}
+
 	detail := &api.NodeDetail{
 		Id:          id,
 		Type:        nodeType,
 		Name:        nodeName,
 		Raw:         rawMap,
 		ExternalIds: extIds,
-		K8s:         ExtractK8sMetadata(extIds),
+		K8s:         detailK8s,
 		Related:     &related,
 	}
 

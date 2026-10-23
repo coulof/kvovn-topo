@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"strings"
 	"time"
 
 	"github.com/coulof/ovn-topology/pkg/api"
@@ -212,6 +213,15 @@ func ExtractK8sMetadata(extIds map[string]string) *api.K8sMetadata {
 	} else if pod, ok := extIds["k8s.ovn.org/pod"]; ok && pod != "" {
 		k8s.Pod = &pod
 		hasAny = true
+	}
+
+	// Handle "namespace/pod" format commonly set by Kube-OVN in the "pod" field
+	if k8s.Namespace == nil && k8s.Pod != nil && strings.Contains(*k8s.Pod, "/") {
+		parts := strings.SplitN(*k8s.Pod, "/", 2)
+		ns := parts[0]
+		k8s.Namespace = &ns
+		pod := parts[1]
+		k8s.Pod = &pod
 	}
 
 	if node, ok := extIds["node"]; ok && node != "" {
