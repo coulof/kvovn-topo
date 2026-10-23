@@ -1,6 +1,0 @@
-{
- "scenario": "overlay-default",
- "captured": "2026-10-23T06:34:45Z",
- "ovnCentralImage": "docker.io/kubeovn/kube-ovn:v1.16.2",
- "ovnVersion": "ovn-nbctl 25.03.4"
-}

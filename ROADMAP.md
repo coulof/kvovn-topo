@@ -46,7 +46,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 
 | # | Item | Where it closes |
 |---|---|---|
-| B1 | Only one hand-written fixture. `hack/capture-fixtures.sh` (2026-10-21) writes `testdata/scenarios/<name>/`, which `pkg/ovsdb.LoadFixture` decodes through the libovsdb cache, and `TestScenarioGoldens` renders each scenario. Still to do: capture the scenarios (start with `overlay-default`, `custom-vpc-ovn-nat`, `kubevirt-multinic` on `hv-01`). | M0 / M1 |
+| B1 | Only one hand-written fixture. `hack/capture-fixtures.sh` (2026-10-21) writes `testdata/scenarios/<name>/`, which `pkg/ovsdb.LoadFixture` decodes through the libovsdb cache, and `TestScenarioGoldens` renders each scenario. One real capture is committed: `testdata/scenarios/hv-01-lab` (2026-10-23, Kube-OVN v1.16.2, OVN 25.03.4). It is the whole lab as it was, not a scenario. **To do: recapture clean testdata**, one capture per named scenario (`overlay-default`, `custom-vpc-ovn-nat`, `kubevirt-multinic` first), each from a cluster prepared to contain exactly that scenario. Each capture's NB must differ from the others, or it is not a new scenario; record in its `meta.json` what was set up. The lab runs OVN 25.03.4 while `hack/ovn-version` pins v24.03.2 (Q4): align the pin with the captured version before relying on columns newer than 24.03. | M0 / M1 |
 | B2 | No `test/` tree: layers 2–5 absent. | M0 / M1 / M7 |
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
 | B4 | `make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff. | M0 |
