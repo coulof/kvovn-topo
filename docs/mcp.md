@@ -51,62 +51,23 @@ When `truncated` is true, pass `next` back as `cursor` to get the next page. Err
 
 | Mode | Flags | Needs |
 |---|---|---|
-| Daemon via service proxy (default) | `--namespace kube-system --service ovn-topologyd --port http`, optional `--kubeconfig`, `--context` | `get` on `services/proxy` for the daemon Service. This is the same RBAC as the UI. |
+| Daemon via service proxy (default) | None. The Service is discovered on the first tool call: `kube-system/ovn-topologyd` if it exists, else the one Service labelled `app.kubernetes.io/name=ovn-topology` in any namespace (several matches is an error, never a guess). `--namespace`/`--service` pin it and skip discovery; `--port` picks the port (default: the one named `http`). Optional `--kubeconfig`, `--context`. | `get` on `services/proxy` for the daemon Service (same RBAC as the UI), plus `get` on that Service and `list` on `services` cluster-wide for discovery. Without `list`, pass `--namespace` and `--service`. |
 | Daemon at a URL | `--daemon-url http://127.0.0.1:8080/api/v1` | Network reach, e.g. `kubectl -n kube-system port-forward svc/ovn-topologyd 8080` |
 | Embedded graph | `--nb tcp:127.0.0.1:6641 --sb tcp:127.0.0.1:6642` (plus `--ovn-cert/--ovn-key/--ovn-ca` for TLS) | Reach to OVSDB, e.g. `kubectl -n kube-system port-forward svc/ovn-nb 6641` and `svc/ovn-sb 6642`. Uses the kubeconfig for node and workload names when it loads. |
 | Fixture | `--fixture` (dev fixture, run from the repo) or `--fixture-dir testdata/scenarios/<name>` | Nothing. |
 
 Logs go to stderr (`--log-level`, default `warn`); stdout carries only the protocol.
 
-## Client configuration
+## Tool setup
 
-The examples use the default backend (service proxy through the current kubeconfig context). Add flags to `args` for the other modes.
+Client configuration for OpenCode, Claude Code and agy is in the [README](../README.md#tool-setup). `ovn-topo` must be on your `PATH` (release binary, or `make build` and an absolute path to `bin/ovn-topo`). Pass the flags from [Backends](#backends) after `mcp` to choose another backend.
 
-**Claude Code**
+### Without a cluster
 
-```sh
-claude mcp add ovn-topology -- ovn-topo mcp --context my-cluster
-```
+Any client can serve a captured scenario instead: use `ovn-topo mcp --fixture-dir /path/to/ovn-topology/testdata/scenarios/hv-01-lab` as the command.
 
-or in `.mcp.json`:
+### Check the setup
 
-```json
-{
-  "mcpServers": {
-    "ovn-topology": {
-      "command": "ovn-topo",
-      "args": ["mcp", "--context", "my-cluster"]
-    }
-  }
-}
-```
+From the repository, `mise run mcp-offline` (fixture), `mise run mcp-live` (service proxy), `mise run mcp-local` (local daemon) or `mise run mcp-embedded` (OVN port-forwards) runs one MCP session through `hack/mcp-smoke.sh` and prints a summary per tool.
 
-**OpenCode** (`opencode.json`):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "ovn-topology": {
-      "type": "local",
-      "command": ["ovn-topo", "mcp", "--context", "my-cluster"],
-      "enabled": true
-    }
-  }
-}
-```
-
-**Gemini CLI** (`~/.gemini/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "ovn-topology": {
-      "command": "ovn-topo",
-      "args": ["mcp", "--context", "my-cluster"]
-    }
-  }
-}
-```
-
-To try it without a cluster, use `"args": ["mcp", "--fixture-dir", "/path/to/ovn-topology/testdata/scenarios/hv-01-lab"]`.
+For ready-to-use questions, see the [MCP Prompt Guide](mcp-prompts.md).

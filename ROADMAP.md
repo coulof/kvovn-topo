@@ -510,7 +510,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   - Object names, `external_ids` and descriptions are cluster-user-controlled data. Return them only inside structured fields, never interpolated into prose summaries.
   - The `summary` field is generated from typed fields only.
 - MCP `resources`: none in this milestone (tools only). Optional `prompts`: `troubleshoot-connectivity` and `what-changed`, templates that chain the tools above.
-- Docs: a `docs/mcp.md` section with client configuration examples (Claude Code, OpenCode, Gemini CLI) and the T0-only guarantee.
+- Docs: a `docs/mcp.md` section with client configuration examples (Claude Code, OpenCode, agy — aligned with kvtop's README, 2026-10-23) and the T0-only guarantee.
 
 **Out of scope:** exec/diagnostic tools, write tools, HTTP transport in the daemon, auth beyond the user's kubeconfig.
 
@@ -519,7 +519,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 - [ ] Golden tests of every tool's output on fixtures (shape, caps, cursors, `summary` built only from typed fields). *2026-10-23: done for the four shipped tools (`testdata/golden/mcp/`, `TestCapsAndCursors`); each later tool adds its own.*
 - [x] Injection test: a fixture with LSP names / `external_ids` containing instruction-like text. The text never appears outside its data field. *2026-10-23: `TestInjectionStaysInData`; extend it with each new tool.*
 - [ ] Scenario eval (`test/mcp/`): a set of questions per layer 3 scenario, each with expected facts (e.g. "path vm-a → vm-b verdict = dropped-by-acl, ACL = …"). These are run as deterministic tool-call scripts in CI (no LLM in CI). An optional manual run with a real agent is recorded in the PR.
-- [ ] Works with backend A (daemon via service proxy) and backend B (embedded); history tools return a clear "not available with this backend" error on B. *2026-10-23: both backends work, and `TestBackendParity` shows identical output over HTTP and in process. The service proxy has not been run against a live cluster yet. The history part waits for M8.*
+- [ ] Works with backend A (daemon via service proxy) and backend B (embedded); history tools return a clear "not available with this backend" error on B. *2026-10-23: both backends work, and `TestBackendParity` shows identical output over HTTP and in process. With no flags the daemon Service is discovered (default name, else chart label; `TestDiscoverService`). The service proxy has not been run against a live cluster yet. The history part waits for M8.*
 
 ---
 

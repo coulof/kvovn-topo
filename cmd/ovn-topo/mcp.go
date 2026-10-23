@@ -51,9 +51,9 @@ func runMCP(args []string, stderr io.Writer) int {
 	var (
 		kubeconfig  = fs.String("kubeconfig", getEnvDefault("KUBECONFIG", ""), "path to kubeconfig (default: standard loading rules)")
 		kubeContext = fs.String("context", "", "kubeconfig context (default: current context)")
-		namespace   = fs.String("namespace", "kube-system", "namespace of the ovn-topologyd Service")
-		service     = fs.String("service", "ovn-topologyd", "name of the ovn-topologyd Service")
-		port        = fs.String("port", "http", "Service port name or number")
+		namespace   = fs.String("namespace", "kube-system", "namespace of the ovn-topologyd Service (default: discovered)")
+		service     = fs.String("service", "ovn-topologyd", "name of the ovn-topologyd Service (default: discovered)")
+		port        = fs.String("port", "", "Service port name or number (default: the port named http)")
 		daemonURL   = fs.String("daemon-url", "", "ovn-topologyd API base URL (e.g. http://127.0.0.1:8080/api/v1); skips the service proxy")
 		nb          = fs.String("nb", "", "comma-separated OVN NB endpoints (embedded backend)")
 		sb          = fs.String("sb", "", "comma-separated OVN SB endpoints (embedded backend)")
@@ -70,6 +70,8 @@ func runMCP(args []string, stderr io.Writer) int {
 		}
 		return 2
 	}
+	pinned := false // --namespace or --service given: use them, skip discovery
+	fs.Visit(func(f *flag.Flag) { pinned = pinned || f.Name == "namespace" || f.Name == "service" })
 
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(*logLevel)); err != nil {
@@ -114,20 +116,9 @@ func runMCP(args []string, stderr io.Writer) int {
 		backend = mcp.NewHTTPBackend(*daemonURL, &http.Client{Timeout: 30 * time.Second})
 		logger.Info("mcp backend: daemon", "url", *daemonURL)
 	default:
-		cfg, err := loader.ClientConfig()
-		if err != nil {
-			logger.Error("loading kubeconfig; pass --kubeconfig, --daemon-url, --nb/--sb or --fixture", "error", err)
-			return 1
-		}
-		client, err := rest.HTTPClientFor(cfg)
-		if err != nil {
-			logger.Error("building Kubernetes HTTP client", "error", err)
-			return 1
-		}
-		client.Timeout = 30 * time.Second
-		base := mcp.ServiceProxyURL(cfg.Host, *namespace, *service, *port)
-		backend = mcp.NewHTTPBackend(base, client)
-		logger.Info("mcp backend: daemon via service proxy", "url", base)
+		// Like kvtop, a cluster that cannot be reached does not stop the
+		// server: the handshake succeeds and every tool returns the reason.
+		backend = serviceProxyBackend(loader, mcp.ServiceRef{Namespace: *namespace, Name: *service, Port: *port}, pinned, logger)
 	}
 
 	srv := mcp.NewServer(backend, mcp.Options{Version: version, Logger: logger})
@@ -136,6 +127,45 @@ func runMCP(args []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// serviceProxyBackend reaches the daemon through the API server's service
+// proxy. Unless pinned, the Service is discovered on the first tool call
+// (mcp.DiscoverService): the default name, else the chart label.
+func serviceProxyBackend(loader clientcmd.ClientConfig, ref mcp.ServiceRef, pinned bool, logger *slog.Logger) mcp.Backend {
+	cfg, err := loader.ClientConfig()
+	if err != nil {
+		logger.Warn("loading kubeconfig; pass --kubeconfig, --daemon-url, --nb/--sb or --fixture", "error", err)
+		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("loading kubeconfig (set KUBECONFIG or pass --kubeconfig): %w", err))
+	}
+	client, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		logger.Warn("building Kubernetes HTTP client", "error", err)
+		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("building Kubernetes HTTP client: %w", err))
+	}
+	client.Timeout = 30 * time.Second
+	clientset, err := kubernetes.NewForConfigAndClient(cfg, client)
+	if err != nil {
+		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("building Kubernetes client: %w", err))
+	}
+
+	return mcp.NewLazyBackend("daemon", func(ctx context.Context) (mcp.Backend, error) {
+		found := ref
+		if pinned {
+			found.How = "flags"
+			if found.Port == "" {
+				found.Port = "http"
+			}
+		} else {
+			var derr error
+			if found, derr = mcp.DiscoverService(ctx, clientset, ref); derr != nil {
+				return nil, derr
+			}
+		}
+		base := mcp.ServiceProxyURL(cfg.Host, found.Namespace, found.Name, found.Port)
+		logger.Info("mcp backend: daemon via service proxy", "namespace", found.Namespace, "service", found.Name, "port", found.Port, "found_by", found.How, "url", base)
+		return mcp.NewHTTPBackend(base, client), nil
+	})
 }
 
 // startEmbedded runs the daemon's OVSDB syncer in process. Kubernetes

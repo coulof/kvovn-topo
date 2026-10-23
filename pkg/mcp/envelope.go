@@ -13,7 +13,7 @@ import (
 
 // Envelope is the shape of every tool result (ADR-0003 §5).
 type Envelope[T any] struct {
-	Revision int       `json:"revision" jsonschema:"graph revision the data was read from"`
+	Revision  int       `json:"revision" jsonschema:"graph revision the data was read from"`
 	Timestamp time.Time `json:"timestamp" jsonschema:"when the data was read"`
 	// Historical is always false until point-in-time reads (M8) exist.
 	Historical bool   `json:"historical" jsonschema:"true when the data is a reconstruction of a past state"`

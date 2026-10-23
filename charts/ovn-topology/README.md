@@ -11,6 +11,7 @@
    - Access to the daemon API is secured via the Kubernetes service proxy:
      `/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:8080/proxy/api/v1/...`
    - Viewer authorization requires standard Kubernetes `services/proxy` RBAC permissions.
+   - `ovn-topo mcp` (AI agents) uses the same path. With no flags it also needs `get` on this Service and `list` on `services` cluster-wide, to find it by the label `app.kubernetes.io/name=ovn-topology`. Users without `list` pass `--namespace` and `--service`.
 3. **Daemon RBAC**:
    - The daemon ServiceAccount is granted strictly `get`, `list`, and `watch` permissions on `Node` objects (solely to map Chassis hostname ↔ Kubernetes Node).
    - If TLS is enabled, read-only (`get`) access is granted to the designated OVN client secret.

@@ -190,6 +190,31 @@ curl -fsS "$DAEMON_URL/chassis" | jq '{total_chassis: (.items | length), hostnam
 echo "==> All live tests passed!"
 """
 
+[tasks.install]
+description = "Install ovn-topo into ~/.local/bin (for MCP clients that run `ovn-topo mcp`)"
+depends = ["build"]
+run = "install -D -m 0755 bin/ovn-topo \"$HOME/.local/bin/ovn-topo\" && echo \"installed $HOME/.local/bin/ovn-topo\""
+
+[tasks.mcp-offline]
+description = "Smoke-test ovn-topo mcp against the hv-01-lab fixture (no cluster)"
+depends = ["build"]
+run = "hack/mcp-smoke.sh --fixture-dir testdata/scenarios/hv-01-lab"
+
+[tasks.mcp-live]
+description = "Smoke-test ovn-topo mcp against the in-cluster daemon via the Kubernetes service proxy"
+depends = ["build"]
+run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\""
+
+[tasks.mcp-local]
+description = "Smoke-test ovn-topo mcp against a locally running daemon (mise run daemon)"
+depends = ["build"]
+run = "hack/mcp-smoke.sh --daemon-url \"$DAEMON_URL\""
+
+[tasks.mcp-embedded]
+description = "Smoke-test ovn-topo mcp with the embedded graph over the OVN port-forwards"
+depends = ["build", "pf"]
+run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\" --nb \"tcp:127.0.0.1:$NB_PORT\" --sb \"tcp:127.0.0.1:$SB_PORT\""
+
 [tasks.clean]
 description = "Stop port-forwards and clean build artifacts"
 depends = ["pf-stop"]

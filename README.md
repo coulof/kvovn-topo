@@ -6,6 +6,7 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
 
 - **`ovn-topologyd`**: Go daemon that connects to OVN Northbound (NB) and Southbound (SB) databases over OVSDB, monitors updates, maintains a joined in-memory network graph, and serves it over HTTP JSON and SSE.
 - **`ovn-topo`**: Terminal UI (Bubble Tea) that renders an L3 topology tree and an interconnection matrix of router ports directly in your terminal.
+- **`ovn-topo mcp`**: Model Context Protocol (MCP) stdio server that lets AI agents (OpenCode, Claude Code, agy) query the same graph, read-only.
 - **Rancher UI Extension**: paused; archived at tag `archive/ui-extension` (see below).
 - **`charts/ovn-topology/`**: Helm chart deployed once per downstream cluster.
 
@@ -36,8 +37,8 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
      ┌───────────────────────┴───────────────────────┐
      │                                               │
      ▼                                               ▼
-Rancher UI Extension                         ovn-topo (TUI)
-(via k8s service proxy)                      (Bubble Tea)
+Rancher UI Extension                         ovn-topo (TUI) / ovn-topo mcp
+(via k8s service proxy)                      (Bubble Tea)   (AI agents, stdio)
 ```
 
 ## Quick Start: Local Testing
@@ -108,6 +109,95 @@ Available diagnostic actions from the TUI (`x` key):
 
 If RBAC denies `pods/exec`, the TUI header shows the `DIAG` badge as degraded with the reason and falls back to passive mode without crashing.
 
+## Model Context Protocol (MCP)
+
+`ovn-topo` includes an [MCP](https://modelcontextprotocol.io/) server (`ovn-topo mcp`) that communicates over stdio using JSON-RPC 2.0. With no flags it finds the in-cluster `ovn-topologyd` Service (`kube-system/ovn-topologyd`, else by the chart label in any namespace) and reads it through the Kubernetes service proxy of your kubeconfig (`services/proxy` RBAC); it can also read a daemon URL, OVSDB directly, or a fixture ([backends](docs/mcp.md#backends)).
+
+Every tool is read-only (Tier 0, ADR-0001): no writes, no `exec`, no packet capture. Object names and `external_ids` are returned as data only, never in the one-line `summary` ([design](docs/adr/0003-mcp-server.md)).
+
+### Available MCP Tools
+
+| Tool | Description | Key Parameters |
+|---|---|---|
+| `find` | Search routers, switches, ports and chassis by name, IP, MAC, namespace, pod, VM, chassis hostname or encap IP | `query`, `type` (LR, LS, LRP, LSP, Chassis), `limit`, `cursor` |
+| `get_graph` | Topology graph for a view, optionally around one object | `view` (l3, l2, chassis), `focus`, `depth`, `cursor` |
+| `get_node` | Full detail of one object: OVSDB columns, external_ids, Kubernetes identity, related objects | `id` |
+| `list_chassis` | Chassis with encaps, node name, binding counts, gateway roles and HA priorities | `cursor` |
+
+Path computation, ACLs, consistency checks and history tools arrive with milestones M4, M5 and M8 (see `ROADMAP.md`).
+
+### Tool Setup
+
+#### 1. OpenCode
+
+Add to `opencode.json` (or `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ovn-topology": {
+      "type": "local",
+      "command": ["ovn-topo", "mcp"],
+      "enabled": false
+    }
+  }
+}
+```
+
+`"enabled": false` keeps the server off (and its tools out of the context) until you switch it on in OpenCode. With no flags, `ovn-topo mcp` uses the kubeconfig OpenCode inherits (`$KUBECONFIG`, else `~/.kube/config`).
+
+With custom kubeconfig:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ovn-topology": {
+      "type": "local",
+      "command": ["ovn-topo", "mcp", "--kubeconfig", "/path/to/kubeconfig"]
+    }
+  }
+}
+```
+
+#### 2. Claude Code
+
+Add `ovn-topology` using the CLI:
+
+```bash
+claude mcp add ovn-topology -- ovn-topo mcp
+
+# With custom kubeconfig
+claude mcp add ovn-topology -- ovn-topo mcp --kubeconfig /path/to/kubeconfig
+```
+
+Or configure via `.mcp.json` in your repository root:
+
+```json
+{
+  "mcpServers": {
+    "ovn-topology": {
+      "command": "ovn-topo",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+#### 3. agy
+
+Add `ovn-topology` using `agy mcp`:
+
+```bash
+agy mcp add ovn-topology ovn-topo mcp
+
+# With custom kubeconfig
+agy mcp add ovn-topology -- ovn-topo mcp --kubeconfig /path/to/kubeconfig
+```
+
+Check a setup with `mise run mcp-offline` (fixture) or `mise run mcp-live` (cluster). For ready-to-use troubleshooting prompts, see the [MCP Prompt Guide](docs/mcp-prompts.md); for backends, result format and caps, see [docs/mcp.md](docs/mcp.md).
+
 ## Rancher UI Extension (paused)
 
 The Rancher/Harvester UI extension is paused. Its code is archived at tag `archive/ui-extension` (`git checkout archive/ui-extension -- ui`). The daemon API stays usable by any client.
@@ -157,6 +247,7 @@ Base path: `/api/v1`
 | `/graph?view=chassis` | GET | Chassis list with encaps and binding counts |
 | `/node/{id}` | GET | Full details and raw OVSDB columns for a node |
 | `/chassis` | GET | Chassis details, HA groups, and gateway roles |
+| `/find?q=<text>&type=&limit=&offset=` | GET | Search objects by name, IP, MAC, namespace, pod, VM |
 | `/events` | GET | SSE stream emitting graph revision changes |
 | `/readyz` | GET | Readiness probe (returns 200 after initial DB sync) |
 | `/healthz` | GET | Liveness probe |
