@@ -364,6 +364,12 @@ func newDiagModel(t *testing.T) model {
 	if !ok || !probe.available {
 		t.Fatalf("expected diag probe to succeed: %+v", probe)
 	}
+	// Chassis → node comes from the daemon's graph, never from an extra OVN query.
+	for _, c := range mockExec.Calls {
+		if len(c.Cmd) > 0 && c.Cmd[0] == "ovn-sbctl" {
+			t.Fatalf("enabling diagnostics must not query OVN for chassis names: %v", c.Cmd)
+		}
+	}
 	return send(m, probe)
 }
 

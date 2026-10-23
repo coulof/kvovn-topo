@@ -92,10 +92,6 @@ func (m model) probeDiagCmd() tea.Cmd {
 			}
 		}
 
-		if allowed && m.diagLocator != nil && m.diagExecutor != nil {
-			m.diagLocator.PopulateChassisUUIDs(ctx, m.diagExecutor)
-		}
-
 		return diagProbeMsg{
 			available:  allowed,
 			reason:     reason,
@@ -490,11 +486,6 @@ func extractCleanMAC(raw string) string {
 func (m model) resolveNodeName(candidate string) string {
 	if candidate == "" {
 		return ""
-	}
-	if m.diagLocator != nil {
-		if host := m.diagLocator.ResolveChassisUUID(candidate); host != "" {
-			return host
-		}
 	}
 	// Check if candidate matches any chassis hostname or nodeName in chassisNodes
 	for _, ch := range m.chassisNodes {

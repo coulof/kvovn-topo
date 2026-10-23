@@ -122,7 +122,7 @@ func (m model) resolveDiagTarget(n *xnode) diagTarget {
 	case kLRP:
 		m.resolveLRP(&t, n)
 	case kChassis:
-		t.Node, t.NodeSource = m.chassisNode(n), "selected chassis"
+		t.Node, t.NodeSource = m.chassisNode(n), nodeSource(n, "selected chassis")
 		t.disable("a chassis is not a traffic endpoint — select one of its ports to trace", actTrace)
 		t.disable("select a port to capture its traffic", actTcpdump)
 		t.disable("select a port to inspect its OVS interface", actOvsPort)
@@ -152,9 +152,21 @@ func workloadLabel(n *xnode) string {
 	return strings.TrimSpace(firstNonEmpty(tag, n.wlKind) + " " + n.name)
 }
 
+// chassisNode is the Kubernetes node of a chassis as the daemon matched it
+// (graph.MatchChassis: node annotation, then hostname). Without a match it falls
+// back to the OVN hostname, which nodeSource says.
 func (m model) chassisNode(ch *xnode) string {
 	p := props(ch.gn)
 	return firstNonEmpty(pstr(p, "nodeName"), pstr(p, "hostname"), ch.name)
+}
+
+// nodeSource describes where a target's node came from, flagging the hostname
+// fallback of chassisNode.
+func nodeSource(ch *xnode, source string) string {
+	if pstr(props(ch.gn), "nodeName") == "" {
+		return source + " (OVN hostname: no Kubernetes node matched)"
+	}
+	return source
 }
 
 func (m model) resolveLSP(t *diagTarget, n *xnode) {
@@ -171,7 +183,7 @@ func (m model) resolveLSP(t *diagTarget, n *xnode) {
 		case "subnet":
 			t.Datapath, t.SwitchID = x.name, x.id
 		case "bound on":
-			t.Node, t.NodeSource = m.chassisNode(x), "Port_Binding chassis "+x.name
+			t.Node, t.NodeSource = m.chassisNode(x), nodeSource(x, "Port_Binding chassis "+x.name)
 		}
 	}
 	t.Gateways = map[string]string{}
@@ -226,7 +238,7 @@ func (m model) resolveLRP(t *diagTarget, n *xnode) {
 	for _, r := range n.refs {
 		if strings.HasPrefix(r.label, "gateway") {
 			if ch := m.tree.byID[r.to]; ch != nil {
-				t.Node, t.NodeSource = m.chassisNode(ch), "active gateway chassis "+ch.name+" (cr-"+c.PortName+" binding)"
+				t.Node, t.NodeSource = m.chassisNode(ch), nodeSource(ch, "active gateway chassis "+ch.name+" (cr-"+c.PortName+" binding)")
 			}
 		}
 	}
@@ -374,7 +386,7 @@ func (t diagTarget) describe() []string {
 // routed inside OVS and have none, so the capture stays unavailable.
 func (m model) withChassis(t diagTarget, ch *xnode) diagTarget {
 	t.Chassis = ch.id
-	t.Node, t.NodeSource = m.chassisNode(ch), "chosen chassis "+ch.name+" (distributed port)"
+	t.Node, t.NodeSource = m.chassisNode(ch), nodeSource(ch, "chosen chassis "+ch.name+" (distributed port)")
 	lrp := m.tree.byID[t.ID]
 	if lrp == nil || lrp.conn == nil {
 		t.disable("router port no longer exists", actTcpdump)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,8 +15,6 @@ import (
 type PodLocator struct {
 	client    kubernetes.Interface
 	namespace string
-	uuidMap   map[string]string
-	mu        sync.Mutex
 }
 
 // NewPodLocator creates a locator targeting the specified namespace (typically "kube-system").
@@ -87,7 +84,6 @@ func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 
 // FindNodeCNIPod finds the kube-ovn-cni pod running on the specified node.
 func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRef, error) {
-	nodeName = l.resolveKubeNodeName(ctx, nodeName)
 	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=kube-ovn-cni",
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
@@ -128,7 +124,6 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 
 // FindNodeOVSPod finds the ovs-ovn or ovs pod running on the specified node (or falls back to kube-ovn-cni).
 func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRef, error) {
-	nodeName = l.resolveKubeNodeName(ctx, nodeName)
 	selectors := []string{"app=ovs", "app=ovs-ovn"}
 	for _, sel := range selectors {
 		pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
@@ -218,70 +213,4 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
-}
-
-func (l *PodLocator) PopulateChassisUUIDs(ctx context.Context, exec Executor) {
-	if exec == nil {
-		return
-	}
-	pod, err := l.FindOvnCentralPod(ctx)
-	if err != nil {
-		return
-	}
-	stdout, _, err := exec.Exec(ctx, pod, []string{"ovn-sbctl", "--bare", "--columns=_uuid,hostname", "list", "Chassis"})
-	if err != nil {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.uuidMap == nil {
-		l.uuidMap = make(map[string]string)
-	}
-	lines := strings.Split(string(stdout), "\n")
-	for i := 0; i+1 < len(lines); i += 2 {
-		uuid := strings.TrimSpace(lines[i])
-		host := strings.TrimSpace(lines[i+1])
-		if uuid != "" && host != "" {
-			l.uuidMap[uuid] = host
-		}
-	}
-}
-
-func (l *PodLocator) ResolveChassisUUID(uuid string) string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.uuidMap != nil {
-		if host, ok := l.uuidMap[uuid]; ok && host != "" {
-			return host
-		}
-	}
-	return ""
-}
-
-func (l *PodLocator) resolveKubeNodeName(ctx context.Context, candidate string) string {
-	if candidate == "" {
-		return candidate
-	}
-	if host := l.ResolveChassisUUID(candidate); host != "" {
-		return host
-	}
-	// Check if candidate is already a valid node name
-	if n, err := l.client.CoreV1().Nodes().Get(ctx, candidate, metav1.GetOptions{}); err == nil && n != nil {
-		return n.Name
-	}
-
-	// Try resolving via annotations or hostname labels
-	nodes, err := l.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err == nil {
-		for _, n := range nodes.Items {
-			if n.Name == candidate || n.Labels["kubernetes.io/hostname"] == candidate {
-				return n.Name
-			}
-			if n.Annotations["ovn.kubernetes.io/chassis"] == candidate ||
-				n.Annotations["k8s.ovn.org/chassis"] == candidate {
-				return n.Name
-			}
-		}
-	}
-	return candidate
 }

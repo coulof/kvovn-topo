@@ -416,3 +416,23 @@ func TestTcpdumpRendersLive(t *testing.T) {
 		t.Errorf("G must resume following")
 	}
 }
+
+// TestChassisNodeFallbackIsFlagged: a chassis the daemon could not match to a
+// Kubernetes node falls back to its OVN hostname, and the target says so.
+func TestChassisNodeFallbackIsFlagged(t *testing.T) {
+	matched := &xnode{name: "hv-01", gn: &api.GraphNode{Properties: &map[string]interface{}{"nodeName": "node-a", "hostname": "hv-01"}}}
+	unmatched := &xnode{name: "hv-02", gn: &api.GraphNode{Properties: &map[string]interface{}{"hostname": "hv-02"}}}
+	var m model
+	if got := m.chassisNode(matched); got != "node-a" {
+		t.Errorf("matched chassis must use the daemon's nodeName, got %q", got)
+	}
+	if src := nodeSource(matched, "selected chassis"); src != "selected chassis" {
+		t.Errorf("matched chassis source must not be flagged: %q", src)
+	}
+	if got := m.chassisNode(unmatched); got != "hv-02" {
+		t.Errorf("unmatched chassis falls back to the hostname, got %q", got)
+	}
+	if src := nodeSource(unmatched, "selected chassis"); !strings.Contains(src, "no Kubernetes node matched") {
+		t.Errorf("hostname fallback must be flagged: %q", src)
+	}
+}
