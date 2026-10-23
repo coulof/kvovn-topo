@@ -456,6 +456,11 @@ func main() {
 	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
 	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
 
+	// "ovn-topo mcp": the MCP server has its own flags and never starts the TUI.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		os.Exit(runMCP(os.Args[2:], os.Stderr))
+	}
+
 	// Allow "ovn-topo graph ..." style invocations
 	if len(os.Args) > 1 && os.Args[1] == "graph" {
 		os.Args = append(os.Args[:1], os.Args[2:]...)

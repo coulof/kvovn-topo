@@ -57,6 +57,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/graph", s.handleGraph)
 	s.mux.HandleFunc("GET /api/v1/node/{id}", s.handleNode)
 	s.mux.HandleFunc("GET /api/v1/chassis", s.handleChassis)
+	s.mux.HandleFunc("GET /api/v1/find", s.handleFind)
 	s.mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	s.mux.HandleFunc("GET /api/v1/version", s.handleVersion)
 	s.mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
@@ -145,6 +146,29 @@ func (s *Server) handleChassis(w http.ResponseWriter, _ *http.Request) {
 	snapshot := s.store.Current()
 	chassisList := snapshot.GetChassisList()
 	writeJSON(w, http.StatusOK, chassisList)
+}
+
+func (s *Server) handleFind(w http.ResponseWriter, r *http.Request) {
+	if !s.store.IsReady() {
+		writeError(w, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "OVSDB monitors are synchronizing initial snapshot")
+		return
+	}
+
+	query := r.URL.Query()
+	q := strings.TrimSpace(query.Get("q"))
+	if q == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "query parameter q is required")
+		return
+	}
+	typeFilter := api.FindHitType(query.Get("type"))
+	if typeFilter != "" && !typeFilter.Valid() {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "type must be one of LR, LS, LRP, LSP, Chassis")
+		return
+	}
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	offset, _ := strconv.Atoi(query.Get("offset"))
+
+	writeJSON(w, http.StatusOK, s.store.Current().Find(q, typeFilter, limit, offset))
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

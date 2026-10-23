@@ -252,3 +252,33 @@ func TestNoCORSHeaders(t *testing.T) {
 		t.Errorf("unexpected CORS header: %q", v)
 	}
 }
+
+func TestFind(t *testing.T) {
+	srv, store := setupTestServer(t)
+	store.SetReady(true)
+
+	for _, tc := range []struct {
+		query string
+		code  int
+	}{
+		{"/api/v1/find?q=10.244.0.10", http.StatusOK},
+		{"/api/v1/find", http.StatusBadRequest},
+		{"/api/v1/find?q=x&type=Bogus", http.StatusBadRequest},
+	} {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, httptest.NewRequest("GET", tc.query, nil))
+		if w.Code != tc.code {
+			t.Errorf("%s: status %d, want %d", tc.query, w.Code, tc.code)
+		}
+		if tc.code != http.StatusOK {
+			continue
+		}
+		var resp api.FindResponse
+		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp.Total != 1 || resp.Items[0].Id != "lsp:lsp-pod1-uuid" {
+			t.Errorf("%s: got %+v", tc.query, resp)
+		}
+	}
+}

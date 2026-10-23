@@ -1,0 +1,216 @@
+{
+  "backend": "embedded",
+  "data": {
+    "graph": {
+      "edges": [
+        {
+          "id": "edge:lr:lr-custom-uuid-ls:ls-custom-uuid-router-peer",
+          "label": "10.100.0.1/24",
+          "properties": {
+            "lrp": "lrp-custom",
+            "lrpMac": "00:00:00:22:33:44",
+            "lsp": "lsp-cust-router",
+            "networks": [
+              "10.100.0.1/24"
+            ]
+          },
+          "source": "lr:lr-custom-uuid",
+          "target": "ls:ls-custom-uuid",
+          "type": "router-peer"
+        },
+        {
+          "id": "edge:lr:lr-custom-uuid-ls:ls-join-uuid-router-peer",
+          "label": "100.64.0.2/16",
+          "properties": {
+            "lrp": "lrp-join-cust",
+            "lrpMac": "00:00:00:55:66:77",
+            "lsp": "lsp-join-cust",
+            "networks": [
+              "100.64.0.2/16"
+            ]
+          },
+          "source": "lr:lr-custom-uuid",
+          "target": "ls:ls-join-uuid",
+          "type": "router-peer"
+        },
+        {
+          "id": "edge:lr:lr-default-uuid-ls:ls-default-uuid-router-peer",
+          "label": "10.244.0.1/24",
+          "properties": {
+            "lrp": "lrp-default",
+            "lrpMac": "00:00:00:11:22:33",
+            "lsp": "lsp-def-router",
+            "networks": [
+              "10.244.0.1/24"
+            ]
+          },
+          "source": "lr:lr-default-uuid",
+          "target": "ls:ls-default-uuid",
+          "type": "router-peer"
+        },
+        {
+          "id": "edge:lr:lr-default-uuid-ls:ls-join-uuid-router-peer",
+          "label": "100.64.0.1/16",
+          "properties": {
+            "lrp": "lrp-join-def",
+            "lrpMac": "00:00:00:44:55:66",
+            "lsp": "lsp-join-def",
+            "networks": [
+              "100.64.0.1/16"
+            ]
+          },
+          "source": "lr:lr-default-uuid",
+          "target": "ls:ls-join-uuid",
+          "type": "router-peer"
+        },
+        {
+          "id": "edge:ls:ls-ext-uuid-ext:provider-ext-localnet",
+          "source": "ls:ls-ext-uuid",
+          "target": "ext:provider-ext",
+          "type": "localnet"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "ext:provider-ext",
+          "name": "provider-ext",
+          "type": "External"
+        },
+        {
+          "id": "lr:lr-custom-uuid",
+          "k8s": {
+            "vendor": "kube-ovn",
+            "vpc": "custom-vpc"
+          },
+          "name": "custom-vpc",
+          "parent": "vpc:custom-vpc",
+          "properties": {
+            "enabled": true,
+            "lbCount": 0,
+            "natCount": 1,
+            "policyCount": 0,
+            "routeCount": 0
+          },
+          "type": "LR"
+        },
+        {
+          "id": "lr:lr-default-uuid",
+          "k8s": {
+            "vendor": "kube-ovn",
+            "vpc": "default"
+          },
+          "name": "ovn_cluster",
+          "parent": "vpc:default",
+          "properties": {
+            "enabled": true,
+            "gateways": [
+              {
+                "activeChassis": "node-1",
+                "lrp": "lrp-gw"
+              }
+            ],
+            "lbCount": 1,
+            "natCount": 0,
+            "policyCount": 1,
+            "routeCount": 1
+          },
+          "type": "LR"
+        },
+        {
+          "id": "ls:ls-custom-uuid",
+          "k8s": {
+            "subnet": "custom-subnet",
+            "vendor": "kube-ovn",
+            "vpc": "custom-vpc"
+          },
+          "name": "custom-subnet",
+          "parent": "vpc:custom-vpc",
+          "properties": {
+            "boundPortCount": 1,
+            "portCount": 2,
+            "subnet": "custom-subnet",
+            "unboundPortCount": 0
+          },
+          "type": "LS"
+        },
+        {
+          "id": "ls:ls-default-uuid",
+          "k8s": {
+            "subnet": "default-subnet",
+            "vendor": "kube-ovn"
+          },
+          "name": "default-subnet",
+          "parent": "vpc:default",
+          "properties": {
+            "boundPortCount": 2,
+            "portCount": 4,
+            "subnet": "default-subnet",
+            "unboundPortCount": 1
+          },
+          "type": "LS"
+        },
+        {
+          "id": "ls:ls-ext-uuid",
+          "k8s": {
+            "subnet": "external-subnet",
+            "vendor": "kube-ovn"
+          },
+          "name": "external-subnet",
+          "properties": {
+            "boundPortCount": 0,
+            "portCount": 1,
+            "subnet": "external-subnet",
+            "unboundPortCount": 0
+          },
+          "type": "LS"
+        },
+        {
+          "id": "ls:ls-join-uuid",
+          "k8s": {
+            "subnet": "join",
+            "vendor": "kube-ovn"
+          },
+          "name": "join",
+          "properties": {
+            "boundPortCount": 0,
+            "portCount": 2,
+            "subnet": "join",
+            "unboundPortCount": 0
+          },
+          "type": "LS"
+        },
+        {
+          "id": "vpc:custom-vpc",
+          "k8s": {
+            "vendor": "kube-ovn",
+            "vpc": "custom-vpc"
+          },
+          "name": "custom-vpc",
+          "properties": {
+            "isDefault": false
+          },
+          "type": "VPC"
+        },
+        {
+          "id": "vpc:default",
+          "k8s": {
+            "vendor": "kube-ovn",
+            "vpc": "default"
+          },
+          "name": "default",
+          "properties": {
+            "isDefault": true
+          },
+          "type": "VPC"
+        }
+      ],
+      "revision": 1,
+      "view": "l3"
+    }
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "l3 view: 9 nodes, 5 edges: 1 External, 2 LR, 4 LS, 2 VPC",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

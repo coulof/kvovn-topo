@@ -1,0 +1,98 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "bindingCount": 3,
+        "encaps": [
+          {
+            "ip": "192.168.1.11",
+            "options": {},
+            "type": "geneve"
+          }
+        ],
+        "externalIds": {
+          "ovn.kubernetes.io/chassis": "node-1"
+        },
+        "gatewayRoles": [
+          {
+            "active": true,
+            "lrpName": "lrp-gw",
+            "priority": 100,
+            "routerName": "ovn_cluster"
+          }
+        ],
+        "haGroups": [
+          {
+            "groupName": "ha-gateway-group",
+            "priority": 100
+          }
+        ],
+        "hostname": "node-1",
+        "name": "chassis-node-1",
+        "nodeName": "node-1",
+        "otherConfig": {
+          "ovn-cms-options": "enable-chassis-as-gw"
+        }
+      },
+      {
+        "bindingCount": 1,
+        "encaps": [
+          {
+            "ip": "192.168.1.12",
+            "options": {},
+            "type": "geneve"
+          }
+        ],
+        "externalIds": {
+          "ovn.kubernetes.io/chassis": "node-2"
+        },
+        "gatewayRoles": [
+          {
+            "active": false,
+            "lrpName": "lrp-gw",
+            "priority": 50,
+            "routerName": "ovn_cluster"
+          }
+        ],
+        "haGroups": [
+          {
+            "groupName": "ha-gateway-group",
+            "priority": 50
+          }
+        ],
+        "hostname": "node-2",
+        "name": "chassis-node-2",
+        "nodeName": "node-2",
+        "otherConfig": {
+          "ovn-cms-options": "enable-chassis-as-gw"
+        }
+      },
+      {
+        "bindingCount": 0,
+        "encaps": [
+          {
+            "ip": "192.168.1.13",
+            "options": {},
+            "type": "geneve"
+          }
+        ],
+        "externalIds": {
+          "ovn.kubernetes.io/chassis": "node-3"
+        },
+        "gatewayRoles": [],
+        "haGroups": [],
+        "hostname": "node-3",
+        "name": "chassis-node-3",
+        "nodeName": "node-3",
+        "otherConfig": {}
+      }
+    ],
+    "total": 3
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "3 chassis (3 shown), 2 with gateway roles, 1 active gateway ports",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

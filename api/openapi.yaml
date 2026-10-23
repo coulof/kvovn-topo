@@ -133,6 +133,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /find:
+    get:
+      summary: Search topology objects
+      description: >-
+        Finds routers, switches, ports and chassis by name, IP, MAC, namespace,
+        pod, VM or chassis hostname / encap IP. IP and MAC queries match exactly;
+        other queries match case-insensitive substrings. Results are ordered
+        (exact matches first, then by type and name) and paginated by offset.
+      operationId: findObjects
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Search text (name fragment, IP, MAC, namespace, pod or VM name).
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [LR, LS, LRP, LSP, Chassis]
+          description: Restrict results to one object type.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Maximum hits to return (max 200).
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Number of hits to skip.
+      responses:
+        '200':
+          description: Search hits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindResponse'
+        '400':
+          description: Missing or invalid query.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Daemon not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /events:
     get:
       summary: SSE event stream
@@ -353,6 +411,57 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelatedObject'
+        revision:
+          type: integer
+          description: Graph revision the detail was read from.
+
+    FindResponse:
+      type: object
+      required:
+        - revision
+        - total
+        - items
+      properties:
+        revision:
+          type: integer
+          description: Graph revision the search ran against.
+        total:
+          type: integer
+          description: Total number of hits before limit/offset.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindHit'
+
+    FindHit:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - matchedField
+        - exact
+      properties:
+        id:
+          type: string
+          description: Typed node ID, usable with /node/{id} and as a graph focus.
+        type:
+          type: string
+          enum: [LR, LS, LRP, LSP, Chassis]
+        name:
+          type: string
+        matchedField:
+          type: string
+          enum: [name, ip, mac, namespace, pod, vm, hostname, encap-ip, node]
+          description: Which field matched the query.
+        exact:
+          type: boolean
+          description: True when the matched field equals the query exactly.
+        parent:
+          type: string
+          description: ID of the containing LS (for an LSP) or LR (for an LRP).
+        k8s:
+          $ref: '#/components/schemas/K8sMetadata'
 
     RelatedObject:
       type: object
@@ -379,6 +488,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChassisDetail'
+        revision:
+          type: integer
+          description: Graph revision the list was read from.
 
     ChassisDetail:
       type: object

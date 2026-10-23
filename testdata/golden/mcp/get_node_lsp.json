@@ -1,0 +1,61 @@
+{
+  "backend": "embedded",
+  "data": {
+    "node": {
+      "externalIds": {
+        "namespace": "default",
+        "pod": "app-pod-1",
+        "vendor": "kube-ovn"
+      },
+      "id": "lsp:lsp-pod1-uuid",
+      "k8s": {
+        "namespace": "default",
+        "node": "node-1",
+        "pod": "app-pod-1",
+        "vendor": "kube-ovn"
+      },
+      "name": "app-pod-1.default",
+      "raw": {
+        "_uuid": "lsp-pod1-uuid",
+        "addresses": [
+          "00:00:00:aa:bb:01 10.244.0.10"
+        ],
+        "dhcpv4_options": null,
+        "dhcpv6_options": null,
+        "dynamic_addresses": null,
+        "enabled": null,
+        "external_ids": {
+          "namespace": "default",
+          "pod": "app-pod-1",
+          "vendor": "kube-ovn"
+        },
+        "ha_chassis_group": null,
+        "mirror_rules": null,
+        "name": "app-pod-1.default",
+        "options": {},
+        "parent_name": null,
+        "port_security": null,
+        "tag": null,
+        "tag_request": null,
+        "type": "",
+        "up": null
+      },
+      "related": [
+        {
+          "id": "chassis:chassis-node-1",
+          "name": "chassis-node-1",
+          "relationship": "bound-on",
+          "type": "Chassis"
+        }
+      ],
+      "revision": 1,
+      "type": "LSP"
+    },
+    "relatedTotal": 1
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "LSP detail: 1 related objects (1 shown), 17 raw columns, 0 cut to 50 entries",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

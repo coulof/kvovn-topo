@@ -825,29 +825,29 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		nodeType = "Chassis"
 		nodeName = ch.Hostname
 
-		// Find bound ports
+		// Bound ports, as node IDs that resolve with GetNodeDetail; sorted
+		// because PortBindings is a map.
 		for _, pb := range s.PortBindings {
 			if pb.Chassis != nil && *pb.Chassis == ch.Name {
-				name := pb.LogicalPort
-				related = append(related, api.RelatedObject{
-					Id:           PrefixLSP + pb.LogicalPort,
-					Type:         "PortBinding",
-					Relationship: "bound-port",
-					Name:         &name,
-				})
+				related = append(related, s.boundPortRelated(pb.LogicalPort))
 			}
 		}
+		sort.Slice(related, func(i, j int) bool { return related[i].Id < related[j].Id })
 
 	default:
 		return nil, fmt.Errorf("unsupported node id prefix: %s", id)
 	}
 
 	rawMap := toMap(rawObj)
+	if extIds == nil {
+		extIds = map[string]string{} // required object in the API, never null
+	}
 
 	if detailK8s == nil {
 		detailK8s = ExtractK8sMetadata(extIds)
 	}
 
+	revision := int(s.Revision)
 	detail := &api.NodeDetail{
 		Id:          id,
 		Type:        nodeType,
@@ -856,9 +856,23 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		ExternalIds: extIds,
 		K8s:         detailK8s,
 		Related:     &related,
+		Revision:    &revision,
 	}
 
 	return detail, nil
+}
+
+// boundPortRelated names a port bound on a chassis: the LSP, the LRP behind a
+// chassisredirect port (cr-<lrp>), or the bare binding when neither is in NB.
+func (s *Snapshot) boundPortRelated(logicalPort string) api.RelatedObject {
+	name := logicalPort
+	rel := api.RelatedObject{Id: "pb:" + logicalPort, Type: "PortBinding", Relationship: "bound-port", Name: &name}
+	if lsp, ok := s.LSPByName[logicalPort]; ok {
+		rel.Id, rel.Type = PrefixLSP+lsp.UUID, "LSP"
+	} else if lrp, ok := s.LRPByName[strings.TrimPrefix(logicalPort, "cr-")]; ok {
+		rel.Id, rel.Type, rel.Relationship = PrefixLRP+lrp.UUID, "LRP", "active-gateway"
+	}
+	return rel
 }
 
 // GetChassisList returns full status for all chassis.
@@ -952,8 +966,10 @@ func (s *Snapshot) GetChassisList() *api.ChassisList {
 		return items[i].Hostname < items[j].Hostname
 	})
 
+	revision := int(s.Revision)
 	return &api.ChassisList{
-		Items: items,
+		Items:    items,
+		Revision: &revision,
 	}
 }
 

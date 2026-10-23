@@ -1,0 +1,26 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "exact": true,
+        "id": "lsp:lsp-pod1-uuid",
+        "k8s": {
+          "namespace": "default",
+          "pod": "app-pod-1",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "ip",
+        "name": "app-pod-1.default",
+        "parent": "ls:ls-default-uuid",
+        "type": "LSP"
+      }
+    ],
+    "total": 1
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "1 of 1 matches (1 exact): 1 LSP",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

@@ -94,6 +94,7 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 | `GET /graph?view=l3\|l2\|chassis&focus=<id>&depth=<n>` | Aggregated graph for a view |
 | `GET /node/{id}` | Full detail for one node (all columns, external_ids, related objects) |
 | `GET /chassis` | Chassis list with encaps, binding counts, gateway roles |
+| `GET /find?q=&type=&limit=&offset=` | Search LR/LS/LRP/LSP/Chassis by name, IP, MAC, namespace, pod, VM (backs the MCP `find` tool, ADR-0003) |
 | `GET /events` | SSE stream of `{revision, changed: [ids]}` |
 | `GET /healthz`, `/readyz` | Ready only after initial NB+SB snapshot |
 | `GET /version` | Daemon + API version, OVN schema versions |

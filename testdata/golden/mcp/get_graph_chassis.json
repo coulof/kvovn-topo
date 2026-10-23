@@ -1,0 +1,80 @@
+{
+  "backend": "embedded",
+  "data": {
+    "graph": {
+      "edges": [],
+      "nodes": [
+        {
+          "id": "chassis:chassis-node-1",
+          "name": "node-1",
+          "properties": {
+            "bindingCount": 3,
+            "encaps": [
+              {
+                "ip": "192.168.1.11",
+                "type": "geneve"
+              }
+            ],
+            "hostname": "node-1",
+            "hostnameShared": 1,
+            "isInterconn": false,
+            "name": "chassis-node-1",
+            "nodeMatch": "override",
+            "nodeName": "node-1",
+            "uuid": "chassis-node-1-uuid"
+          },
+          "type": "Chassis"
+        },
+        {
+          "id": "chassis:chassis-node-2",
+          "name": "node-2",
+          "properties": {
+            "bindingCount": 1,
+            "encaps": [
+              {
+                "ip": "192.168.1.12",
+                "type": "geneve"
+              }
+            ],
+            "hostname": "node-2",
+            "hostnameShared": 1,
+            "isInterconn": false,
+            "name": "chassis-node-2",
+            "nodeMatch": "override",
+            "nodeName": "node-2",
+            "uuid": "chassis-node-2-uuid"
+          },
+          "type": "Chassis"
+        },
+        {
+          "id": "chassis:chassis-node-3",
+          "name": "node-3",
+          "properties": {
+            "bindingCount": 0,
+            "encaps": [
+              {
+                "ip": "192.168.1.13",
+                "type": "geneve"
+              }
+            ],
+            "hostname": "node-3",
+            "hostnameShared": 1,
+            "isInterconn": false,
+            "name": "chassis-node-3",
+            "nodeMatch": "override",
+            "nodeName": "node-3",
+            "uuid": "chassis-node-3-uuid"
+          },
+          "type": "Chassis"
+        }
+      ],
+      "revision": 1,
+      "view": "chassis"
+    }
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "chassis view: 3 nodes, 0 edges: 3 Chassis",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

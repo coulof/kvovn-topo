@@ -40,7 +40,8 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M3 | 2/3 | **No live updates in the extension** (no SSE, no polling) and no API-version banner. See the M3 DoD. |
 | M4, M5 | 0 | Not started. |
 | M6 | 5/5 | Done out of order. Layer 3 verification was manual on `hv-01`; there is no automated suite. |
-| M7–M9 | 0 | Not started. |
+| M7, M8 | 0 | Not started. |
+| M9 | 2/5 | **Started out of order (2026-10-23, explicit request; ADR-0003)** while M4/M5 are not started. Shipped: `find`, `get_graph`, `get_node`, `list_chassis` on both backends, plus `GET /find`. The M4/M5/M8 tools wait for their data. |
 
 **Tech-debt register** (from the 2026-10-21 audit; fixed items moved to milestone follow-ups):
 
@@ -488,9 +489,10 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 
   | Tool | Purpose |
   |---|---|
-  | `find` | search objects by name, IP, MAC, pod/VM, namespace; returns IDs + one-line summaries |
+  | `find` | search objects by name, IP, MAC, pod/VM, namespace; returns IDs + one-line summaries (backed by `GET /find`, ADR-0003) |
   | `get_graph` | view (`l3`/`l2`/`chassis`), `focus`, `depth`, optional `at` |
   | `get_node` | full detail of one object, optional `at` |
+  | `list_chassis` | chassis with encaps, binding counts, gateway roles and HA priorities (`/chassis`; added by ADR-0003) |
   | `resolve_ip` | IP → owner (LSP/LRP/node/external) |
   | `effective_acls` | ACLs applying to a port, ordered, with source objects |
   | `compute_path` | M5 path; result always carries `approximate: true` and `source: configuration` |
@@ -513,11 +515,11 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 **Out of scope:** exec/diagnostic tools, write tools, HTTP transport in the daemon, auth beyond the user's kubeconfig.
 
 **DoD**
-- [ ] `depguard` proves `pkg/mcp` has no path to `pkg/diag`.
-- [ ] Golden tests of every tool's output on fixtures (shape, caps, cursors, `summary` built only from typed fields).
-- [ ] Injection test: a fixture with LSP names / `external_ids` containing instruction-like text. The text never appears outside its data field.
+- [x] `depguard` proves `pkg/mcp` has no path to `pkg/diag`. *2026-10-23: `hack/check-deps.sh` passes on `pkg/mcp`.*
+- [ ] Golden tests of every tool's output on fixtures (shape, caps, cursors, `summary` built only from typed fields). *2026-10-23: done for the four shipped tools (`testdata/golden/mcp/`, `TestCapsAndCursors`); each later tool adds its own.*
+- [x] Injection test: a fixture with LSP names / `external_ids` containing instruction-like text. The text never appears outside its data field. *2026-10-23: `TestInjectionStaysInData`; extend it with each new tool.*
 - [ ] Scenario eval (`test/mcp/`): a set of questions per layer 3 scenario, each with expected facts (e.g. "path vm-a → vm-b verdict = dropped-by-acl, ACL = …"). These are run as deterministic tool-call scripts in CI (no LLM in CI). An optional manual run with a real agent is recorded in the PR.
-- [ ] Works with backend A (daemon via service proxy) and backend B (embedded); history tools return a clear "not available with this backend" error on B.
+- [ ] Works with backend A (daemon via service proxy) and backend B (embedded); history tools return a clear "not available with this backend" error on B. *2026-10-23: both backends work, and `TestBackendParity` shows identical output over HTTP and in process. The service proxy has not been run against a live cluster yet. The history part waits for M8.*
 
 ---
 
@@ -577,6 +579,6 @@ Record answers here with evidence (date, link to test run or doc).
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
 | Q7 | Should `pkg/diag` import `github.com/kubeovn/kube-ovn/pkg/ko` directly? | M6 | **Resolved (2026-10-20)**: **No.** Importing `github.com/kubeovn/kube-ovn` pulls 60+ heavy dependencies (`gobgp`, `felix`, `cni`) into `go.mod` and violates `AGENTS.md` rule 2 by querying Kube-OVN CRDs (`Subnet`, `Vpc`). Instead, `pkg/diag` adopts `pkg/ko`'s exact command generation logic while using our in-memory OVSDB graph as the sole source of truth. |
 | Q8 | Measured monitor churn per table (to set the ADR-0002 noise denylist and checkpoint cadence) | M8 | open; measure on `overlay-default` + `kubevirt-multinic` |
-| Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | open |
+| Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | **Resolved (2026-10-23, ADR-0003)**: kvtop uses **no SDK**. `internal/mcp` is hand-written JSON-RPC pinned to protocol `2024-11-05`, which predates tool annotations. We use the official `github.com/modelcontextprotocol/go-sdk` v1.8.0 for annotations, `structuredContent`/`outputSchema`, version negotiation and the in-memory test transport. kvtop should adopt it when it next touches MCP. |
 | Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |
 | Q11 | Is `ovn-detrace` (and its python `ovs` bindings) shipped in the Kube-OVN images on Harvester, and in which pod can it reach NB, SB and the node's OVS db? Candidates: `ovs-ovn` (local OVS db; NB/SB over the `ovn-nb`/`ovn-sb` services, TLS?) or `ovn-central` (NB/SB sockets; `--ovsdb` only names ports?). | M6 detrace follow-up | open; check `which ovn-detrace` and a dry run in both pods on `hv-01` |

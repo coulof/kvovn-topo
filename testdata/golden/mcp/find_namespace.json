@@ -1,0 +1,52 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "exact": true,
+        "id": "lsp:lsp-pod1-uuid",
+        "k8s": {
+          "namespace": "default",
+          "pod": "app-pod-1",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "namespace",
+        "name": "app-pod-1.default",
+        "parent": "ls:ls-default-uuid",
+        "type": "LSP"
+      },
+      {
+        "exact": true,
+        "id": "lsp:lsp-pod2-uuid",
+        "k8s": {
+          "namespace": "default",
+          "pod": "app-pod-2",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "namespace",
+        "name": "app-pod-2.default",
+        "parent": "ls:ls-default-uuid",
+        "type": "LSP"
+      },
+      {
+        "exact": true,
+        "id": "lsp:lsp-unbound-uuid",
+        "k8s": {
+          "namespace": "default",
+          "pod": "pending-pod",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "namespace",
+        "name": "pending-pod.default",
+        "parent": "ls:ls-default-uuid",
+        "type": "LSP"
+      }
+    ],
+    "total": 3
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "3 of 3 matches (3 exact): 3 LSP",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}
