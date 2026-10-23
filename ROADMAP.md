@@ -51,9 +51,9 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
 | B4 | `make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff. | M0 |
 | B5 | Extension has one unit test (`layout.test.ts`). | M3 |
-| C1 | `forbidigo` misses `.Patch`, `.Apply` and `.Evict`. | quick win |
-| C2 | No `depguard` rule for `pkg/mcp` yet. | quick win (before M9) |
-| C3 | OVN schemas are downloaded by `make generate`, not vendored. | quick win |
+| C1 | ~~`forbidigo` misses `.Patch`, `.Apply` and `.Evict`.~~ **Done 2026-10-23:** a type-aware rule forbids `Patch`/`Apply*`/`Evict*`/`DeleteCollection` on `k8s.io/client-go` types (scoped so `graph.Store.Apply` stays allowed). | done |
+| C2 | ~~No `depguard` rule for `pkg/mcp` yet.~~ **Done 2026-10-23:** `depguard` and `hack/check-deps.sh` cover `pkg/mcp` (the script checks it once the package exists). | done |
+| C3 | ~~OVN schemas are downloaded by `make generate`, not vendored.~~ **Not debt:** `hack/schema/*.ovsschema` are committed since the first commit; `make generate` only downloads when they are missing. | closed |
 | A6 | SSE has no heartbeat; idle streams may be cut by proxies. | M3 |
 | E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). | before M5 |
 | E2 | Three chassis → node resolvers (daemon `MatchChassis`, TUI `resolveNodeName`, `pkg/diag` `resolveKubeNodeName` + an extra `ovn-sbctl` exec). The TUI should use the daemon's `nodeName`. | before M5 |
