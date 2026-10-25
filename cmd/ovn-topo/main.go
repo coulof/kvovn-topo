@@ -24,7 +24,6 @@ import (
 	"github.com/coulof/ovn-topology/pkg/graph"
 	"github.com/coulof/ovn-topology/pkg/kubeproxy"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
 )
@@ -177,7 +176,10 @@ type diagExecResultMsg struct {
 	err         error
 }
 
-func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubeconfigPath, k8sNamespace string) model {
+// initialModel builds the TUI state. kube is the kubeconfig the diagnostics
+// exec through; main passes the same one the service-proxy connection uses, so
+// graph and diagnostics always target the same cluster (nil: default rules).
+func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kube clientcmd.ClientConfig, k8sNamespace string) model {
 	theme, idx := GetThemeByName(themeName)
 	if k8sNamespace == "" {
 		k8sNamespace = "kube-system"
@@ -207,16 +209,10 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kubec
 	}
 
 	if diagMode {
-		var k8sConfig *rest.Config
-		var err error
-		if kubeconfigPath != "" {
-			k8sConfig, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-		} else {
-			loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-			configOverrides := &clientcmd.ConfigOverrides{}
-			kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-			k8sConfig, err = kubeConfig.ClientConfig()
+		if kube == nil {
+			kube = kubeproxy.Loader("", "")
 		}
+		k8sConfig, err := kube.ClientConfig()
 
 		if err != nil {
 			m.diagAvailable = false
@@ -478,13 +474,14 @@ func main() {
 
 	// Without --daemon-url, reach the in-cluster daemon the supported way: the
 	// API server's service proxy with the kubeconfig's credentials and RBAC.
+	loader := kubeproxy.Loader(kubeconfig, kubeContext)
 	var client *http.Client
 	via := "direct " + daemonURL
 	if fixturePath == "" && daemonURL == "" {
 		pinned := false
 		flag.Visit(func(f *flag.Flag) { pinned = pinned || f.Name == "namespace" || f.Name == "service" })
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		conn, err := kubeproxy.Connect(ctx, kubeproxy.Loader(kubeconfig, kubeContext),
+		conn, err := kubeproxy.Connect(ctx, loader,
 			kubeproxy.ServiceRef{Namespace: namespace, Name: service, Port: port}, pinned)
 		cancel()
 		if err != nil {
@@ -502,7 +499,7 @@ func main() {
 		return
 	}
 
-	m := initialModel(daemonURL, fixturePath, themeName, diagMode, kubeconfig, k8sNamespace)
+	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

@@ -3,10 +3,13 @@
 `ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **xray trees** (objects and what they contain) and a **`:ports` table** (the router-port matrix), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
 
 ```bash
-ovn-topo --daemon-url http://127.0.0.1:8080/api/v1   # live daemon (mise run tui)
+ovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
+ovn-topo --context harvester --diag                  # another context, + Tier 1 exec diagnostics (ADR-0001)
 ovn-topo --fixture                                   # bundled dataset, offline (run from the repo root)
-ovn-topo --diag                                      # + Tier 1 exec diagnostics (ADR-0001)
+ovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourself (mise run tui-local)
 ```
+
+See [§0 Connecting](#0-connecting) for how the TUI reaches the daemon.
 
 Part 1 is organised by **use case**: the question you have, the keys to press, what to look at. Each use case has a **TUI | Harvester** screenshot pair. Part 2 is the **reference** for every screen.
 
@@ -16,10 +19,24 @@ Part 1 is organised by **use case**: the question you have, the keys to press, w
 
 ---
 
+## 0. Connecting
+
+The daemon is never exposed: no NodePort, LoadBalancer, kube-vip IP or Ingress. `ovn-topo` reaches it through the **Kubernetes API server's service proxy** with your kubeconfig credentials, so the API server authenticates you and checks RBAC. This works the same through Rancher (`https://<rancher>/k8s/clusters/<id>`) and against a Harvester VIP (`https://<vip>:6443`). No port-forward is needed.
+
+- **Finding the daemon:** with no flags, `ovn-topo` uses the Service `kube-system/ovn-topologyd`. If it isn't there, it looks for the one Service labelled `app.kubernetes.io/name=ovn-topology` in any namespace. Several matches is an error: the TUI never guesses.
+  - `--namespace` / `--service` pin the Service and skip the search.
+  - `--port` picks the Service port (default: the one named `http`).
+- **Which kubeconfig:** `--kubeconfig` (default `$KUBECONFIG`, then `~/.kube/config`) and `--context`. The graph and the `--diag` exec diagnostics use the **same** kubeconfig and context, so they always target the same cluster.
+- **Permissions:** `get` on `services/proxy` for the daemon Service, plus `get` on that Service and `list services` for the search. The chart's `rbac.viewer.create=true` creates these roles ([chart README](../charts/ovn-topology/README.md#viewer-access)).
+- **Other sources:** `--daemon-url` talks to a daemon directly (one you run locally with `mise run daemon`). `--fixture` needs no cluster.
+- **If it fails:** with no usable kubeconfig, `ovn-topo` exits with the reason. If the daemon can't be reached, the *Daemon unreachable* screen names the path that was tried and what to check.
+
+The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.md)) through `pkg/kubeproxy`.
+
 ## 1. Screen layout
 
 ```text
- Daemon:   http://127.0.0.1:8080/api/v1        <:>     command         <e/E>   expand/fold     <r>  refresh
+ Daemon:   service proxy kube-system/ovn-top…  <:>     command         <e/E>   expand/fold     <r>  refresh
  Revision: 1842  ● live                        </>     filter          <i>     details pane    <L>  live on/off
  Topology: 2 VPC · 4 LS · 412 LSP · 3 chassis  <1-4>   vpc/ch/wl/ports <d>     describe        <t>  theme
  Diag:     DIAG ready                          <h/l>   fold/unfold     <y>     raw             <?>  help
@@ -41,7 +58,7 @@ Part 1 is organised by **use case**: the question you have, the keys to press, w
 ```
 
 - **Header (5 rows):**
-  - daemon address;
+  - how the daemon is reached: `service proxy <namespace>/<service>:<port>`, `direct <url>` with `--daemon-url`, or `fixture: …`;
   - revision and live state: `● live` over SSE, `◌ polling` when the stream is unavailable, `‖ paused`, `○ offline fixture`;
   - topology totals, diagnostics state, theme;
   - the hotkeys of the current screen.
@@ -321,7 +338,7 @@ The Port Matrix as a resource table: one row per logical router port, including 
 - **`:`:** command prompt with `Tab` completion: `xray vpc|chassis|workload`, `ports` (`lrp`, `matrix`), `theme <name>`, `quit`.
 - **Live updates:** the TUI subscribes to `/events` (SSE).
   - Each event refetches the L3 graph and only the switches whose ports changed. Unknown IDs fall back to all switches.
-  - If the stream breaks, it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE.
+  - If the stream breaks, it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE. Through Rancher's proxy the stream may be buffered: the header then shows `◌ polling`, and updates arrive every 10 s instead of instantly.
   - Rows whose content changed flash for 3 s.
   - `L` pauses/resumes; `r` forces a full reload.
 - **Ports are fetched completely:** L2 pages (200 ports each) are followed until the last one.
@@ -331,6 +348,7 @@ The Port Matrix as a resource table: one row per logical router port, including 
 `x` opens the diagnostics modal for the selection: a switch port (LSP), a workload (asking which NIC when it has several), a router port or a chassis.
 - Switches, routers, groups, namespaces, VPCs and external networks are not traffic endpoints, so `x` asks you to select a port or a chassis instead.
 - Without `--diag`, or when RBAC denies `pods/exec`, `x` explains why instead of failing.
+- The exec runs through the same kubeconfig and context as the graph (see [§0](#0-connecting)), so the diagnostics always act on the cluster you are looking at.
 
 | Key | Action |
 |---|---|

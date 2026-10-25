@@ -11,13 +11,16 @@ DAEMON_PORT = "8888"
 DAEMON_URL = "http://127.0.0.1:8888/api/v1"
 PROXY_POD = "ovn-topology-proxy"
 PROXY_NAMESPACE = "kube-system"
+# The in-cluster daemon through the Kubernetes service proxy (authn + RBAC by
+# the API server); used by the api-* and test-live tasks. No port-forward.
+OVN_TOPO_API = "/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1"
 
 [tasks.build]
 description = "Build ovn-topologyd and ovn-topo binaries"
 run = "make build"
 
 [tasks.pf-proxy-deploy]
-description = "Deploy the lightweight OVN port-forwarding bridge pod into kube-system"
+description = "[dev] Deploy the OVN port-forwarding bridge pod (only for a locally run daemon)"
 run = """
 if ! kubectl --kubeconfig "$KUBECONFIG" get pod -n "$PROXY_NAMESPACE" "$PROXY_POD" > /dev/null 2>&1; then
   echo "Deploying $PROXY_POD in $PROXY_NAMESPACE..."
@@ -79,13 +82,13 @@ fi
 """
 
 [tasks.pf-proxy-remove]
-description = "Delete the OVN port-forwarding bridge pod from kube-system"
+description = "[dev] Delete the OVN port-forwarding bridge pod from kube-system"
 depends = ["pf-stop"]
 run = "kubectl --kubeconfig \"$KUBECONFIG\" delete pod -n \"$PROXY_NAMESPACE\" \"$PROXY_POD\" --ignore-not-found"
 
 [tasks.pf]
 alias = "port-forward"
-description = "Start background port-forwarding for ovn-nb (6641) and ovn-sb (6642)"
+description = "[dev] Port-forward ovn-nb/ovn-sb to localhost, for a locally run daemon or mcp-embedded"
 depends = ["pf-proxy-deploy"]
 run = """
 pkill -f "kubectl.*port-forward.*$PROXY_POD" || true
@@ -99,7 +102,7 @@ echo "Port-forward active on 127.0.0.1:$NB_PORT (NB) and 127.0.0.1:$SB_PORT (SB)
 
 [tasks.pf-stop]
 alias = "port-forward-stop"
-description = "Stop active port-forwards on OVN ports"
+description = "[dev] Stop the OVN port-forwards"
 run = """
 pkill -f "kubectl.*port-forward.*$PROXY_POD" || true
 pkill -f "kubectl.*port-forward.*6641" || true
@@ -108,7 +111,7 @@ echo "Port-forwards stopped."
 """
 
 [tasks.daemon]
-description = "Run ovn-topologyd locally against live cluster OVN databases"
+description = "[dev] Run ovn-topologyd locally against the cluster OVN databases (needs mise run pf)"
 depends = ["build"]
 run = """
 ./bin/ovn-topologyd \
@@ -136,7 +139,7 @@ depends = ["build"]
 run = "DIAG=true mise run tui"
 
 [tasks.tui-local]
-description = "Launch TUI against locally running daemon"
+description = "[dev] Launch the TUI against the locally running daemon (mise run daemon)"
 depends = ["build"]
 run = "./bin/ovn-topo --daemon-url=$DAEMON_URL"
 
@@ -145,38 +148,77 @@ description = "Launch TUI in offline mode using bundled dev fixtures"
 depends = ["build"]
 run = "./bin/ovn-topo --fixture"
 
-[tasks.curl-ready]
-description = "Check daemon readiness"
-run = "curl -s \"http://127.0.0.1:$DAEMON_PORT/readyz\" | jq ."
+[tasks.api-ready]
+alias = "curl-ready"
+description = "Check the in-cluster daemon's readiness through the service proxy"
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/readyz\" | jq ."
 
-[tasks.curl-version]
-description = "Query daemon and OVN schema versions"
-run = "curl -s \"http://127.0.0.1:$DAEMON_PORT/version\" | jq ."
+[tasks.api-version]
+alias = "curl-version"
+description = "Query the in-cluster daemon and OVN schema versions through the service proxy"
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/version\" | jq ."
 
-[tasks.curl-graph]
-description = "Fetch aggregated L3 graph"
-run = "curl -s \"$DAEMON_URL/graph?view=l3\" | jq ."
+[tasks.api-graph]
+alias = "curl-graph"
+description = "Fetch the aggregated L3 graph through the service proxy"
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/graph?view=l3\" | jq ."
 
-[tasks.curl-chassis]
-description = "Fetch chassis status list"
-run = "curl -s \"$DAEMON_URL/chassis\" | jq ."
+[tasks.api-chassis]
+alias = "curl-chassis"
+description = "Fetch the chassis list through the service proxy"
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/chassis\" | jq ."
 
-[tasks.curl-events]
-description = "Stream live SSE events"
-run = "curl -N -s \"$DAEMON_URL/events\""
+[tasks.api-find]
+description = "Search objects through the service proxy: mise run api-find <text>"
+usage = 'arg "[q]" help="name, IP, MAC, namespace, pod or VM" default="join"'
+run = """
+q="${usage_q:-join}"
+kubectl --kubeconfig "$KUBECONFIG" get --raw "$OVN_TOPO_API/find?q=$(jq -rn --arg q "$q" '$q|@uri')" | jq .
+"""
+
+[tasks.api-events]
+alias = "curl-events"
+description = "Stream live SSE events from the in-cluster daemon (local kubectl proxy, authenticated by the kubeconfig)"
+run = """
+LOG=$(mktemp)
+kubectl --kubeconfig "$KUBECONFIG" proxy --port=0 > "$LOG" 2>&1 &
+KP=$!
+trap 'kill $KP 2>/dev/null || true; rm -f "$LOG"' EXIT INT TERM
+for _ in $(seq 1 50); do grep -q "Starting to serve" "$LOG" && break; sleep 0.1; done
+ADDR=$(sed -n 's/^Starting to serve on //p' "$LOG")
+[ -n "$ADDR" ] || { cat "$LOG" >&2; exit 1; }
+curl -N -s "http://$ADDR$OVN_TOPO_API/events"
+"""
 
 [tasks.test-live]
-description = "Run end-to-end verification against the running daemon"
+description = "End-to-end check of the in-cluster daemon through the Kubernetes service proxy (no port-forward)"
 run = """
+set -euo pipefail
+api() { kubectl --kubeconfig "$KUBECONFIG" get --raw "$OVN_TOPO_API$1"; }
 echo "==> Checking /readyz..."
-curl -fsS "http://127.0.0.1:$DAEMON_PORT/readyz" | jq .
+api /readyz | jq .
 echo "==> Checking /version..."
-curl -fsS "http://127.0.0.1:$DAEMON_PORT/version" | jq .
+api /version | jq .
 echo "==> Checking /graph?view=l3..."
-curl -fsS "$DAEMON_URL/graph?view=l3" | jq '{revision: .revision, nodes: (.nodes | length), edges: (.edges | length), vpcs: [.nodes[] | select(.type=="VPC") | .name]}'
+api "/graph?view=l3" | jq '{revision: .revision, nodes: (.nodes | length), edges: (.edges | length), vpcs: [.nodes[] | select(.type=="VPC") | .name]}'
 echo "==> Checking /chassis..."
-curl -fsS "$DAEMON_URL/chassis" | jq '{total_chassis: (.items | length), hostnames: [.items[].hostname]}'
+api /chassis | jq '{total_chassis: (.items | length), hostnames: [.items[].hostname]}'
+echo "==> Checking /find?q=join..."
+api "/find?q=join" | jq '{total, first: .items[0].id}'
 echo "==> All live tests passed!"
+"""
+
+[tasks.test-local]
+description = "[dev] Same checks against the locally running daemon (mise run daemon)"
+run = """
+set -euo pipefail
+echo "==> Checking /readyz..."
+curl -fsS "$DAEMON_URL/readyz" | jq .
+echo "==> Checking /graph?view=l3..."
+curl -fsS "$DAEMON_URL/graph?view=l3" | jq '{revision: .revision, nodes: (.nodes | length), edges: (.edges | length)}'
+echo "==> Checking /chassis..."
+curl -fsS "$DAEMON_URL/chassis" | jq '{total_chassis: (.items | length)}'
+echo "==> All local tests passed!"
 """
 
 [tasks.install]
@@ -190,17 +232,17 @@ depends = ["build"]
 run = "hack/mcp-smoke.sh --fixture-dir testdata/scenarios/hv-01-lab"
 
 [tasks.mcp-live]
-description = "Smoke-test ovn-topo mcp against the in-cluster daemon via the Kubernetes service proxy"
+description = "Smoke-test ovn-topo mcp against the in-cluster daemon through the Kubernetes service proxy (no port-forward)"
 depends = ["build"]
 run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\""
 
 [tasks.mcp-local]
-description = "Smoke-test ovn-topo mcp against a locally running daemon (mise run daemon)"
+description = "[dev] Smoke-test ovn-topo mcp against the locally running daemon (mise run daemon)"
 depends = ["build"]
 run = "hack/mcp-smoke.sh --daemon-url \"$DAEMON_URL\""
 
 [tasks.mcp-embedded]
-description = "Smoke-test ovn-topo mcp with the embedded graph over the OVN port-forwards"
+description = "[dev] Smoke-test ovn-topo mcp with the embedded graph over the OVN port-forwards"
 depends = ["build", "pf"]
 run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\" --nb \"tcp:127.0.0.1:$NB_PORT\" --sb \"tcp:127.0.0.1:$SB_PORT\""
 

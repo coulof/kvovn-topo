@@ -64,7 +64,7 @@ func typeText(m model, s string) model {
 // loaded returns a model with the fixture graph, every switch's ports and the chassis view loaded.
 func loaded(t *testing.T, w, h int, diagMode bool) model {
 	t.Helper()
-	m := initialModel(testDaemon, "dev-fixture", "default", diagMode, "", "")
+	m := initialModel(testDaemon, "dev-fixture", "default", diagMode, nil, "")
 	m = send(m, tea.WindowSizeMsg{Width: w, Height: h})
 	m = send(m, m.fetchGraphCmd()())
 	m = send(m, m.fetchChassisCmd()())
@@ -141,7 +141,7 @@ func TestXrayVPCTree(t *testing.T) {
 }
 
 func TestDefaultExpansionTwoLevels(t *testing.T) {
-	m := initialModel(testDaemon, "dev-fixture", "default", false, "", "")
+	m := initialModel(testDaemon, "dev-fixture", "default", false, nil, "")
 	m = send(m, tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = send(m, m.fetchGraphCmd()())
 	m = send(m, m.fetchChassisCmd()())
@@ -232,7 +232,7 @@ func TestViewAlwaysFitsTerminal(t *testing.T) {
 		d = press(d, "d")
 		screens["describe"] = d
 		screens["raw"] = press(d, "y")
-		empty := initialModel(testDaemon, "", "default", false, "", "")
+		empty := initialModel(testDaemon, "", "default", false, nil, "")
 		empty = send(empty, tea.WindowSizeMsg{Width: w, Height: h})
 		empty.err = fmt.Errorf("connection refused")
 		screens["unreachable"] = empty
@@ -507,7 +507,7 @@ func TestDaemonPaginationAndETag(t *testing.T) {
 		t.Fatalf("expected all 3 pages of ports, got %d (%v)", len(lsps), err)
 	}
 
-	m := initialModel(srv.URL, "", "default", false, "", "")
+	m := initialModel(srv.URL, "", "default", false, nil, "")
 	msg, ok := m.fetchGraphCmd()().(graphLoadedMsg)
 	if !ok || msg.err != nil || msg.resp.Revision != 7 {
 		t.Fatalf("expected first graph load, got %+v", msg)
@@ -521,7 +521,7 @@ func TestDaemonPaginationAndETag(t *testing.T) {
 func TestForeignServiceOn404(t *testing.T) {
 	foreign := httptest.NewServer(http.NotFoundHandler())
 	defer foreign.Close()
-	m := initialModel(foreign.URL+"/api/v1", "", "default", false, "", "")
+	m := initialModel(foreign.URL+"/api/v1", "", "default", false, nil, "")
 	msg, _ := m.fetchGraphCmd()().(graphLoadedMsg)
 	if msg.err == nil || !strings.Contains(msg.err.Error(), "404 page not found") || !strings.Contains(msg.err.Error(), "not ovn-topologyd") {
 		t.Fatalf("expected body excerpt and foreign-service hint, got %v", msg.err)
@@ -535,7 +535,7 @@ func TestForeignServiceOn404(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer daemon.Close()
-	m = initialModel(daemon.URL+"/api/v1", "", "default", false, "", "")
+	m = initialModel(daemon.URL+"/api/v1", "", "default", false, nil, "")
 	msg, _ = m.fetchGraphCmd()().(graphLoadedMsg)
 	if msg.err == nil || !strings.Contains(msg.err.Error(), "ovn-topologyd 0.1.0") {
 		t.Fatalf("expected daemon version in the error, got %v", msg.err)
@@ -588,7 +588,7 @@ func TestThemes(t *testing.T) {
 			t.Errorf("failed to render title with theme %s", name)
 		}
 	}
-	m := initialModel(testDaemon, "dev-fixture", "dracula", false, "", "")
+	m := initialModel(testDaemon, "dev-fixture", "dracula", false, nil, "")
 	if m.theme.Name != "Dracula" {
 		t.Errorf("expected Dracula, got %s", m.theme.Name)
 	}
@@ -769,7 +769,7 @@ func TestServiceProxyClientIsUsed(t *testing.T) {
 	defer srv.Close()
 	client := &http.Client{Transport: bearer{http.DefaultTransport}}
 
-	m := initialModel(srv.URL+"/api/v1", "", "default", false, "", "")
+	m := initialModel(srv.URL+"/api/v1", "", "default", false, nil, "")
 	m.httpClient, m.via = client, "service proxy kube-system/ovn-topologyd:http"
 	if msg, _ := m.fetchGraphCmd()().(graphLoadedMsg); msg.err != nil || msg.resp.Revision != 7 {
 		t.Fatalf("graph via authenticated client: %+v", msg)

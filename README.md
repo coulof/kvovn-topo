@@ -30,16 +30,23 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
   │  │ ovn-topologyd                                        │  │
   │  │   • In-memory joined graph (atomic snapshots)        │  │
   │  │   • K8s NodeMapper (chassis <-> node)                │  │
-  │  │   • HTTP REST + SSE API (:8080)                      │  │
-  │  └───────────────────────┬──────────────────────────────┘  │
-  └──────────────────────────┼─────────────────────────────────┘
-                             │
-     ┌───────────────────────┴───────────────────────┐
-     │                                               │
-     ▼                                               ▼
-Rancher UI Extension                         ovn-topo (TUI) / ovn-topo mcp
-(via k8s service proxy)                      (Bubble Tea)   (AI agents, stdio)
+  │  │   • HTTP REST + SSE API (ClusterIP :8080, no authn,  │  │
+  │  │     never exposed: no NodePort / LB / Ingress)       │  │
+  │  └──────────────────────────▲───────────────────────────┘  │
+  │                             │ service proxy                │
+  │  ┌──────────────────────────┴───────────────────────────┐  │
+  │  │ Kubernetes API server: authn + services/proxy RBAC   │  │
+  │  └──────────────────────────▲───────────────────────────┘  │
+  └─────────────────────────────┼──────────────────────────────┘
+                                │ kubeconfig (Rancher /k8s/clusters/<id>
+                                │ or the Harvester / RKE2 API, :6443)
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+   ovn-topo (TUI)        ovn-topo mcp         Rancher UI Extension
+   (Bubble Tea)          (AI agents, stdio)   (paused)
 ```
+
+All clients use the same path (`pkg/kubeproxy`): they find the daemon Service (`kube-system/ovn-topologyd`, else by the chart label) and call it through the API server's service proxy with the kubeconfig's credentials. No port-forward is needed.
 
 ## Quick Start
 
@@ -52,9 +59,16 @@ mise run tui        # or: ./bin/ovn-topo
 
 See [Accessing the API](charts/ovn-topology/README.md#accessing-the-api-harvester-and-rke2) for the URLs and the optional viewer role.
 
+Check the in-cluster daemon's API from the shell, again through the service proxy:
+
+```bash
+mise run test-live              # readyz, version, graph, chassis, find
+mise run api-find 10.244.0.10   # also api-ready, api-version, api-graph, api-chassis, api-events
+```
+
 ### Local daemon development
 
-To run a locally built daemon against the cluster's OVN databases:
+Only a daemon you run on your laptop needs port-forwards: it must reach the cluster's OVN databases. The `[dev]` tasks in `mise tasks` cover this flow:
 
 ```bash
 # 1. Forward OVN database ports to localhost
@@ -64,7 +78,7 @@ mise run pf
 mise run daemon
 
 # 3. Test the API or launch the TUI against it (terminal 2)
-mise run test-live
+mise run test-local
 mise run tui-local
 ```
 
@@ -102,11 +116,11 @@ Launch with a preferred theme:
 
 ### Tier 1 Diagnostics Mode (ADR-0001)
 
-Launch `ovn-topo` with `--diag` to enable read-only execution diagnostics in cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`):
+Launch `ovn-topo` with `--diag` to enable read-only execution diagnostics in cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`). The exec uses the same kubeconfig and `--context` as the graph, so it always targets the cluster on screen:
 
 ```bash
 # Launch with diagnostics enabled
-./bin/ovn-topo --diag --kubeconfig=~/.kube/config
+./bin/ovn-topo --diag --kubeconfig=~/.kube/config --context harvester
 
 # Or using mise
 mise run tui-diag
@@ -237,7 +251,7 @@ hauler store copy registry://registry.internal.example.com
 
 ## Development
 
-Prerequisites: Go 1.24+, `golangci-lint`, `make`.
+Prerequisites: Go 1.27+, `golangci-lint`, `make` (or `mise install`, which pins both).
 
 ```bash
 make generate    # Regenerate OVSDB models and OpenAPI Go types
