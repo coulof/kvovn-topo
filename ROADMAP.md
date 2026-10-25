@@ -28,18 +28,25 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M9 | MCP server (T0 tools only) | T0 | AI agents via `ovn-topo mcp` | M5; history tools gated on M8 |
 | Backlog | ACL hit counters, OVN-IC, metrics overlay, logical flow browser, history archival to S3, segmentation audit report, fleet view | mixed | — | — |
 
-## Status and tech-debt register (2026-10-21)
+## Status and tech-debt register (2026-10-21, refreshed 2026-10-25)
 
 **Order rule broken.** M2, M3 and M6 were built while the M0 and M1 DoD were still open, and M6 ahead of M4. This is recorded here rather than hidden. **Before M4 starts, the foundation items below take priority.** The M2 and M6 work stays, and new feature work waits.
 
+**2026-10-25 review: the rule was not followed.** Since the audit, every commit has been a feature or a fix:
+- M9 (MCP server, ADR-0003);
+- service-proxy access for the TUI and MCP (`pkg/kubeproxy`, chart viewer RBAC);
+- diag OpenFlow flow inspection.
+
+Only the cheap debt items closed (C1, C2, C3, A6, E2, F2). The structural ones (B1–B4) are untouched, and E1 and E3 grew. The order of work from here is in "Foundation pass" below. No new feature work until it is done.
+
 | M | DoD | Reality |
 |---|---|---|
-| M0 | 0/4 | Lint and deps guards work. No `test/` tree, no `make dev-cluster` run recorded, no `hack/capture-fixtures.sh`. |
+| M0 | 0/4 | Lint and deps guards work, and `hack/capture-fixtures.sh` exists. No `test/` tree, no `make dev-cluster` run recorded. |
 | M1 | 0/5 | API and goldens exist on a single hand-written fixture. The live data path was fixed and unit-tested on 2026-10-21 (see the M1 follow-up). The layer 2/3 tests, scale test and API freeze are missing. |
 | M2 | 5/6 | LR routes/policies/NAT open. Scenario navigation was checked on the lab, not on committed fixtures. |
 | M3 | 2/3 | **No live updates in the extension** (no SSE, no polling) and no API-version banner. See the M3 DoD. |
 | M4, M5 | 0 | Not started. |
-| M6 | 5/5 | Done out of order. Layer 3 verification was manual on `hv-01`; there is no automated suite. |
+| M6 | 5/5 | Done out of order. Layer 3 verification was manual on `hv-01`; there is no automated suite. The detrace follow-up is open, and OpenFlow flow inspection was added on 2026-10-24 (`8296532`). |
 | M7, M8 | 0 | Not started. |
 | M9 | 2/5 | **Started out of order (2026-10-23, explicit request; ADR-0003)** while M4/M5 are not started. Shipped: `find`, `get_graph`, `get_node`, `list_chassis` on both backends, plus `GET /find`. The M4/M5/M8 tools wait for their data. |
 
@@ -56,11 +63,38 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | C2 | ~~No `depguard` rule for `pkg/mcp` yet.~~ **Done 2026-10-23:** `depguard` and `hack/check-deps.sh` cover `pkg/mcp` (the script checks it once the package exists). | done |
 | C3 | ~~OVN schemas are downloaded by `make generate`, not vendored.~~ **Not debt:** `hack/schema/*.ovsschema` are committed since the first commit; `make generate` only downloads when they are missing. | closed |
 | A6 | ~~SSE has no heartbeat; idle streams may be cut by proxies.~~ **Done 2026-10-23:** `/events` sends a `: keepalive` comment every 15s. | done |
-| E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). | before M5 |
+| E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). **Growing:** 1,397 lines on 2026-10-25. | before M5 |
 | E2 | ~~Three chassis → node resolvers.~~ **Done 2026-10-23:** the TUI and `pkg/diag` use only the daemon's `nodeName` (`graph.MatchChassis`); the `ovn-sbctl list Chassis` exec at diag start and the client-side re-mapping in `pkg/diag` are gone. A chassis with no matched node falls back to its OVN hostname, and the diag target says so. | done |
 | F2 | ~~CORS `*` on the daemon.~~ **Done 2026-10-23:** removed; the extension calls through the Rancher service proxy (same origin). | done |
-| E3 | `ovn-trace` output parsed with regexes (`ofproto/trace` and `ovn-detrace` will add two more formats). | M5 / M6 detrace follow-up |
+| E3 | `ovn-trace` output parsed with regexes (`ofproto/trace` and `ovn-detrace` will add two more formats). **Growing:** `8296532` added more text parsing of OVS output in `pkg/diag/ovs.go`. | M5 / M6 detrace follow-up |
 | F1 | Version `0.1.0` everywhere; no release has run end to end. | M7 |
+| N1 | The `services/proxy` resourceName form in `charts/ovn-topology/templates/viewer-rbac.yaml` is unverified: both the bare Service name and `http:<svc>:http` are listed. | Foundation pass step 2 |
+| N2 | The service-proxy path (TUI default, `ovn-topo mcp` default, `mise run test-live`) is tested only against a fake API server (`cmd/ovn-topo/proxy_test.go`). It has never run against a live cluster through Rancher or the Harvester VIP. | Foundation pass step 2 |
+| N3 | ADR-0003 (MCP server) is still `Proposed`. | Foundation pass step 2 |
+
+### Foundation pass (2026-10-25)
+
+One PR per step, in this order. Feature work (M4 onward, more MCP tools, more diag actions) waits until it is done.
+
+1. **Register refresh** (this section). *Done 2026-10-25.*
+2. **Lab checks on hv-01** (N1–N3).
+   - Deploy the latest image, then run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP.
+   - Bind a test user to `ovn-topologyd-viewer` only, keep the resourceName form that works, and record which.
+   - Accept or amend ADR-0003.
+3. **B4: deterministic codegen.**
+   - Make modelgen output identical across machines (the `validate` tag drift).
+   - Have CI run `git diff --exit-code pkg/ovsdb pkg/api`.
+4. **B1: scenario fixtures.**
+   - Align `hack/ovn-version` with the lab's OVN 25.03 (re-answer Q4) and regenerate.
+   - Capture `overlay-default`, `custom-vpc-ovn-nat` and `kubevirt-multinic`, with scenario goldens and MCP goldens per scenario.
+5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2). Then the layer 3 `overlay-default` e2e on kind (M1 DoD 4, M0 DoD 3).
+6. **B3: scale.**
+   - A 10k-LSP synthetic fixture and a `/graph?view=l3` benchmark: p95 < 200 ms and payload < 1 MB.
+   - A per-revision view cache if needed. Closes M1 DoD 3.
+7. **M1 API freeze.** `api/openapi.yaml` v1, including `/find`; breaking changes after this need an ADR.
+8. **E1: split `diag_ui.go`** into per-action models. Pure refactor, guarded by `TestDiagTargetIsAlwaysTheSelection` and the executor tests.
+
+Then M4 starts. M4 also unlocks the MCP tools `resolve_ip`, `effective_acls` and `run_checks`. E3, F1 and the detrace follow-up stay with their milestones.
 
 ---
 
