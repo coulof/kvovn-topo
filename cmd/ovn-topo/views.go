@@ -122,7 +122,7 @@ var logo = []string{
 
 func (m model) header() []string {
 	st := m.styles
-	daemon := m.daemonURL
+	daemon := firstNonEmpty(m.via, m.daemonURL)
 	if m.fixturePath != "" {
 		daemon = "fixture: " + m.fixturePath
 	}
@@ -351,14 +351,23 @@ func (m model) stateView() []string {
 				body = append(body, "    "+st.Warn.Render(l))
 			}
 		}
-		body = append(body, "",
-			"  Check that ovn-topologyd is running and reachable at "+st.CIDR.Render(m.daemonURL)+", e.g.:",
-			"    kubectl -n kube-system port-forward svc/ovn-topologyd 8080:8080",
+		body = append(body, "")
+		if m.httpClient != nil { // service proxy
+			body = append(body,
+				"  Reached through the Kubernetes "+st.CIDR.Render(m.via)+".",
+				"  Check that the daemon pod is ready and that your kubeconfig user has",
+				"  "+st.CIDR.Render("get services/proxy")+" on it (chart value rbac.viewer.create),")
+		} else {
+			body = append(body,
+				"  Check that ovn-topologyd is running and reachable at "+st.CIDR.Render(m.daemonURL)+",",
+				"  or drop --daemon-url to go through the Kubernetes service proxy,")
+		}
+		body = append(body,
 			"  or explore the bundled dataset offline with "+st.CIDR.Render("ovn-topo --fixture")+".", "",
 			"  "+st.Key.Render("<r>")+" retry   "+st.Key.Render("<q>")+" quit",
 		)
 	} else {
-		body = []string{"", "  Loading topology from " + st.CIDR.Render(firstNonEmpty(m.fixturePath, m.daemonURL)) + " …"}
+		body = []string{"", "  Loading topology from " + st.CIDR.Render(firstNonEmpty(m.fixturePath, m.via, m.daemonURL)) + " …"}
 	}
 	return box(body, m.w(), m.areaH(), title, st.Border)
 }

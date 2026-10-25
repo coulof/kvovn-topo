@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/coulof/ovn-topology/pkg/api"
 	"github.com/coulof/ovn-topology/pkg/diag"
 	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/ovn-topology/pkg/kubeproxy"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -28,7 +30,11 @@ import (
 )
 
 type model struct {
-	daemonURL   string
+	daemonURL string
+	// httpClient carries the kubeconfig credentials on the service-proxy path;
+	// nil means http.DefaultClient (direct --daemon-url). via labels the path.
+	httpClient  *http.Client
+	via         string
 	fixturePath string
 	theme       Theme
 	themeIndex  int
@@ -386,7 +392,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func runMachineOutput(daemonURL, fixturePath, viewName, focusID, format string) error {
+func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewName, focusID, format string) error {
 	var resp *api.GraphResponse
 	var err error
 
@@ -394,22 +400,15 @@ func runMachineOutput(daemonURL, fixturePath, viewName, focusID, format string) 
 		snap := graph.LoadTestSnapshot(nil)
 		resp, err = snap.BuildGraph(viewName, focusID, 1, 1, 100)
 	} else {
-		url := fmt.Sprintf("%s/graph?view=%s", strings.TrimRight(daemonURL, "/"), viewName)
+		q := url.Values{"view": {viewName}}
 		if focusID != "" {
-			url += fmt.Sprintf("&focus=%s", focusID)
+			q.Set("focus", focusID)
 		}
-		client := &http.Client{Timeout: 5 * time.Second}
-		r, reqErr := client.Get(url)
-		if reqErr != nil {
-			return fmt.Errorf("failed to reach daemon: %w", reqErr)
-		}
-		defer func() { _ = r.Body.Close() }()
-		if r.StatusCode != http.StatusOK {
-			return fmt.Errorf("daemon returned HTTP %d", r.StatusCode)
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
 		var decoded api.GraphResponse
-		if decodeErr := json.NewDecoder(r.Body).Decode(&decoded); decodeErr != nil {
-			return decodeErr
+		if err := httpGetJSON(ctx, client, apiURL(daemonURL, "/graph", q), "", &decoded); err != nil {
+			return err
 		}
 		resp = &decoded
 	}
@@ -446,7 +445,12 @@ func main() {
 	var viewName string
 	var focusID string
 
-	flag.StringVar(&daemonURL, "daemon-url", "http://127.0.0.1:8080/api/v1", "URL of the ovn-topologyd API")
+	var kubeContext, namespace, service, port string
+	flag.StringVar(&daemonURL, "daemon-url", "", "ovn-topologyd API URL, e.g. http://127.0.0.1:8080/api/v1 (default: the in-cluster daemon through the Kubernetes service proxy)")
+	flag.StringVar(&kubeContext, "context", "", "kubeconfig context (default: current context)")
+	flag.StringVar(&namespace, "namespace", kubeproxy.Default.Namespace, "namespace of the ovn-topologyd Service; setting it (or --service) skips discovery")
+	flag.StringVar(&service, "service", kubeproxy.Default.Name, "name of the ovn-topologyd Service; setting it (or --namespace) skips discovery")
+	flag.StringVar(&port, "port", "", "ovn-topologyd Service port name or number (default: the port named http)")
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
 	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
 	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
@@ -472,15 +476,35 @@ func main() {
 		fixturePath = "dev-fixture"
 	}
 
+	// Without --daemon-url, reach the in-cluster daemon the supported way: the
+	// API server's service proxy with the kubeconfig's credentials and RBAC.
+	var client *http.Client
+	via := "direct " + daemonURL
+	if fixturePath == "" && daemonURL == "" {
+		pinned := false
+		flag.Visit(func(f *flag.Flag) { pinned = pinned || f.Name == "namespace" || f.Name == "service" })
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		conn, err := kubeproxy.Connect(ctx, kubeproxy.Loader(kubeconfig, kubeContext),
+			kubeproxy.ServiceRef{Namespace: namespace, Name: service, Port: port}, pinned)
+		cancel()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\nUse --daemon-url for a daemon you can reach directly, or --fixture to explore offline.\n", err)
+			os.Exit(1)
+		}
+		daemonURL, client, via = conn.BaseURL, conn.Client, "service proxy "+conn.Service.String()
+	}
+
 	if outputFormat != "" {
-		if err := runMachineOutput(daemonURL, fixturePath, viewName, focusID, outputFormat); err != nil {
+		if err := runMachineOutput(daemonURL, client, fixturePath, viewName, focusID, outputFormat); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	p := tea.NewProgram(initialModel(daemonURL, fixturePath, themeName, diagMode, kubeconfig, k8sNamespace), tea.WithAltScreen())
+	m := initialModel(daemonURL, fixturePath, themeName, diagMode, kubeconfig, k8sNamespace)
+	m.httpClient, m.via = client, via
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		os.Exit(1)

@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -28,13 +27,6 @@ func NewHTTPBackend(baseURL string, client *http.Client) *HTTPBackend {
 		client = http.DefaultClient
 	}
 	return &HTTPBackend{base: strings.TrimRight(baseURL, "/"), client: client}
-}
-
-// ServiceProxyURL is the daemon API base URL through the API server's service
-// proxy. Callers need services/proxy on that Service, nothing else.
-func ServiceProxyURL(apiServer, namespace, service, port string) string {
-	return fmt.Sprintf("%s/api/v1/namespaces/%s/services/http:%s:%s/proxy/api/v1",
-		strings.TrimRight(apiServer, "/"), url.PathEscape(namespace), url.PathEscape(service), url.PathEscape(port))
 }
 
 func (b *HTTPBackend) Name() string { return "daemon" }

@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/ovn-topology/pkg/kubeproxy"
 	"github.com/coulof/ovn-topology/pkg/mcp"
 	"github.com/coulof/ovn-topology/pkg/ovsdb"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -51,8 +51,8 @@ func runMCP(args []string, stderr io.Writer) int {
 	var (
 		kubeconfig  = fs.String("kubeconfig", getEnvDefault("KUBECONFIG", ""), "path to kubeconfig (default: standard loading rules)")
 		kubeContext = fs.String("context", "", "kubeconfig context (default: current context)")
-		namespace   = fs.String("namespace", "kube-system", "namespace of the ovn-topologyd Service (default: discovered)")
-		service     = fs.String("service", "ovn-topologyd", "name of the ovn-topologyd Service (default: discovered)")
+		namespace   = fs.String("namespace", "kube-system", "namespace of the ovn-topologyd Service; setting it (or --service) skips discovery")
+		service     = fs.String("service", "ovn-topologyd", "name of the ovn-topologyd Service; setting it (or --namespace) skips discovery")
 		port        = fs.String("port", "", "Service port name or number (default: the port named http)")
 		daemonURL   = fs.String("daemon-url", "", "ovn-topologyd API base URL (e.g. http://127.0.0.1:8080/api/v1); skips the service proxy")
 		nb          = fs.String("nb", "", "comma-separated OVN NB endpoints (embedded backend)")
@@ -83,9 +83,7 @@ func runMCP(args []string, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: *kubeconfig, Precedence: clientcmd.NewDefaultClientConfigLoadingRules().Precedence},
-		&clientcmd.ConfigOverrides{CurrentContext: *kubeContext})
+	loader := kubeproxy.Loader(*kubeconfig, *kubeContext)
 
 	var backend mcp.Backend
 	switch {
@@ -118,7 +116,7 @@ func runMCP(args []string, stderr io.Writer) int {
 	default:
 		// Like kvtop, a cluster that cannot be reached does not stop the
 		// server: the handshake succeeds and every tool returns the reason.
-		backend = serviceProxyBackend(loader, mcp.ServiceRef{Namespace: *namespace, Name: *service, Port: *port}, pinned, logger)
+		backend = serviceProxyBackend(loader, kubeproxy.ServiceRef{Namespace: *namespace, Name: *service, Port: *port}, pinned, logger)
 	}
 
 	srv := mcp.NewServer(backend, mcp.Options{Version: version, Logger: logger})
@@ -130,41 +128,19 @@ func runMCP(args []string, stderr io.Writer) int {
 }
 
 // serviceProxyBackend reaches the daemon through the API server's service
-// proxy. Unless pinned, the Service is discovered on the first tool call
-// (mcp.DiscoverService): the default name, else the chart label.
-func serviceProxyBackend(loader clientcmd.ClientConfig, ref mcp.ServiceRef, pinned bool, logger *slog.Logger) mcp.Backend {
-	cfg, err := loader.ClientConfig()
-	if err != nil {
-		logger.Warn("loading kubeconfig; pass --kubeconfig, --daemon-url, --nb/--sb or --fixture", "error", err)
-		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("loading kubeconfig (set KUBECONFIG or pass --kubeconfig): %w", err))
-	}
-	client, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		logger.Warn("building Kubernetes HTTP client", "error", err)
-		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("building Kubernetes HTTP client: %w", err))
-	}
-	client.Timeout = 30 * time.Second
-	clientset, err := kubernetes.NewForConfigAndClient(cfg, client)
-	if err != nil {
-		return mcp.NewUnavailableBackend("daemon", fmt.Errorf("building Kubernetes client: %w", err))
-	}
-
+// proxy (pkg/kubeproxy). The kubeconfig is loaded and, unless pinned, the
+// Service discovered on the first tool call; failures are retried per call.
+func serviceProxyBackend(loader clientcmd.ClientConfig, ref kubeproxy.ServiceRef, pinned bool, logger *slog.Logger) mcp.Backend {
 	return mcp.NewLazyBackend("daemon", func(ctx context.Context) (mcp.Backend, error) {
-		found := ref
-		if pinned {
-			found.How = "flags"
-			if found.Port == "" {
-				found.Port = "http"
-			}
-		} else {
-			var derr error
-			if found, derr = mcp.DiscoverService(ctx, clientset, ref); derr != nil {
-				return nil, derr
-			}
+		conn, err := kubeproxy.Connect(ctx, loader, ref, pinned)
+		if err != nil {
+			logger.Warn("mcp backend: daemon via service proxy unavailable", "error", err)
+			return nil, err
 		}
-		base := mcp.ServiceProxyURL(cfg.Host, found.Namespace, found.Name, found.Port)
-		logger.Info("mcp backend: daemon via service proxy", "namespace", found.Namespace, "service", found.Name, "port", found.Port, "found_by", found.How, "url", base)
-		return mcp.NewHTTPBackend(base, client), nil
+		logger.Info("mcp backend: daemon via service proxy", "service", conn.Service.String(), "found_by", conn.Service.How, "url", conn.BaseURL)
+		client := *conn.Client
+		client.Timeout = 30 * time.Second // tools make plain requests; no streams here
+		return mcp.NewHTTPBackend(conn.BaseURL, &client), nil
 	})
 }
 

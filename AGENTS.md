@@ -22,7 +22,7 @@ Targets: Rancher-managed RKE2 and Rancher-managed Harvester clusters running Kub
 2. **OVSDB is the source of truth for topology.** Do **not** read Kube-OVN CRDs (Vpc, Subnet, IP, Ovn*, Iptables*, SecurityGroup…). Kubernetes identity comes from NB `external_ids`. Allowed Kubernetes reads (get/list/watch only) are exactly: `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, `NetworkAttachmentDefinition`. They are used to enrich graph nodes, never to create them.
 3. **Metrics are optional overlays only**, never a source of topology.
 4. **Air-gap friendly.** No runtime calls to the internet. No CDN assets in the UI. All images and charts must be mirrorable (Hauler).
-5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon and `pkg/mcp` must never depend on `pkg/diag` or `remotecommand`; MCP exposes T0 tools only — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
+5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon, `pkg/mcp` and `pkg/kubeproxy` must never depend on `pkg/diag` or `remotecommand`; MCP exposes T0 tools only — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
 
 ## 2. Repository layout
 
@@ -40,6 +40,7 @@ ovn-topology/
 │   ├── trace/               # T0 configuration-based path computation (M5)
 │   ├── history/             # T0 recorder, stores (memory/bbolt), reconstructor, summarizer (ADR-0002, M8)
 │   ├── mcp/                 # T0 MCP tools for `ovn-topo mcp` (M9) — never imports pkg/diag
+│   ├── kubeproxy/           # T0 service-proxy client + daemon Service discovery (TUI, MCP) — never imports pkg/diag
 │   └── diag/                # T1 exec-based diagnostics — TUI only (ADR-0001, M6)
 ├── cmd/
 │   ├── ovn-topologyd/

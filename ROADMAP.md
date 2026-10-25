@@ -401,6 +401,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   - Self-hosted runner against the lab Harvester (dedicated namespace/VPC, created and destroyed per run).
   - Then ephemeral nested Harvester (single node, Kube-OVN addon) nightly.
 - Validate endpoint autodetection, TLS and namespaces for Harvester's Kube-OVN addon. Record the findings in § Open questions and the chart README.
+- **Access on Harvester (decision 2026-10-25):** the daemon is never exposed through kube-vip, an IP pool or ingress-nginx. The TUI and `ovn-topo mcp` reach it through the API-server service proxy (Rancher `/k8s/clusters/<id>` or the Harvester VIP `:6443`), via `pkg/kubeproxy`. The chart's optional `rbac.viewer` roles grant access. Lab item: check which `services/proxy` resourceName form the authorizer matches (bare name or `http:<svc>:http`), then keep only that one in `templates/viewer-rbac.yaml`. A browser hostname (Ingress plus kube-rbac-proxy) would need its own ADR.
 - Same `expected.yaml` scenario assertions reused on Harvester (VM-centric scenarios: VM with 2 NICs, VM live migration, VPC + FIP to a VM).
 - Version matrix on release: Kube-OVN current and current-1; Rancher latest; Harvester current (and previous, on RC only).
 - `release.yml`:

@@ -2,11 +2,20 @@ package mcp
 
 import (
 	"context"
-	"strconv"
+	"errors"
 	"sync"
 
 	"github.com/coulof/ovn-topology/pkg/api"
 )
+
+// asToolError keeps a ToolError as is and reports any other error as backend_error.
+func asToolError(err error) error {
+	var te *ToolError
+	if errors.As(err, &te) {
+		return te
+	}
+	return toolErr(CodeBackend, "%v", err)
+}
 
 // LazyBackend resolves its real backend on the first tool call, so the MCP
 // handshake never waits on the cluster. A success is kept; a failure is
@@ -34,7 +43,7 @@ func (b *LazyBackend) get(ctx context.Context) (Backend, error) {
 	}
 	r, err := b.resolve(ctx)
 	if err != nil {
-		return nil, err
+		return nil, asToolError(err)
 	}
 	b.resolved = r
 	return r, nil
@@ -71,5 +80,3 @@ func (b *LazyBackend) Chassis(ctx context.Context) (*api.ChassisList, error) {
 	}
 	return r.Chassis(ctx)
 }
-
-func itoa(n int) string { return strconv.Itoa(n) }

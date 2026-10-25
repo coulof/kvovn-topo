@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -501,7 +502,7 @@ func TestDaemonPaginationAndETag(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lsps, err := fetchL2All("", srv.URL, "ls:x")
+	lsps, err := fetchL2All("", srv.URL, nil, "ls:x")
 	if err != nil || len(lsps) != 3 {
 		t.Fatalf("expected all 3 pages of ports, got %d (%v)", len(lsps), err)
 	}
@@ -601,10 +602,10 @@ func TestThemes(t *testing.T) {
 }
 
 func TestMachineOutput(t *testing.T) {
-	if err := runMachineOutput("", "dev-fixture", "l3", "", "json"); err != nil {
+	if err := runMachineOutput("", nil, "dev-fixture", "l3", "", "json"); err != nil {
 		t.Errorf("expected machine output json to succeed, got: %v", err)
 	}
-	if err := runMachineOutput("", "dev-fixture", "chassis", "", "yaml"); err != nil {
+	if err := runMachineOutput("", nil, "dev-fixture", "chassis", "", "yaml"); err != nil {
 		t.Errorf("expected machine output yaml to succeed, got: %v", err)
 	}
 }
@@ -737,4 +738,52 @@ func collectJoinDest(m model) TraceDestination {
 		}
 	}
 	return TraceDestination{}
+}
+
+// bearer adds the kubeconfig-style credential the service-proxy client carries.
+type bearer struct{ next http.RoundTripper }
+
+func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer t0ken")
+	return b.next.RoundTrip(r)
+}
+
+// On the service-proxy path every request (graph, -o output, SSE) must go
+// through the authenticated client, never http.DefaultClient.
+func TestServiceProxyClientIsUsed(t *testing.T) {
+	var unauthenticated []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer t0ken" {
+			unauthenticated = append(unauthenticated, r.URL.Path)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "data: {\"revision\":8,\"changed\":[]}\n\n")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(api.GraphResponse{Revision: 7, View: api.GraphResponseViewL3})
+	}))
+	defer srv.Close()
+	client := &http.Client{Transport: bearer{http.DefaultTransport}}
+
+	m := initialModel(srv.URL+"/api/v1", "", "default", false, "", "")
+	m.httpClient, m.via = client, "service proxy kube-system/ovn-topologyd:http"
+	if msg, _ := m.fetchGraphCmd()().(graphLoadedMsg); msg.err != nil || msg.resp.Revision != 7 {
+		t.Fatalf("graph via authenticated client: %+v", msg)
+	}
+	if msg, ok := m.connectLiveCmd()().(liveEventMsg); !ok || msg.ev.Revision != 8 {
+		t.Fatalf("SSE via authenticated client: %#v", msg)
+	}
+	if err := runMachineOutput(srv.URL+"/api/v1", client, "", "l3", "", "json"); err != nil {
+		t.Fatalf("machine output via authenticated client: %v", err)
+	}
+	if len(unauthenticated) > 0 {
+		t.Fatalf("requests sent without credentials: %v", unauthenticated)
+	}
+	if h := strings.Join(m.header(), "\n"); !strings.Contains(h, "service proxy") {
+		t.Errorf("header does not show the access path:\n%s", h)
+	}
 }

@@ -55,7 +55,8 @@ const l2PageSize = 200
 
 var errNotModified = errors.New("not modified")
 
-func httpGetJSON(ctx context.Context, rawURL, etag string, out any) error {
+// httpGetJSON GETs rawURL with client (nil: http.DefaultClient) into out.
+func httpGetJSON(ctx context.Context, client *http.Client, rawURL, etag string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
@@ -63,7 +64,10 @@ func httpGetJSON(ctx context.Context, rawURL, etag string, out any) error {
 	if etag != "" {
 		req.Header.Set("If-None-Match", etag)
 	}
-	r, err := http.DefaultClient.Do(req)
+	if client == nil {
+		client = http.DefaultClient
+	}
+	r, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to reach daemon at %s: %w", rawURL, err)
 	}
@@ -100,13 +104,13 @@ func bodyExcerpt(r io.Reader) string {
 
 // explainNotFound probes /version after a 404: ovn-topologyd serves every
 // /api/v1 route it knows, so a 404 usually means another service owns the port.
-func explainNotFound(ctx context.Context, daemon string, err error) error {
+func explainNotFound(ctx context.Context, client *http.Client, daemon string, err error) error {
 	var se *httpStatusError
 	if !errors.As(err, &se) || se.code != http.StatusNotFound {
 		return err
 	}
 	var v api.VersionInfo
-	if verr := httpGetJSON(ctx, apiURL(daemon, "/version", nil), "", &v); verr != nil || v.ApiVersion == "" {
+	if verr := httpGetJSON(ctx, client, apiURL(daemon, "/version", nil), "", &v); verr != nil || v.ApiVersion == "" {
 		host := daemon
 		if u, perr := url.Parse(daemon); perr == nil && u.Host != "" {
 			host = u.Host
@@ -130,7 +134,7 @@ func (m model) fetchGraphCmd() tea.Cmd {
 	if m.graphResp != nil {
 		etag = strconv.Itoa(m.graphResp.Revision)
 	}
-	fixture, daemon := m.fixturePath, m.daemonURL
+	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
 			snap := graph.LoadTestSnapshot(nil)
@@ -143,19 +147,19 @@ func (m model) fetchGraphCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var resp api.GraphResponse
-		err := httpGetJSON(ctx, apiURL(daemon, "/graph", url.Values{"view": {"l3"}}), etag, &resp)
+		err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{"view": {"l3"}}), etag, &resp)
 		if errors.Is(err, errNotModified) {
 			return graphUnchangedMsg{}
 		}
 		if err != nil {
-			return graphLoadedMsg{err: explainNotFound(ctx, daemon, err)}
+			return graphLoadedMsg{err: explainNotFound(ctx, client, daemon, err)}
 		}
 		return graphLoadedMsg{resp: &resp}
 	}
 }
 
 // fetchL2All returns every LSP of a switch, following pagination.
-func fetchL2All(fixture, daemon, lsID string) ([]api.GraphNode, error) {
+func fetchL2All(fixture, daemon string, client *http.Client, lsID string) ([]api.GraphNode, error) {
 	var lsps []api.GraphNode
 	var snap *graph.Snapshot
 	if fixture != "" {
@@ -175,7 +179,7 @@ func fetchL2All(fixture, daemon, lsID string) ([]api.GraphNode, error) {
 		} else {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			var r api.GraphResponse
-			err := httpGetJSON(ctx, apiURL(daemon, "/graph", url.Values{
+			err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{
 				"view": {"l2"}, "focus": {lsID}, "page": {strconv.Itoa(page)}, "pageSize": {strconv.Itoa(l2PageSize)},
 			}), "", &r)
 			cancel()
@@ -196,15 +200,15 @@ func fetchL2All(fixture, daemon, lsID string) ([]api.GraphNode, error) {
 }
 
 func (m model) fetchL2Cmd(lsID string) tea.Cmd {
-	fixture, daemon := m.fixturePath, m.daemonURL
+	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
-		lsps, err := fetchL2All(fixture, daemon, lsID)
+		lsps, err := fetchL2All(fixture, daemon, client, lsID)
 		return l2LoadedMsg{lsID: lsID, lsps: lsps, err: err}
 	}
 }
 
 func (m model) fetchChassisCmd() tea.Cmd {
-	fixture, daemon := m.fixturePath, m.daemonURL
+	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
 			snap := graph.LoadTestSnapshot(nil)
@@ -217,7 +221,7 @@ func (m model) fetchChassisCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var resp api.GraphResponse
-		if err := httpGetJSON(ctx, apiURL(daemon, "/graph", url.Values{"view": {"chassis"}}), "", &resp); err != nil {
+		if err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{"view": {"chassis"}}), "", &resp); err != nil {
 			return chassisLoadedMsg{err: err}
 		}
 		return chassisLoadedMsg{resp: &resp}
@@ -226,7 +230,7 @@ func (m model) fetchChassisCmd() tea.Cmd {
 
 // fetchNodeDetailCmd loads /node/{id} for the describe screen.
 func (m model) fetchNodeDetailCmd(id string) tea.Cmd {
-	fixture, daemon := m.fixturePath, m.daemonURL
+	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
 			d, err := graph.LoadTestSnapshot(nil).GetNodeDetail(id)
@@ -238,7 +242,7 @@ func (m model) fetchNodeDetailCmd(id string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var d api.NodeDetail
-		if err := httpGetJSON(ctx, apiURL(daemon, "/node/"+url.PathEscape(id), nil), "", &d); err != nil {
+		if err := httpGetJSON(ctx, client, apiURL(daemon, "/node/"+url.PathEscape(id), nil), "", &d); err != nil {
 			return nodeDetailMsg{id: id, err: err}
 		}
 		return nodeDetailMsg{id: id, detail: &d}
@@ -403,7 +407,7 @@ func (m *model) applyGraph(resp *api.GraphResponse) {
 	if m.fixturePath != "" {
 		for _, n := range resp.Nodes {
 			if n.Type == api.GraphNodeTypeLS {
-				if lsps, err := fetchL2All(m.fixturePath, m.daemonURL, n.Id); err == nil {
+				if lsps, err := fetchL2All(m.fixturePath, m.daemonURL, m.httpClient, n.Id); err == nil {
 					m.switchWorkloads[n.Id] = lsps
 				}
 			}

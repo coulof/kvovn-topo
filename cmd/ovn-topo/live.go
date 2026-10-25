@@ -43,14 +43,17 @@ type pollTickMsg struct{}
 type flashTickMsg struct{}
 
 func (m model) connectLiveCmd() tea.Cmd {
-	daemon := m.daemonURL
+	daemon, client := m.daemonURL, m.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
 	return func() tea.Msg {
 		req, err := http.NewRequest(http.MethodGet, apiURL(daemon, "/events", nil), nil)
 		if err != nil {
 			return liveErrMsg{err}
 		}
 		req.Header.Set("Accept", "text/event-stream")
-		resp, err := http.DefaultClient.Do(req) // no timeout: long-lived stream
+		resp, err := client.Do(req) // no timeout: long-lived stream
 		if err != nil {
 			return liveErrMsg{err}
 		}

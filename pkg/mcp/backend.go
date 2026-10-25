@@ -146,35 +146,3 @@ func graphErr(err error) error {
 	}
 	return toolErr(CodeBadRequest, "%s", err.Error())
 }
-
-// UnavailableBackend answers every call with the setup error that prevented
-// a real backend, so agents can report it instead of seeing no server.
-type UnavailableBackend struct {
-	name string
-	err  error
-}
-
-// NewUnavailableBackend returns a backend that fails every call with err.
-func NewUnavailableBackend(name string, err error) *UnavailableBackend {
-	return &UnavailableBackend{name: name, err: err}
-}
-
-func (b *UnavailableBackend) Name() string { return b.name }
-
-func (b *UnavailableBackend) fail() error { return toolErr(CodeBackend, "%v", b.err) }
-
-func (b *UnavailableBackend) Graph(context.Context, GraphQuery) (*api.GraphResponse, error) {
-	return nil, b.fail()
-}
-
-func (b *UnavailableBackend) Node(context.Context, string) (*api.NodeDetail, error) {
-	return nil, b.fail()
-}
-
-func (b *UnavailableBackend) Find(context.Context, FindQuery) (*api.FindResponse, error) {
-	return nil, b.fail()
-}
-
-func (b *UnavailableBackend) Chassis(context.Context) (*api.ChassisList, error) {
-	return nil, b.fail()
-}

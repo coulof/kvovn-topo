@@ -40,9 +40,22 @@ securityContext:
     drop:
       - ALL
 
+# The API is reached only through the Kubernetes service proxy, which enforces
+# authentication and RBAC; the daemon has no authentication of its own. Keep
+# ClusterIP: a NodePort, LoadBalancer (e.g. Harvester/kube-vip IP pool) or bare
+# Ingress would expose the topology unauthenticated.
 service:
   type: ClusterIP
   port: 8080
+
+rbac:
+  viewer:
+    # Create a Role "<fullname>-viewer" (get services/proxy and the Service)
+    # for users of ovn-topo / ovn-topo mcp. No bindings are created.
+    create: false
+    # Also create a ClusterRole "<fullname>-discovery" (list services) so
+    # ovn-topo can find the Service outside kube-system without flags.
+    discovery: true
 
 resources:
   limits:

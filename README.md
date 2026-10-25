@@ -13,8 +13,8 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
 ## Design and Security Rules
 
 - **Strictly read-only**: OVSDB does not have a read-only user role. Read-only access is guaranteed in code and enforced during build by `golangci-lint` using `forbidigo`. The codebase contains no write operations (`Create`, `Update`, `Mutate`, `Delete`, `Transact`) against OVSDB or the Kubernetes API.
-- **OVSDB is the source of truth**: The daemon does not read Kube-OVN CRDs (such as Vpc, Subnet, or IP). Kubernetes metadata comes from OVN NB `external_ids`. The only Kubernetes resource read by the daemon is `Node`, used solely to map chassis hostnames to node names.
-- **Access control**: API access goes through the Kubernetes service proxy (`/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:8080/proxy/api/v1/...`). Authorization is controlled by standard `services/proxy` RBAC rules.
+- **OVSDB is the source of truth**: The daemon does not read Kube-OVN CRDs (such as Vpc, Subnet, or IP). Kubernetes metadata comes from OVN NB `external_ids`. Kubernetes reads are get/list/watch on `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachine`/`VirtualMachineInstance` and `NetworkAttachmentDefinition`, used only to enrich graph nodes (node names, workload identity), never to create them.
+- **Access control**: The daemon has no authentication of its own and is never exposed (no NodePort, LoadBalancer or Ingress). API access goes through the Kubernetes service proxy (`/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:http/proxy/api/v1/...`), which authenticates the caller; authorization is standard `services/proxy` RBAC. The TUI and `ovn-topo mcp` use this path by default.
 - **Air-gap friendly**: No runtime calls to the internet, no CDN dependencies, and non-root distroless container images.
 
 ## Architecture
@@ -41,9 +41,20 @@ Rancher UI Extension                         ovn-topo (TUI) / ovn-topo mcp
 (via k8s service proxy)                      (Bubble Tea)   (AI agents, stdio)
 ```
 
-## Quick Start: Local Testing
+## Quick Start
 
-To test against an existing cluster (for example `export KUBECONFIG=~/.kube/hv-01.yaml`):
+With the chart installed on the cluster, the TUI needs only a kubeconfig. It reaches the daemon through the Kubernetes service proxy (Rancher's `/k8s/clusters/<id>` or the API server directly), which enforces authentication and `services/proxy` RBAC. Nothing is exposed, and no port-forward is needed:
+
+```bash
+export KUBECONFIG=~/.kube/hv-01.yaml
+mise run tui        # or: ./bin/ovn-topo
+```
+
+See [Accessing the API](charts/ovn-topology/README.md#accessing-the-api-harvester-and-rke2) for the URLs and the optional viewer role.
+
+### Local daemon development
+
+To run a locally built daemon against the cluster's OVN databases:
 
 ```bash
 # 1. Forward OVN database ports to localhost
@@ -52,9 +63,9 @@ mise run pf
 # 2. Run the daemon locally (terminal 1)
 mise run daemon
 
-# 3. Test the API or launch the TUI (terminal 2)
+# 3. Test the API or launch the TUI against it (terminal 2)
 mise run test-live
-mise run tui
+mise run tui-local
 ```
 
 When finished, stop the port-forwarding:

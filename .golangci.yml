@@ -38,6 +38,7 @@ linters:
             - "**/pkg/server/**"
             - "**/pkg/ovsdb/**"
             - "**/pkg/mcp/**"
+            - "**/pkg/kubeproxy/**"
           deny:
             - pkg: "github.com/coulof/ovn-topology/pkg/diag"
               desc: "ADR-0001: pkg/diag is strictly restricted to cmd/ovn-topo and must not be imported by the daemon or pkg/mcp"
