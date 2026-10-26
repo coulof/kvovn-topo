@@ -18,11 +18,11 @@ var (
 type LogicalRouterStaticRoute struct {
 	UUID        string                          `ovsdb:"_uuid"`
 	BFD         *string                         `ovsdb:"bfd"`
-	ExternalIDs map[string]string               `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	IPPrefix    string                          `ovsdb:"ip_prefix" validate:"max=9223372036854775806"`
-	Nexthop     string                          `ovsdb:"nexthop" validate:"max=9223372036854775806"`
-	Options     map[string]string               `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	OutputPort  *string                         `ovsdb:"output_port" validate:"omitempty,max=9223372036854775806"`
-	Policy      *LogicalRouterStaticRoutePolicy `ovsdb:"policy" validate:"omitempty,max=9223372036854775806,oneof='src-ip' 'dst-ip'"`
-	RouteTable  string                          `ovsdb:"route_table" validate:"max=9223372036854775806"`
+	ExternalIDs map[string]string               `ovsdb:"external_ids"`
+	IPPrefix    string                          `ovsdb:"ip_prefix"`
+	Nexthop     string                          `ovsdb:"nexthop"`
+	Options     map[string]string               `ovsdb:"options"`
+	OutputPort  *string                         `ovsdb:"output_port"`
+	Policy      *LogicalRouterStaticRoutePolicy `ovsdb:"policy" validate:"omitempty,oneof='src-ip' 'dst-ip'"`
+	RouteTable  string                          `ovsdb:"route_table"`
 }

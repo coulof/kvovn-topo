@@ -18,8 +18,8 @@ var (
 // Encap defines an object in Encap table
 type Encap struct {
 	UUID        string            `ovsdb:"_uuid"`
-	ChassisName string            `ovsdb:"chassis_name" validate:"max=9223372036854775806"`
-	IP          string            `ovsdb:"ip" validate:"max=9223372036854775806"`
-	Options     map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Type        EncapType         `ovsdb:"type" validate:"max=9223372036854775806,oneof='geneve' 'stt' 'vxlan'"`
+	ChassisName string            `ovsdb:"chassis_name"`
+	IP          string            `ovsdb:"ip"`
+	Options     map[string]string `ovsdb:"options"`
+	Type        EncapType         `ovsdb:"type" validate:"oneof='geneve' 'stt' 'vxlan'"`
 }

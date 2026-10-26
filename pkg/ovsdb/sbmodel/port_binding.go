@@ -13,21 +13,21 @@ type PortBinding struct {
 	Chassis                    *string           `ovsdb:"chassis"`
 	Datapath                   string            `ovsdb:"datapath"`
 	Encap                      *string           `ovsdb:"encap"`
-	ExternalIDs                map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs                map[string]string `ovsdb:"external_ids"`
 	GatewayChassis             []string          `ovsdb:"gateway_chassis"`
 	HaChassisGroup             *string           `ovsdb:"ha_chassis_group"`
-	LogicalPort                string            `ovsdb:"logical_port" validate:"max=9223372036854775806"`
-	MAC                        []string          `ovsdb:"mac" validate:"dive,max=9223372036854775806"`
+	LogicalPort                string            `ovsdb:"logical_port"`
+	MAC                        []string          `ovsdb:"mac"`
 	MirrorRules                []string          `ovsdb:"mirror_rules"`
-	NatAddresses               []string          `ovsdb:"nat_addresses" validate:"dive,max=9223372036854775806"`
-	Options                    map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	ParentPort                 *string           `ovsdb:"parent_port" validate:"omitempty,max=9223372036854775806"`
-	PortSecurity               []string          `ovsdb:"port_security" validate:"dive,max=9223372036854775806"`
+	NatAddresses               []string          `ovsdb:"nat_addresses"`
+	Options                    map[string]string `ovsdb:"options"`
+	ParentPort                 *string           `ovsdb:"parent_port"`
+	PortSecurity               []string          `ovsdb:"port_security"`
 	RequestedAdditionalChassis []string          `ovsdb:"requested_additional_chassis"`
 	RequestedChassis           *string           `ovsdb:"requested_chassis"`
 	Tag                        *int              `ovsdb:"tag" validate:"omitempty,min=1,max=4095"`
 	TunnelKey                  int               `ovsdb:"tunnel_key" validate:"min=1,max=32767"`
-	Type                       string            `ovsdb:"type" validate:"max=9223372036854775806"`
+	Type                       string            `ovsdb:"type"`
 	Up                         *bool             `ovsdb:"up"`
-	VirtualParent              *string           `ovsdb:"virtual_parent" validate:"omitempty,max=9223372036854775806"`
+	VirtualParent              *string           `ovsdb:"virtual_parent"`
 }

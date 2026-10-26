@@ -8,9 +8,9 @@ const GatewayChassisTable = "Gateway_Chassis"
 // GatewayChassis defines an object in Gateway_Chassis table
 type GatewayChassis struct {
 	UUID        string            `ovsdb:"_uuid"`
-	ChassisName string            `ovsdb:"chassis_name" validate:"max=9223372036854775806"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Name        string            `ovsdb:"name" validate:"max=9223372036854775806"`
-	Options     map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ChassisName string            `ovsdb:"chassis_name"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
+	Name        string            `ovsdb:"name"`
+	Options     map[string]string `ovsdb:"options"`
 	Priority    int               `ovsdb:"priority" validate:"min=0,max=32767"`
 }

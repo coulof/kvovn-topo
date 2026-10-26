@@ -9,11 +9,11 @@ const ChassisTable = "Chassis"
 type Chassis struct {
 	UUID                string            `ovsdb:"_uuid"`
 	Encaps              []string          `ovsdb:"encaps" validate:"min=1"`
-	ExternalIDs         map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Hostname            string            `ovsdb:"hostname" validate:"max=9223372036854775806"`
-	Name                string            `ovsdb:"name" validate:"max=9223372036854775806"`
-	NbCfg               int               `ovsdb:"nb_cfg" validate:"max=9223372036854775806"`
-	OtherConfig         map[string]string `ovsdb:"other_config" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	TransportZones      []string          `ovsdb:"transport_zones" validate:"dive,max=9223372036854775806"`
-	VtepLogicalSwitches []string          `ovsdb:"vtep_logical_switches" validate:"dive,max=9223372036854775806"`
+	ExternalIDs         map[string]string `ovsdb:"external_ids"`
+	Hostname            string            `ovsdb:"hostname"`
+	Name                string            `ovsdb:"name"`
+	NbCfg               int               `ovsdb:"nb_cfg"`
+	OtherConfig         map[string]string `ovsdb:"other_config"`
+	TransportZones      []string          `ovsdb:"transport_zones"`
+	VtepLogicalSwitches []string          `ovsdb:"vtep_logical_switches"`
 }

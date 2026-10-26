@@ -9,9 +9,9 @@ const SBGlobalTable = "SB_Global"
 type SBGlobal struct {
 	UUID        string            `ovsdb:"_uuid"`
 	Connections []string          `ovsdb:"connections"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
 	Ipsec       bool              `ovsdb:"ipsec"`
-	NbCfg       int               `ovsdb:"nb_cfg" validate:"max=9223372036854775806"`
-	Options     map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	NbCfg       int               `ovsdb:"nb_cfg"`
+	Options     map[string]string `ovsdb:"options"`
 	SSL         *string           `ovsdb:"ssl"`
 }

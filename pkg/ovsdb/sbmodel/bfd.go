@@ -19,15 +19,15 @@ var (
 // BFD defines an object in BFD table
 type BFD struct {
 	UUID        string            `ovsdb:"_uuid"`
-	ChassisName string            `ovsdb:"chassis_name" validate:"max=9223372036854775806"`
-	DetectMult  int               `ovsdb:"detect_mult" validate:"max=9223372036854775806"`
-	Disc        int               `ovsdb:"disc" validate:"max=9223372036854775806"`
-	DstIP       string            `ovsdb:"dst_ip" validate:"max=9223372036854775806"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	LogicalPort string            `ovsdb:"logical_port" validate:"max=9223372036854775806"`
-	MinRx       int               `ovsdb:"min_rx" validate:"max=9223372036854775806"`
-	MinTx       int               `ovsdb:"min_tx" validate:"max=9223372036854775806"`
-	Options     map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ChassisName string            `ovsdb:"chassis_name"`
+	DetectMult  int               `ovsdb:"detect_mult"`
+	Disc        int               `ovsdb:"disc"`
+	DstIP       string            `ovsdb:"dst_ip"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
+	LogicalPort string            `ovsdb:"logical_port"`
+	MinRx       int               `ovsdb:"min_rx"`
+	MinTx       int               `ovsdb:"min_tx"`
+	Options     map[string]string `ovsdb:"options"`
 	SrcPort     int               `ovsdb:"src_port" validate:"min=49152,max=65535"`
-	Status      BFDStatus         `ovsdb:"status" validate:"max=9223372036854775806,oneof='down' 'init' 'up' 'admin_down'"`
+	Status      BFDStatus         `ovsdb:"status" validate:"oneof='down' 'init' 'up' 'admin_down'"`
 }

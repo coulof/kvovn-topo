@@ -30,16 +30,16 @@ var (
 // ACL defines an object in ACL table
 type ACL struct {
 	UUID        string            `ovsdb:"_uuid"`
-	Action      ACLAction         `ovsdb:"action" validate:"max=9223372036854775806,oneof='allow' 'allow-related' 'allow-stateless' 'drop' 'reject' 'pass'"`
-	Direction   ACLDirection      `ovsdb:"direction" validate:"max=9223372036854775806,oneof='from-lport' 'to-lport'"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	Action      ACLAction         `ovsdb:"action" validate:"oneof='allow' 'allow-related' 'allow-stateless' 'drop' 'reject' 'pass'"`
+	Direction   ACLDirection      `ovsdb:"direction" validate:"oneof='from-lport' 'to-lport'"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
 	Label       int               `ovsdb:"label" validate:"min=0,max=4294967295"`
 	Log         bool              `ovsdb:"log"`
-	Match       string            `ovsdb:"match" validate:"max=9223372036854775806"`
-	Meter       *string           `ovsdb:"meter" validate:"omitempty,max=9223372036854775806"`
+	Match       string            `ovsdb:"match"`
+	Meter       *string           `ovsdb:"meter"`
 	Name        *string           `ovsdb:"name" validate:"omitempty,max=63"`
-	Options     map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	Options     map[string]string `ovsdb:"options"`
 	Priority    int               `ovsdb:"priority" validate:"min=0,max=32767"`
-	Severity    *ACLSeverity      `ovsdb:"severity" validate:"omitempty,max=9223372036854775806,oneof='alert' 'warning' 'notice' 'info' 'debug'"`
+	Severity    *ACLSeverity      `ovsdb:"severity" validate:"omitempty,oneof='alert' 'warning' 'notice' 'info' 'debug'"`
 	Tier        int               `ovsdb:"tier" validate:"min=0,max=3"`
 }

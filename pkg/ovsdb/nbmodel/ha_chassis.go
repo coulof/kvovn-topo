@@ -8,7 +8,7 @@ const HAChassisTable = "HA_Chassis"
 // HAChassis defines an object in HA_Chassis table
 type HAChassis struct {
 	UUID        string            `ovsdb:"_uuid"`
-	ChassisName string            `ovsdb:"chassis_name" validate:"max=9223372036854775806"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ChassisName string            `ovsdb:"chassis_name"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
 	Priority    int               `ovsdb:"priority" validate:"min=0,max=32767"`
 }

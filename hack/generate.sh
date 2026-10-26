@@ -70,6 +70,10 @@ go run github.com/ovn-kubernetes/libovsdb/cmd/modelgen \
   -o "${ROOT_DIR}/pkg/ovsdb/sbmodel" \
   "${TMP_DIR}/sb.ovsschema"
 
+# modelgen output differs between amd64 and arm64 (libovsdb MaxLength overflow);
+# normalize so every machine produces the same files (tech-debt B4).
+python3 -I "${SCRIPT_DIR}/normalize-models.py" "${ROOT_DIR}/pkg/ovsdb/nbmodel" "${ROOT_DIR}/pkg/ovsdb/sbmodel"
+
 echo "Generating API types in pkg/api..."
 mkdir -p "${ROOT_DIR}/pkg/api"
 go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen \

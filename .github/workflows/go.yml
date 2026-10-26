@@ -46,8 +46,10 @@ jobs:
       - name: Verify codegen
         run: |
           make generate
-          # Verify openapi codegen is clean (OVSDB modelgen validation tags vary across darwin/linux math.MaxInt)
-          git diff --exit-code pkg/api
+          # All generated code must match what is committed: OVSDB models
+          # (normalized across CPU architectures by hack/normalize-models.py)
+          # and the OpenAPI types.
+          git diff --exit-code pkg/ovsdb pkg/api
 
       - name: Run Linters
         run: make lint

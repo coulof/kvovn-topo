@@ -10,12 +10,12 @@ type LogicalRouter struct {
 	UUID              string            `ovsdb:"_uuid"`
 	Copp              *string           `ovsdb:"copp"`
 	Enabled           *bool             `ovsdb:"enabled"`
-	ExternalIDs       map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs       map[string]string `ovsdb:"external_ids"`
 	LoadBalancer      []string          `ovsdb:"load_balancer"`
 	LoadBalancerGroup []string          `ovsdb:"load_balancer_group"`
-	Name              string            `ovsdb:"name" validate:"max=9223372036854775806"`
+	Name              string            `ovsdb:"name"`
 	Nat               []string          `ovsdb:"nat"`
-	Options           map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	Options           map[string]string `ovsdb:"options"`
 	Policies          []string          `ovsdb:"policies"`
 	Ports             []string          `ovsdb:"ports"`
 	StaticRoutes      []string          `ovsdb:"static_routes"`

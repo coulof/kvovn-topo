@@ -8,20 +8,20 @@ const LogicalSwitchPortTable = "Logical_Switch_Port"
 // LogicalSwitchPort defines an object in Logical_Switch_Port table
 type LogicalSwitchPort struct {
 	UUID             string            `ovsdb:"_uuid"`
-	Addresses        []string          `ovsdb:"addresses" validate:"dive,max=9223372036854775806"`
+	Addresses        []string          `ovsdb:"addresses"`
 	Dhcpv4Options    *string           `ovsdb:"dhcpv4_options"`
 	Dhcpv6Options    *string           `ovsdb:"dhcpv6_options"`
-	DynamicAddresses *string           `ovsdb:"dynamic_addresses" validate:"omitempty,max=9223372036854775806"`
+	DynamicAddresses *string           `ovsdb:"dynamic_addresses"`
 	Enabled          *bool             `ovsdb:"enabled"`
-	ExternalIDs      map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs      map[string]string `ovsdb:"external_ids"`
 	HaChassisGroup   *string           `ovsdb:"ha_chassis_group"`
 	MirrorRules      []string          `ovsdb:"mirror_rules"`
-	Name             string            `ovsdb:"name" validate:"max=9223372036854775806"`
-	Options          map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	ParentName       *string           `ovsdb:"parent_name" validate:"omitempty,max=9223372036854775806"`
-	PortSecurity     []string          `ovsdb:"port_security" validate:"dive,max=9223372036854775806"`
+	Name             string            `ovsdb:"name"`
+	Options          map[string]string `ovsdb:"options"`
+	ParentName       *string           `ovsdb:"parent_name"`
+	PortSecurity     []string          `ovsdb:"port_security"`
 	Tag              *int              `ovsdb:"tag" validate:"omitempty,min=1,max=4095"`
 	TagRequest       *int              `ovsdb:"tag_request" validate:"omitempty,min=0,max=4095"`
-	Type             string            `ovsdb:"type" validate:"max=9223372036854775806"`
+	Type             string            `ovsdb:"type"`
 	Up               *bool             `ovsdb:"up"`
 }

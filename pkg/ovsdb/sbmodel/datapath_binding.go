@@ -8,7 +8,7 @@ const DatapathBindingTable = "Datapath_Binding"
 // DatapathBinding defines an object in Datapath_Binding table
 type DatapathBinding struct {
 	UUID          string            `ovsdb:"_uuid"`
-	ExternalIDs   map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs   map[string]string `ovsdb:"external_ids"`
 	LoadBalancers []string          `ovsdb:"load_balancers"`
 	TunnelKey     int               `ovsdb:"tunnel_key" validate:"min=1,max=16777215"`
 }

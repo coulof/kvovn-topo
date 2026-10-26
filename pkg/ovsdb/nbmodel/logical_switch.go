@@ -11,12 +11,12 @@ type LogicalSwitch struct {
 	ACLs              []string          `ovsdb:"acls"`
 	Copp              *string           `ovsdb:"copp"`
 	DNSRecords        []string          `ovsdb:"dns_records"`
-	ExternalIDs       map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs       map[string]string `ovsdb:"external_ids"`
 	ForwardingGroups  []string          `ovsdb:"forwarding_groups"`
 	LoadBalancer      []string          `ovsdb:"load_balancer"`
 	LoadBalancerGroup []string          `ovsdb:"load_balancer_group"`
-	Name              string            `ovsdb:"name" validate:"max=9223372036854775806"`
-	OtherConfig       map[string]string `ovsdb:"other_config" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	Name              string            `ovsdb:"name"`
+	OtherConfig       map[string]string `ovsdb:"other_config"`
 	Ports             []string          `ovsdb:"ports"`
 	QOSRules          []string          `ovsdb:"qos_rules"`
 }

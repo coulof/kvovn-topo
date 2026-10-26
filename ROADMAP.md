@@ -57,7 +57,7 @@ Only the cheap debt items closed (C1, C2, C3, A6, E2, F2). The structural ones (
 | B1 | Only one hand-written fixture. `hack/capture-fixtures.sh` (2026-10-21) writes `testdata/scenarios/<name>/`, which `pkg/ovsdb.LoadFixture` decodes through the libovsdb cache, and `TestScenarioGoldens` renders each scenario. One real capture is committed: `testdata/scenarios/hv-01-lab` (2026-10-23, Kube-OVN v1.16.2, OVN 25.03.4). It is the whole lab as it was, not a scenario. **To do: recapture clean testdata**, one capture per named scenario (`overlay-default`, `custom-vpc-ovn-nat`, `kubevirt-multinic` first), each from a cluster prepared to contain exactly that scenario. Each capture's NB must differ from the others, or it is not a new scenario; record in its `meta.json` what was set up. The lab runs OVN 25.03.4 while `hack/ovn-version` pins v24.03.2 (Q4): align the pin with the captured version before relying on columns newer than 24.03. | M0 / M1 |
 | B2 | No `test/` tree: layers 2–5 absent. | M0 / M1 / M7 |
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
-| B4 | `make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff. | M0 |
+| B4 | ~~`make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff.~~ **Done 2026-10-25:** the cause is CPU architecture, not OS. libovsdb v0.8.1 `MaxLength()` computes `int(math.Pow(2, 63)) - 1`. That float → int conversion overflows: amd64 emits no tag, while arm64 emits a meaningless `max=9223372036854775806`. `hack/normalize-models.py` (run by `hack/generate.sh`) rewrites arm64 output to the amd64 form; the committed arm64 files, normalized, came out byte-identical to an amd64 run. Models are regenerated in that form, and CI now runs `git diff --exit-code pkg/ovsdb pkg/api`. Worth reporting upstream. | done |
 | B5 | Extension has one unit test (`layout.test.ts`). | M3 (paused) |
 | C1 | ~~`forbidigo` misses `.Patch`, `.Apply` and `.Evict`.~~ **Done 2026-10-23:** a type-aware rule forbids `Patch`/`Apply*`/`Evict*`/`DeleteCollection` on `k8s.io/client-go` types (scoped so `graph.Store.Apply` stays allowed). | done |
 | C2 | ~~No `depguard` rule for `pkg/mcp` yet.~~ **Done 2026-10-23:** `depguard` and `hack/check-deps.sh` cover `pkg/mcp` (the script checks it once the package exists). | done |
@@ -81,7 +81,7 @@ One PR per step, in this order. Feature work (M4 onward, more MCP tools, more di
    - Deploy the latest image, then run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP.
    - Bind a test user to `ovn-topologyd-viewer` only, keep the resourceName form that works, and record which.
    - Accept or amend ADR-0003.
-3. **B4: deterministic codegen.**
+3. **B4: deterministic codegen.** *Done 2026-10-25 (see B4).*
    - Make modelgen output identical across machines (the `validate` tag drift).
    - Have CI run `git diff --exit-code pkg/ovsdb pkg/api`.
 4. **B1: scenario fixtures.**

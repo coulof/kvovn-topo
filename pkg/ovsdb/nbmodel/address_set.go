@@ -8,7 +8,7 @@ const AddressSetTable = "Address_Set"
 // AddressSet defines an object in Address_Set table
 type AddressSet struct {
 	UUID        string            `ovsdb:"_uuid"`
-	Addresses   []string          `ovsdb:"addresses" validate:"dive,max=9223372036854775806"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Name        string            `ovsdb:"name" validate:"max=9223372036854775806"`
+	Addresses   []string          `ovsdb:"addresses"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
+	Name        string            `ovsdb:"name"`
 }

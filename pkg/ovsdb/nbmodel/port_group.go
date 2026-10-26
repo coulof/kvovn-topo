@@ -9,7 +9,7 @@ const PortGroupTable = "Port_Group"
 type PortGroup struct {
 	UUID        string            `ovsdb:"_uuid"`
 	ACLs        []string          `ovsdb:"acls"`
-	ExternalIDs map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Name        string            `ovsdb:"name" validate:"max=9223372036854775806"`
+	ExternalIDs map[string]string `ovsdb:"external_ids"`
+	Name        string            `ovsdb:"name"`
 	Ports       []string          `ovsdb:"ports"`
 }

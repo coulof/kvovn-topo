@@ -20,13 +20,13 @@ type NAT struct {
 	UUID              string            `ovsdb:"_uuid"`
 	AllowedExtIPs     *string           `ovsdb:"allowed_ext_ips"`
 	ExemptedExtIPs    *string           `ovsdb:"exempted_ext_ips"`
-	ExternalIDs       map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	ExternalIP        string            `ovsdb:"external_ip" validate:"max=9223372036854775806"`
-	ExternalMAC       *string           `ovsdb:"external_mac" validate:"omitempty,max=9223372036854775806"`
-	ExternalPortRange string            `ovsdb:"external_port_range" validate:"max=9223372036854775806"`
+	ExternalIDs       map[string]string `ovsdb:"external_ids"`
+	ExternalIP        string            `ovsdb:"external_ip"`
+	ExternalMAC       *string           `ovsdb:"external_mac"`
+	ExternalPortRange string            `ovsdb:"external_port_range"`
 	GatewayPort       *string           `ovsdb:"gateway_port"`
-	LogicalIP         string            `ovsdb:"logical_ip" validate:"max=9223372036854775806"`
-	LogicalPort       *string           `ovsdb:"logical_port" validate:"omitempty,max=9223372036854775806"`
-	Options           map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Type              NATType           `ovsdb:"type" validate:"max=9223372036854775806,oneof='dnat' 'snat' 'dnat_and_snat'"`
+	LogicalIP         string            `ovsdb:"logical_ip"`
+	LogicalPort       *string           `ovsdb:"logical_port"`
+	Options           map[string]string `ovsdb:"options"`
+	Type              NATType           `ovsdb:"type" validate:"oneof='dnat' 'snat' 'dnat_and_snat'"`
 }

@@ -25,12 +25,12 @@ var (
 // LoadBalancer defines an object in Load_Balancer table
 type LoadBalancer struct {
 	UUID            string                        `ovsdb:"_uuid"`
-	ExternalIDs     map[string]string             `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	ExternalIDs     map[string]string             `ovsdb:"external_ids"`
 	HealthCheck     []string                      `ovsdb:"health_check"`
-	IPPortMappings  map[string]string             `ovsdb:"ip_port_mappings" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Name            string                        `ovsdb:"name" validate:"max=9223372036854775806"`
-	Options         map[string]string             `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	Protocol        *LoadBalancerProtocol         `ovsdb:"protocol" validate:"omitempty,max=9223372036854775806,oneof='tcp' 'udp' 'sctp'"`
-	SelectionFields []LoadBalancerSelectionFields `ovsdb:"selection_fields" validate:"dive,max=9223372036854775806,oneof='eth_src' 'eth_dst' 'ip_src' 'ip_dst' 'tp_src' 'tp_dst'"`
-	Vips            map[string]string             `ovsdb:"vips" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
+	IPPortMappings  map[string]string             `ovsdb:"ip_port_mappings"`
+	Name            string                        `ovsdb:"name"`
+	Options         map[string]string             `ovsdb:"options"`
+	Protocol        *LoadBalancerProtocol         `ovsdb:"protocol" validate:"omitempty,oneof='tcp' 'udp' 'sctp'"`
+	SelectionFields []LoadBalancerSelectionFields `ovsdb:"selection_fields" validate:"dive,oneof='eth_src' 'eth_dst' 'ip_src' 'ip_dst' 'tp_src' 'tp_dst'"`
+	Vips            map[string]string             `ovsdb:"vips"`
 }

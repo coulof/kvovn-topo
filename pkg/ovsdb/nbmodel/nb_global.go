@@ -9,15 +9,15 @@ const NBGlobalTable = "NB_Global"
 type NBGlobal struct {
 	UUID           string            `ovsdb:"_uuid"`
 	Connections    []string          `ovsdb:"connections"`
-	ExternalIDs    map[string]string `ovsdb:"external_ids" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	HvCfg          int               `ovsdb:"hv_cfg" validate:"max=9223372036854775806"`
-	HvCfgTimestamp int               `ovsdb:"hv_cfg_timestamp" validate:"max=9223372036854775806"`
+	ExternalIDs    map[string]string `ovsdb:"external_ids"`
+	HvCfg          int               `ovsdb:"hv_cfg"`
+	HvCfgTimestamp int               `ovsdb:"hv_cfg_timestamp"`
 	Ipsec          bool              `ovsdb:"ipsec"`
-	Name           string            `ovsdb:"name" validate:"max=9223372036854775806"`
-	NbCfg          int               `ovsdb:"nb_cfg" validate:"max=9223372036854775806"`
-	NbCfgTimestamp int               `ovsdb:"nb_cfg_timestamp" validate:"max=9223372036854775806"`
-	Options        map[string]string `ovsdb:"options" validate:"dive,keys,max=9223372036854775806,endkeys,max=9223372036854775806"`
-	SbCfg          int               `ovsdb:"sb_cfg" validate:"max=9223372036854775806"`
-	SbCfgTimestamp int               `ovsdb:"sb_cfg_timestamp" validate:"max=9223372036854775806"`
+	Name           string            `ovsdb:"name"`
+	NbCfg          int               `ovsdb:"nb_cfg"`
+	NbCfgTimestamp int               `ovsdb:"nb_cfg_timestamp"`
+	Options        map[string]string `ovsdb:"options"`
+	SbCfg          int               `ovsdb:"sb_cfg"`
+	SbCfgTimestamp int               `ovsdb:"sb_cfg_timestamp"`
 	SSL            *string           `ovsdb:"ssl"`
 }
