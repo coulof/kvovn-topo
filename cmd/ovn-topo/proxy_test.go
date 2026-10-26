@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -129,6 +130,20 @@ func TestMCPDefaultUsesServiceProxy(t *testing.T) {
 				t.Fatalf("no request to %s; saw %v", want, *seen)
 			}
 		})
+	}
+}
+
+// Priming the service-proxy backend logs where the daemon was found, before any tool call.
+func TestMCPPrimeLogsDaemon(t *testing.T) {
+	api, _ := fakeAPIServer(t, "kube-system", "ovn-topologyd")
+	var logs bytes.Buffer
+	backend := serviceProxyBackend(kubeproxy.Loader(writeKubeconfig(t, api), ""), kubeproxy.Default, false,
+		slog.New(slog.NewTextHandler(&logs, nil)))
+	if err := backend.Prime(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "mcp backend: daemon via service proxy") || !strings.Contains(logs.String(), "kube-system/ovn-topologyd") {
+		t.Fatalf("unexpected logs: %s", logs.String())
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/coulof/ovn-topology/pkg/mcp"
 	"github.com/coulof/ovn-topology/pkg/ovsdb"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/term"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -62,7 +63,7 @@ func runMCP(args []string, stderr io.Writer) int {
 		ovnCA       = fs.String("ovn-ca", "", "OVN CA certificate (embedded backend)")
 		fixture     = fs.Bool("fixture", false, "serve the bundled dev fixture (run from the repository)")
 		fixtureDir  = fs.String("fixture-dir", "", "serve a captured scenario (testdata/scenarios/<name>)")
-		logLevel    = fs.String("log-level", "warn", "stderr log level: debug, info, warn, error")
+		logLevel    = fs.String("log-level", "info", "stderr log level: debug, info, warn, error")
 	)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -75,7 +76,7 @@ func runMCP(args []string, stderr io.Writer) int {
 
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(*logLevel)); err != nil {
-		level = slog.LevelWarn
+		level = slog.LevelInfo
 	}
 	// stdout carries the protocol; everything else goes to stderr.
 	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
@@ -116,7 +117,14 @@ func runMCP(args []string, stderr io.Writer) int {
 	default:
 		// Like kvtop, a cluster that cannot be reached does not stop the
 		// server: the handshake succeeds and every tool returns the reason.
-		backend = serviceProxyBackend(loader, kubeproxy.ServiceRef{Namespace: *namespace, Name: *service, Port: *port}, pinned, logger)
+		lazy := serviceProxyBackend(loader, kubeproxy.ServiceRef{Namespace: *namespace, Name: *service, Port: *port}, pinned, logger)
+		go func() { _ = lazy.Prime(ctx) }() // logs the outcome; tool calls retry a failure
+		backend = lazy
+	}
+
+	logger.Info("mcp server ready on stdio", "version", version, "backend", backend.Name())
+	if stdinIsTerminal() {
+		logger.Info("stdin is a terminal: this command speaks MCP JSON-RPC on stdin/stdout; register it in an MCP client (docs/mcp.md) or try hack/mcp-smoke.sh")
 	}
 
 	srv := mcp.NewServer(backend, mcp.Options{Version: version, Logger: logger})
@@ -130,7 +138,7 @@ func runMCP(args []string, stderr io.Writer) int {
 // serviceProxyBackend reaches the daemon through the API server's service
 // proxy (pkg/kubeproxy). The kubeconfig is loaded and, unless pinned, the
 // Service discovered on the first tool call; failures are retried per call.
-func serviceProxyBackend(loader clientcmd.ClientConfig, ref kubeproxy.ServiceRef, pinned bool, logger *slog.Logger) mcp.Backend {
+func serviceProxyBackend(loader clientcmd.ClientConfig, ref kubeproxy.ServiceRef, pinned bool, logger *slog.Logger) *mcp.LazyBackend {
 	return mcp.NewLazyBackend("daemon", func(ctx context.Context) (mcp.Backend, error) {
 		conn, err := kubeproxy.Connect(ctx, loader, ref, pinned)
 		if err != nil {
@@ -194,6 +202,11 @@ func startEmbedded(ctx context.Context, loader clientcmd.ClientConfig, nbEP, sbE
 		syncer.Close()
 	}()
 	return store, nil
+}
+
+// stdinIsTerminal reports whether a person, not an MCP client, is on stdin.
+func stdinIsTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 func splitList(s string) []string {

@@ -35,6 +35,13 @@ func NewLazyBackend(name string, resolve func(context.Context) (Backend, error))
 
 func (b *LazyBackend) Name() string { return b.name }
 
+// Prime resolves the backend ahead of the first tool call, so setup problems
+// show in the logs at startup. Like a tool call, a failure is retried later.
+func (b *LazyBackend) Prime(ctx context.Context) error {
+	_, err := b.get(ctx)
+	return err
+}
+
 func (b *LazyBackend) get(ctx context.Context) (Backend, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

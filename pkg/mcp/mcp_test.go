@@ -401,6 +401,30 @@ func TestLazyBackendReportsSetupErrors(t *testing.T) {
 	}
 }
 
+func TestLazyBackendPrime(t *testing.T) {
+	calls := 0
+	lazy := NewLazyBackend("daemon", func(context.Context) (Backend, error) {
+		calls++
+		if calls == 1 {
+			return nil, toolErr(CodeBackend, "not yet")
+		}
+		return NewSnapshotBackend(StaticSource{graph.LoadTestSnapshot(t)}), nil
+	})
+	ctx := context.Background()
+	if err := lazy.Prime(ctx); err == nil {
+		t.Fatal("first prime should fail")
+	}
+	if _, err := lazy.Chassis(ctx); err != nil { // a failed prime is retried by the next call
+		t.Fatal(err)
+	}
+	if err := lazy.Prime(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("resolve called %d times, want 2 (failure retried, success kept)", calls)
+	}
+}
+
 func TestLazyBackendRetriesFailures(t *testing.T) {
 	calls := 0
 	lazy := NewLazyBackend("daemon", func(context.Context) (Backend, error) {

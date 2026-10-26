@@ -56,7 +56,7 @@ When `truncated` is true, pass `next` back as `cursor` to get the next page. Err
 | Embedded graph | `--nb tcp:127.0.0.1:6641 --sb tcp:127.0.0.1:6642` (plus `--ovn-cert/--ovn-key/--ovn-ca` for TLS) | Reach to OVSDB. From a laptop use `mise run pf`: it creates the `ovn-topology-proxy` relay pod and port-forwards to it (see the README's *Local daemon development*). A plain `kubectl port-forward svc/ovn-nb` does not work, because the OVN databases listen on the node IP of host-network pods. Clean up with `mise run pf-proxy-remove`. Uses the kubeconfig for node and workload names when it loads. |
 | Fixture | `--fixture` (dev fixture, run from the repo) or `--fixture-dir testdata/scenarios/<name>` | Nothing. |
 
-Logs go to stderr (`--log-level`, default `warn`); stdout carries only the protocol.
+Logs go to stderr (`--log-level`, default `info`; `warn` for a quiet client); stdout carries only the protocol. At startup the server logs `mcp server ready on stdio` with the backend, then whether that backend is reachable: for the service proxy, the Service it found and its URL (or why it failed; tool calls retry); for the embedded graph, the OVSDB connection and the first synchronized snapshot. Run by hand in a terminal, the command waits for JSON-RPC on stdin and says so; use an MCP client or `hack/mcp-smoke.sh` instead.
 
 ## Tool setup
 
