@@ -68,7 +68,9 @@ mise run api-find 10.244.0.10   # also api-ready, api-version, api-graph, api-ch
 
 ### Local daemon development
 
-Only a daemon you run on your laptop needs port-forwards: it must reach the cluster's OVN databases. The `[dev]` tasks in `mise tasks` cover this flow:
+Only a daemon you run on your laptop needs port-forwards: it must reach the cluster's OVN databases. The `[dev]` tasks in `mise tasks` cover this flow.
+
+A plain `kubectl port-forward svc/ovn-nb` cannot do it. The ovn-central pods use `hostNetwork` and the databases listen on the node IP, while `port-forward` always connects to `localhost` inside the pod. So `mise run pf` first creates a small relay pod, `ovn-topology-proxy` in `kube-system`. It runs a Python TCP relay in the Kube-OVN image (set `PROXY_IMAGE` to match your version or mirror) that forwards 6641/6642 to the `ovn-nb`/`ovn-sb` Services, and `pf` port-forwards to that pod. It is the only thing any task creates in the cluster; remove it when you are done.
 
 ```bash
 # 1. Forward OVN database ports to localhost
@@ -82,10 +84,10 @@ mise run test-local
 mise run tui-local
 ```
 
-When finished, stop the port-forwarding:
+When finished, stop the port-forwards and delete the relay pod:
 
 ```bash
-mise run pf-stop
+mise run pf-proxy-remove   # runs pf-stop first
 ```
 
 ## TUI Controls (`ovn-topo`)
@@ -155,36 +157,29 @@ Path computation, ACLs, consistency checks and history tools arrive with milesto
 
 #### 1. OpenCode
 
-Add to `opencode.json` (or `~/.config/opencode/opencode.json`):
+Add this entry to the `mcp` object of `opencode.json` (or `~/.config/opencode/opencode.json`):
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "ovn-topology": {
-      "type": "local",
-      "command": ["ovn-topo", "mcp"],
-      "enabled": false
-    }
-  }
-}
+```jsonc
+"ovn-topology": {
+    "type": "local",
+    "command": ["ovn-topo", "mcp"],
+    "enabled": false
+},
 ```
 
-`"enabled": false` keeps the server off (and its tools out of the context) until you switch it on in OpenCode. With no flags, `ovn-topo mcp` uses the kubeconfig OpenCode inherits (`$KUBECONFIG`, else `~/.kube/config`).
+`"enabled": false` keeps the server off (and its tools out of the context) until you switch it on in OpenCode. With no flags, `ovn-topo mcp` uses the kubeconfig OpenCode inherits (`$KUBECONFIG`, else `~/.kube/config`) and reaches the daemon through the Kubernetes service proxy.
 
-With custom kubeconfig:
+With a custom kubeconfig:
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "ovn-topology": {
-      "type": "local",
-      "command": ["ovn-topo", "mcp", "--kubeconfig", "/path/to/kubeconfig"]
-    }
-  }
-}
+```jsonc
+"ovn-topology": {
+    "type": "local",
+    "command": ["ovn-topo", "mcp", "--kubeconfig", "/path/to/kubeconfig"],
+    "enabled": false
+},
 ```
+
+In a new file, the entry goes inside `{"$schema": "https://opencode.ai/config.json", "mcp": { … }}`.
 
 #### 2. Claude Code
 

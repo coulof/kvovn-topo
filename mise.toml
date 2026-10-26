@@ -11,6 +11,9 @@ DAEMON_PORT = "8888"
 DAEMON_URL = "http://127.0.0.1:8888/api/v1"
 PROXY_POD = "ovn-topology-proxy"
 PROXY_NAMESPACE = "kube-system"
+# Image of the dev relay pod (any image with python3); match your Kube-OVN
+# version or point at your mirror (air-gap).
+PROXY_IMAGE = "{{env.PROXY_IMAGE | default(value='docker.io/kubeovn/kube-ovn:v1.16.2')}}"
 # The in-cluster daemon through the Kubernetes service proxy (authn + RBAC by
 # the API server); used by the api-* and test-live tasks. No port-forward.
 OVN_TOPO_API = "/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1"
@@ -19,12 +22,19 @@ OVN_TOPO_API = "/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/
 description = "Build ovn-topologyd and ovn-topo binaries"
 run = "make build"
 
+# Dev only. A locally run daemon must reach the OVN databases, but a plain
+# `kubectl port-forward svc/ovn-nb` cannot: the ovn-central pods are
+# hostNetwork and NB/SB listen on the node IP, while port-forward always dials
+# localhost inside the pod (ROADMAP Q3). This pod relays 6641/6642 from its own
+# network to the ovn-nb/ovn-sb Services, and `pf` port-forwards to it.
+# It is the only thing any task creates in the cluster: remove it with
+# `mise run pf-proxy-remove`. The in-cluster daemon, the TUI and MCP never need it.
 [tasks.pf-proxy-deploy]
-description = "[dev] Deploy the OVN port-forwarding bridge pod (only for a locally run daemon)"
+description = "[dev] Create the ovn-topology-proxy relay pod in kube-system (OVSDB reach for a locally run daemon)"
 run = """
 if ! kubectl --kubeconfig "$KUBECONFIG" get pod -n "$PROXY_NAMESPACE" "$PROXY_POD" > /dev/null 2>&1; then
-  echo "Deploying $PROXY_POD in $PROXY_NAMESPACE..."
-  cat << 'EOF' | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+  echo "Deploying $PROXY_POD ($PROXY_IMAGE) in $PROXY_NAMESPACE; remove it with: mise run pf-proxy-remove"
+  sed "s|__PROXY_IMAGE__|$PROXY_IMAGE|" << 'EOF' | kubectl --kubeconfig "$KUBECONFIG" apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -35,7 +45,7 @@ metadata:
 spec:
   containers:
     - name: proxy
-      image: docker.io/kubeovn/kube-ovn:v1.16.2
+      image: __PROXY_IMAGE__
       imagePullPolicy: IfNotPresent
       command:
         - python3
@@ -82,7 +92,7 @@ fi
 """
 
 [tasks.pf-proxy-remove]
-description = "[dev] Delete the OVN port-forwarding bridge pod from kube-system"
+description = "[dev] Stop the OVN port-forwards and delete the ovn-topology-proxy relay pod"
 depends = ["pf-stop"]
 run = "kubectl --kubeconfig \"$KUBECONFIG\" delete pod -n \"$PROXY_NAMESPACE\" \"$PROXY_POD\" --ignore-not-found"
 
