@@ -7,33 +7,33 @@ edges:
   source: ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee
   target: lsp:a36018e1-94da-49c9-85e3-5aa4c91d1cf0
   type: contains
-- id: edge:lsp:a36018e1-94da-49c9-85e3-5aa4c91d1cf0-chassis:c1cba3aa-c70b-4918-9a8e-fe4472d6b95c-bound-on
+- id: edge:lsp:a36018e1-94da-49c9-85e3-5aa4c91d1cf0-chassis:e89b2726-abaf-4f21-a107-2d6a23c7619a-bound-on
   source: lsp:a36018e1-94da-49c9-85e3-5aa4c91d1cf0
-  target: chassis:c1cba3aa-c70b-4918-9a8e-fe4472d6b95c
+  target: chassis:e89b2726-abaf-4f21-a107-2d6a23c7619a
   type: bound-on
 - id: edge:ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee-lsp:b0ea496d-7dba-43fe-9cc3-7e1990443c14-contains
   source: ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee
   target: lsp:b0ea496d-7dba-43fe-9cc3-7e1990443c14
   type: contains
-- id: edge:lsp:b0ea496d-7dba-43fe-9cc3-7e1990443c14-chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2-bound-on
+- id: edge:lsp:b0ea496d-7dba-43fe-9cc3-7e1990443c14-chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7-bound-on
   source: lsp:b0ea496d-7dba-43fe-9cc3-7e1990443c14
-  target: chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
+  target: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
   type: bound-on
 - id: edge:ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee-lsp:d866d693-8a6d-4475-a8bb-232f9637dbbf-contains
   source: ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee
   target: lsp:d866d693-8a6d-4475-a8bb-232f9637dbbf
   type: contains
-- id: edge:lsp:d866d693-8a6d-4475-a8bb-232f9637dbbf-chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091-bound-on
+- id: edge:lsp:d866d693-8a6d-4475-a8bb-232f9637dbbf-chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969-bound-on
   source: lsp:d866d693-8a6d-4475-a8bb-232f9637dbbf
-  target: chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091
+  target: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
   type: bound-on
 - id: edge:ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee-lsp:dbbfa52e-062d-40f0-9244-927d0aa4ca4c-contains
   source: ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee
   target: lsp:dbbfa52e-062d-40f0-9244-927d0aa4ca4c
   type: contains
-- id: edge:lsp:dbbfa52e-062d-40f0-9244-927d0aa4ca4c-chassis:99991a3f-1220-4479-8dcb-129c074a705f-bound-on
+- id: edge:lsp:dbbfa52e-062d-40f0-9244-927d0aa4ca4c-chassis:b31870eb-31b2-420c-b2b2-a98af839670c-bound-on
   source: lsp:dbbfa52e-062d-40f0-9244-927d0aa4ca4c
-  target: chassis:99991a3f-1220-4479-8dcb-129c074a705f
+  target: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
   type: bound-on
 nodes:
 - id: ls:ac3f1945-f4ef-4437-bb09-b13c4f3db3ee
@@ -69,7 +69,7 @@ nodes:
   properties:
     addresses:
     - b6:49:2e:44:fc:dc 100.64.0.3
-    boundChassis: c1cba3aa-c70b-4918-9a8e-fe4472d6b95c
+    boundChassis: e89b2726-abaf-4f21-a107-2d6a23c7619a
     boundState: bound
     enabled: true
     type: ""
@@ -87,7 +87,7 @@ nodes:
   properties:
     addresses:
     - 12:7e:e2:de:70:77 100.64.0.2
-    boundChassis: ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
+    boundChassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
     boundState: bound
     enabled: true
     type: ""
@@ -105,7 +105,7 @@ nodes:
   properties:
     addresses:
     - 66:06:46:9e:92:42 100.64.0.4
-    boundChassis: 29066f73-4be9-4d98-b2e7-683ccfd5c091
+    boundChassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
     boundState: bound
     enabled: true
     type: ""
@@ -123,39 +123,39 @@ nodes:
   properties:
     addresses:
     - 16:3b:16:e1:a6:e1 100.64.0.5
-    boundChassis: 99991a3f-1220-4479-8dcb-129c074a705f
+    boundChassis: b31870eb-31b2-420c-b2b2-a98af839670c
     boundState: bound
     enabled: true
     type: ""
     up: true
   type: LSP
-- id: chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091
+- id: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
+  name: hv-01
+  properties:
+    chassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
+    hostname: hv-01
+    nodeName: hv-01
+  type: Chassis
+- id: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
   name: hv-03
   properties:
-    chassis: 29066f73-4be9-4d98-b2e7-683ccfd5c091
+    chassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
     hostname: hv-03
     nodeName: hv-03
   type: Chassis
-- id: chassis:99991a3f-1220-4479-8dcb-129c074a705f
+- id: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
   name: hv-04
   properties:
-    chassis: 99991a3f-1220-4479-8dcb-129c074a705f
+    chassis: b31870eb-31b2-420c-b2b2-a98af839670c
     hostname: hv-04
     nodeName: hv-04
   type: Chassis
-- id: chassis:c1cba3aa-c70b-4918-9a8e-fe4472d6b95c
+- id: chassis:e89b2726-abaf-4f21-a107-2d6a23c7619a
   name: hv-02
   properties:
-    chassis: c1cba3aa-c70b-4918-9a8e-fe4472d6b95c
+    chassis: e89b2726-abaf-4f21-a107-2d6a23c7619a
     hostname: hv-02
     nodeName: hv-02
-  type: Chassis
-- id: chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
-  name: hv-01
-  properties:
-    chassis: ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
-    hostname: hv-01
-    nodeName: hv-01
   type: Chassis
 pagination:
   page: 1

@@ -20,6 +20,11 @@ func (s *Snapshot) Reindex() {
 		s.LSPByName[lsp.Name] = lsp
 	}
 
+	s.ChassisByUUID = make(map[string]*sbmodel.Chassis, len(s.Chassis))
+	for _, ch := range s.Chassis {
+		s.ChassisByUUID[ch.UUID] = ch
+	}
+
 	s.PortBindingByPort = make(map[string]*sbmodel.PortBinding, len(s.PortBindings))
 	s.CRPortBindingByLRP = make(map[string]*sbmodel.PortBinding)
 	for _, pb := range s.PortBindings {
@@ -79,4 +84,25 @@ func appendIfNotPresent(list []string, item string) []string {
 		}
 	}
 	return append(list, item)
+}
+
+// chassisFor resolves a chassis reference: a name (the snapshot key and node ID)
+// or a row UUID (what Port_Binding.chassis holds in OVSDB). Nil if unknown.
+func (s *Snapshot) chassisFor(ref string) *sbmodel.Chassis {
+	if ch, ok := s.Chassis[ref]; ok {
+		return ch
+	}
+	return s.ChassisByUUID[ref]
+}
+
+// boundChassisName returns the name of the chassis a port binding is bound on, or
+// "" if unbound. An unknown chassis reference is returned as is.
+func (s *Snapshot) boundChassisName(pb *sbmodel.PortBinding) string {
+	if pb == nil || pb.Chassis == nil || *pb.Chassis == "" {
+		return ""
+	}
+	if ch := s.chassisFor(*pb.Chassis); ch != nil {
+		return ch.Name
+	}
+	return *pb.Chassis
 }

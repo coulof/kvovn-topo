@@ -186,6 +186,29 @@ func TestSyncerFollowsReconnect(t *testing.T) {
 	}
 }
 
+// TestSyncerChassisBindings: a chassis is stored once, under its name, and a port
+// binding referencing it by row UUID (as OVSDB does) counts towards it.
+func TestSyncerChassisBindings(t *testing.T) {
+	nb, sb := newFakePair(t)
+	sb.apply("Chassis", "initial", uuidA, ovsdb.Row{"name": "sys-id-1", "hostname": "hv-01"})
+
+	store := graph.NewStore(nil)
+	s := NewSyncer(nb, sb, store, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = s.Start(ctx) }()
+	eventually(t, "initial snapshot", func() bool { return store.IsReady() })
+
+	sb.apply("Port_Binding", "insert", uuidB, ovsdb.Row{"logical_port": "pod-a", "chassis": ovsdb.UUID{GoUUID: uuidA}})
+	eventually(t, "binding counted on the chassis", func() bool {
+		items := store.Current().GetChassisList().Items
+		return len(items) == 1 && items[0].Name == "sys-id-1" && items[0].BindingCount == 1
+	})
+	if n := len(store.Current().Chassis); n != 1 {
+		t.Errorf("chassis stored %d times, want once", n)
+	}
+}
+
 // TestSyncerOverflowResyncs: a dropped event triggers a resync, and stale queued
 // events are discarded instead of being replayed over the rebuilt snapshot.
 func TestSyncerOverflowResyncs(t *testing.T) {

@@ -302,7 +302,7 @@ func fillSnapshot(ctx context.Context, nb, sb lister, next *graph.Snapshot) erro
 		listInto(ctx, nb, next.LogicalSwitches, func(r *nbmodel.LogicalSwitch) []string { return []string{r.UUID} }),
 		listInto(ctx, nb, next.LogicalSwitchPorts, func(r *nbmodel.LogicalSwitchPort) []string { return []string{r.UUID} }),
 		listInto(ctx, nb, next.LoadBalancers, func(r *nbmodel.LoadBalancer) []string { return []string{r.UUID} }),
-		listInto(ctx, sb, next.Chassis, func(r *sbmodel.Chassis) []string { return []string{r.Name, r.UUID} }),
+		listInto(ctx, sb, next.Chassis, func(r *sbmodel.Chassis) []string { return []string{r.Name} }),
 		listInto(ctx, sb, next.Encaps, func(r *sbmodel.Encap) []string { return []string{r.UUID} }),
 		listInto(ctx, sb, next.PortBindings, func(r *sbmodel.PortBinding) []string { return []string{r.UUID} }),
 		listInto(ctx, sb, next.DatapathBindings, func(r *sbmodel.DatapathBinding) []string { return []string{r.UUID} }),
@@ -374,8 +374,12 @@ func applyEventToDraft(draft *graph.Snapshot, ev dbEvent) []string {
 		upsert(draft.NATs, val.UUID, val, et)
 		return []string{graph.PrefixNAT + val.UUID}
 	case *sbmodel.Chassis:
+		for name, ch := range draft.Chassis { // a renamed chassis leaves no stale entry
+			if ch.UUID == val.UUID && name != val.Name {
+				delete(draft.Chassis, name)
+			}
+		}
 		upsert(draft.Chassis, val.Name, val, et)
-		upsert(draft.Chassis, val.UUID, val, et)
 		return []string{graph.PrefixChassis + val.Name}
 	case *sbmodel.PortBinding:
 		upsert(draft.PortBindings, val.UUID, val, et)

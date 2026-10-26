@@ -208,6 +208,26 @@ func TestChassisView(t *testing.T) {
 	}
 }
 
+// TestChassisListBindings: Port_Binding.chassis holds the Chassis row UUID, which
+// must resolve to the chassis name; each chassis is listed once.
+func TestChassisListBindings(t *testing.T) {
+	snap := LoadTestSnapshot(t)
+	list := snap.GetChassisList()
+	if len(list.Items) != 3 {
+		t.Fatalf("expected 3 chassis, got %d", len(list.Items))
+	}
+	for _, c := range list.Items {
+		if c.Name == "chassis-node-1" && c.BindingCount != 3 {
+			t.Errorf("expected node-1 bindingCount 3, got %d", c.BindingCount)
+		}
+	}
+	for _, pb := range snap.PortBindings {
+		if pb.Chassis != nil && snap.Chassis[*pb.Chassis] != nil {
+			t.Fatalf("fixture port binding %s references chassis by name, OVSDB uses the row UUID", pb.LogicalPort)
+		}
+	}
+}
+
 func TestNodeDetail(t *testing.T) {
 	snap := LoadTestSnapshot(t)
 

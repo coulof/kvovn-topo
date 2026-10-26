@@ -8,7 +8,7 @@ nodes:
     - ip: 10.144.98.249
       type: vxlan
     hostname: hv-01
-    hostnameShared: 2
+    hostnameShared: 1
     isInterconn: false
     name: 43519f69-444f-4b57-8fa0-be222c9fc4e7
     nodeMatch: annotation
@@ -23,7 +23,7 @@ nodes:
     - ip: 10.144.98.244
       type: vxlan
     hostname: hv-03
-    hostnameShared: 2
+    hostnameShared: 1
     isInterconn: false
     name: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
     nodeMatch: annotation
@@ -38,7 +38,7 @@ nodes:
     - ip: 10.144.98.201
       type: vxlan
     hostname: hv-04
-    hostnameShared: 2
+    hostnameShared: 1
     isInterconn: false
     name: b31870eb-31b2-420c-b2b2-a98af839670c
     nodeMatch: annotation
@@ -53,7 +53,7 @@ nodes:
     - ip: 10.144.98.7
       type: vxlan
     hostname: hv-02
-    hostnameShared: 2
+    hostnameShared: 1
     isInterconn: false
     name: e89b2726-abaf-4f21-a107-2d6a23c7619a
     nodeMatch: annotation

@@ -344,18 +344,8 @@ func LoadTestSnapshot(t testing.TB) *Snapshot {
 		pbType, _ := row["type"].(string)
 		var chassisRef *string
 		if chArr, ok := row["chassis"].([]interface{}); ok && len(chArr) == 2 && chArr[0] == "uuid" {
-			chUUID := chArr[1].(string)
-			// Match chassis by UUID to name
-			for _, ch := range snap.Chassis {
-				if ch.UUID == chUUID || ch.Name == chUUID {
-					chName := ch.Name
-					chassisRef = &chName
-					break
-				}
-			}
-			if chassisRef == nil {
-				chassisRef = &chUUID
-			}
+			chUUID := chArr[1].(string) // the Chassis row UUID, as OVSDB stores the reference
+			chassisRef = &chUUID
 		}
 		snap.PortBindings[uuid] = &sbmodel.PortBinding{
 			UUID:        uuid,

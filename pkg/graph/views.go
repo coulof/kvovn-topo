@@ -81,8 +81,8 @@ func (s *Snapshot) BuildL3View(focus string, depth int) *api.GraphResponse {
 				continue
 			}
 			activeChassis := ""
-			if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-				activeChassis = s.resolveChassisName(*crPB.Chassis)
+			if gw := s.boundChassisName(s.CRPortBindingByLRP[lrp.Name]); gw != "" {
+				activeChassis = s.resolveChassisName(gw)
 			}
 
 			if len(lrp.GatewayChassis) > 0 || lrp.HaChassisGroup != nil {
@@ -238,9 +238,8 @@ func (s *Snapshot) BuildL3View(focus string, depth int) *api.GraphResponse {
 					"lsp":      lsp.Name,
 				}
 
-				if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-					resolvedGW := s.resolveChassisName(*crPB.Chassis)
-					props["activeGateway"] = resolvedGW
+				if gw := s.boundChassisName(s.CRPortBindingByLRP[lrp.Name]); gw != "" {
+					props["activeGateway"] = s.resolveChassisName(gw)
 					props["isGateway"] = true
 				}
 
@@ -348,8 +347,8 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 
 		boundChassis := ""
 		boundState := "unbound"
-		if pb, ok := s.PortBindingByPort[lsp.Name]; ok && pb.Chassis != nil && *pb.Chassis != "" {
-			boundChassis = *pb.Chassis
+		if name := s.boundChassisName(s.PortBindingByPort[lsp.Name]); name != "" {
+			boundChassis = name
 			boundState = "bound"
 			chassisReferenced[boundChassis] = struct{}{}
 		}
@@ -439,13 +438,7 @@ func (s *Snapshot) BuildL2View(focusLS string, page int, pageSize int) (*api.Gra
 func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse {
 	nodes := make([]api.GraphNode, 0, len(s.Chassis))
 
-	seenChassis := make(map[string]struct{})
 	for _, ch := range s.Chassis {
-		if _, seen := seenChassis[ch.Name]; seen {
-			continue
-		}
-		seenChassis[ch.Name] = struct{}{}
-
 		chassisID := PrefixChassis + ch.Name
 		nodeName, nodeMatch := s.NodeMapper.MatchChassis(ch.Hostname, ch.Name)
 		hostnameShared := 0
@@ -458,7 +451,7 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 		// Count bindings
 		bindingCount := 0
 		for _, pb := range s.PortBindings {
-			if pb.Chassis != nil && (*pb.Chassis == ch.Name || *pb.Chassis == ch.UUID) {
+			if s.boundChassisName(pb) == ch.Name {
 				bindingCount++
 			}
 		}
@@ -771,14 +764,13 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		nodeName = lsp.Name
 
 		boundChassis := ""
-		if pb, ok := s.PortBindingByPort[lsp.Name]; ok && pb.Chassis != nil {
-			boundChassis = *pb.Chassis
-			chassisID := PrefixChassis + *pb.Chassis
+		if name := s.boundChassisName(s.PortBindingByPort[lsp.Name]); name != "" {
+			boundChassis = name
 			related = append(related, api.RelatedObject{
-				Id:           chassisID,
+				Id:           PrefixChassis + name,
 				Type:         "Chassis",
 				Relationship: "bound-on",
-				Name:         pb.Chassis,
+				Name:         &name,
 			})
 		}
 		detailK8s = s.enrichLSPK8s(lsp, boundChassis)
@@ -794,9 +786,9 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		nodeType = "LRP"
 		nodeName = lrp.Name
 
-		if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-			chassisID := PrefixChassis + *crPB.Chassis
-			gwName := s.resolveChassisName(*crPB.Chassis)
+		if gw := s.boundChassisName(s.CRPortBindingByLRP[lrp.Name]); gw != "" {
+			chassisID := PrefixChassis + gw
+			gwName := s.resolveChassisName(gw)
 			related = append(related, api.RelatedObject{
 				Id:           chassisID,
 				Type:         "Chassis",
@@ -807,11 +799,11 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 
 	case strings.HasPrefix(id, PrefixChassis):
 		chassisName := strings.TrimPrefix(id, PrefixChassis)
-		ch, ok := s.Chassis[chassisName]
-		if !ok {
-			// Try finding by name/hostname
+		ch := s.chassisFor(chassisName)
+		if ch == nil {
+			// Try finding by hostname
 			for _, candidate := range s.Chassis {
-				if candidate.Name == chassisName || candidate.Hostname == chassisName {
+				if candidate.Hostname == chassisName {
 					ch = candidate
 					break
 				}
@@ -828,7 +820,7 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		// Bound ports, as node IDs that resolve with GetNodeDetail; sorted
 		// because PortBindings is a map.
 		for _, pb := range s.PortBindings {
-			if pb.Chassis != nil && *pb.Chassis == ch.Name {
+			if s.boundChassisName(pb) == ch.Name {
 				related = append(related, s.boundPortRelated(pb.LogicalPort))
 			}
 		}
@@ -895,7 +887,7 @@ func (s *Snapshot) GetChassisList() *api.ChassisList {
 
 		boundPorts := make([]string, 0)
 		for _, pb := range s.PortBindings {
-			if pb.Chassis != nil && *pb.Chassis == ch.Name {
+			if s.boundChassisName(pb) == ch.Name {
 				boundPorts = append(boundPorts, pb.LogicalPort)
 			}
 		}
@@ -908,12 +900,7 @@ func (s *Snapshot) GetChassisList() *api.ChassisList {
 				if !ok || gw.ChassisName != ch.Name {
 					continue
 				}
-				isActive := false
-				if crPB, ok := s.CRPortBindingByLRP[lrp.Name]; ok && crPB.Chassis != nil {
-					if *crPB.Chassis == ch.Name || *crPB.Chassis == ch.UUID {
-						isActive = true
-					}
-				}
+				isActive := s.boundChassisName(s.CRPortBindingByLRP[lrp.Name]) == ch.Name
 				routerName := ""
 				for lrUUID, ports := range s.LRPsByRouter {
 					for _, pUUID := range ports {
@@ -978,15 +965,8 @@ func (s *Snapshot) resolveChassisName(chassisID string) string {
 		return ""
 	}
 	name := chassisID
-	if ch, ok := s.Chassis[chassisID]; ok {
+	if ch := s.chassisFor(chassisID); ch != nil {
 		name = ch.Hostname
-	} else {
-		for _, ch := range s.Chassis {
-			if ch.UUID == chassisID {
-				name = ch.Hostname
-				break
-			}
-		}
 	}
 	if s.NodeMapper != nil {
 		if node := s.NodeMapper.NodeForChassis(name, chassisID); node != "" {

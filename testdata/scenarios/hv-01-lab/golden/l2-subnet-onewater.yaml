@@ -3,25 +3,25 @@ edges:
   source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
   target: lsp:1fd5de58-d6df-4c00-bb6e-dddb1f77d2d0
   type: contains
-- id: edge:lsp:1fd5de58-d6df-4c00-bb6e-dddb1f77d2d0-chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2-bound-on
+- id: edge:lsp:1fd5de58-d6df-4c00-bb6e-dddb1f77d2d0-chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7-bound-on
   source: lsp:1fd5de58-d6df-4c00-bb6e-dddb1f77d2d0
-  target: chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
+  target: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
   type: bound-on
 - id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0-contains
   source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
   target: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
   type: contains
-- id: edge:lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0-chassis:99991a3f-1220-4479-8dcb-129c074a705f-bound-on
+- id: edge:lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0-chassis:b31870eb-31b2-420c-b2b2-a98af839670c-bound-on
   source: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
-  target: chassis:99991a3f-1220-4479-8dcb-129c074a705f
+  target: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
   type: bound-on
 - id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5-contains
   source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
   target: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
   type: contains
-- id: edge:lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5-chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091-bound-on
+- id: edge:lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5-chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969-bound-on
   source: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
-  target: chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091
+  target: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
   type: bound-on
 - id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:bcf7b5c4-6108-48c4-9af4-bf4e61c642a7-contains
   source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
@@ -51,7 +51,7 @@ nodes:
   properties:
     addresses:
     - 32:36:ab:92:a9:0a 192.168.54.37
-    boundChassis: ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
+    boundChassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
     boundState: bound
     enabled: true
     type: ""
@@ -73,7 +73,7 @@ nodes:
   properties:
     addresses:
     - d6:c4:54:0b:7b:5b 192.168.54.36
-    boundChassis: 99991a3f-1220-4479-8dcb-129c074a705f
+    boundChassis: b31870eb-31b2-420c-b2b2-a98af839670c
     boundState: bound
     enabled: true
     type: ""
@@ -95,7 +95,7 @@ nodes:
   properties:
     addresses:
     - e6:10:52:5b:4f:fd 192.168.54.35
-    boundChassis: 29066f73-4be9-4d98-b2e7-683ccfd5c091
+    boundChassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
     boundState: bound
     enabled: true
     type: ""
@@ -115,26 +115,26 @@ nodes:
     type: router
     up: true
   type: LSP
-- id: chassis:29066f73-4be9-4d98-b2e7-683ccfd5c091
+- id: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
+  name: hv-01
+  properties:
+    chassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
+    hostname: hv-01
+    nodeName: hv-01
+  type: Chassis
+- id: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
   name: hv-03
   properties:
-    chassis: 29066f73-4be9-4d98-b2e7-683ccfd5c091
+    chassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
     hostname: hv-03
     nodeName: hv-03
   type: Chassis
-- id: chassis:99991a3f-1220-4479-8dcb-129c074a705f
+- id: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
   name: hv-04
   properties:
-    chassis: 99991a3f-1220-4479-8dcb-129c074a705f
+    chassis: b31870eb-31b2-420c-b2b2-a98af839670c
     hostname: hv-04
     nodeName: hv-04
-  type: Chassis
-- id: chassis:ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
-  name: hv-01
-  properties:
-    chassis: ddbfec73-3751-43f3-b9ef-b5bdec1eedc2
-    hostname: hv-01
-    nodeName: hv-01
   type: Chassis
 pagination:
   page: 1

@@ -64,7 +64,7 @@ type Snapshot struct {
 	LoadBalancers       map[string]*nbmodel.LoadBalancer
 
 	// Southbound entities indexed by UUID / name
-	Chassis         map[string]*sbmodel.Chassis
+	Chassis         map[string]*sbmodel.Chassis         // Keyed by name (the OVS system-id)
 	Encaps          map[string]*sbmodel.Encap
 	PortBindings     map[string]*sbmodel.PortBinding     // Keyed by UUID
 	DatapathBindings map[string]*sbmodel.DatapathBinding // Keyed by UUID
@@ -73,6 +73,7 @@ type Snapshot struct {
 	// Secondary indices for O(1) joins
 	LRPByName            map[string]*nbmodel.LogicalRouterPort
 	LSPByName            map[string]*nbmodel.LogicalSwitchPort
+	ChassisByUUID        map[string]*sbmodel.Chassis     // Row UUID, as Port_Binding.chassis references it
 	PortBindingByPort    map[string]*sbmodel.PortBinding // Keyed by logical_port name
 	CRPortBindingByLRP   map[string]*sbmodel.PortBinding // Keyed by LRP name (cr-<lrp>)
 	LSPsBySwitch         map[string][]string             // Switch UUID -> LSP UUIDs
@@ -109,6 +110,7 @@ func NewEmptySnapshot(revision int64, mapper NodeMapper) *Snapshot {
 		BFDs:                 make(map[string]*sbmodel.BFD),
 		LRPByName:            make(map[string]*nbmodel.LogicalRouterPort),
 		LSPByName:            make(map[string]*nbmodel.LogicalSwitchPort),
+		ChassisByUUID:        make(map[string]*sbmodel.Chassis),
 		PortBindingByPort:    make(map[string]*sbmodel.PortBinding),
 		CRPortBindingByLRP:   make(map[string]*sbmodel.PortBinding),
 		LSPsBySwitch:         make(map[string][]string),
