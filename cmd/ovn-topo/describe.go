@@ -192,6 +192,52 @@ func (m model) describeLines() []string {
 				out = append(out, "   "+st.MutedText.Render(pad(r.Relationship, 20))+r.Type+" "+firstNonEmpty(deref(r.Name), r.Id))
 			}
 		}
+		if d.detail.StaticRoutes != nil && len(*d.detail.StaticRoutes) > 0 {
+			out = append(out, "", section(fmt.Sprintf("Static routes (%d)", len(*d.detail.StaticRoutes))))
+			for _, r := range *d.detail.StaticRoutes {
+				pol := "dst-ip"
+				if r.Policy != nil && *r.Policy != "" {
+					pol = string(*r.Policy)
+				}
+				ecmp := ""
+				if r.Ecmp != nil && *r.Ecmp {
+					ecmp = " " + st.Label.Render("[ECMP]")
+				}
+				table := ""
+				if r.RouteTable != nil && *r.RouteTable != "" {
+					table = " table " + *r.RouteTable
+				}
+				out = append(out, " • "+st.CIDR.Render(r.IpPrefix)+" via "+st.Value.Render(m.formatNexthop(r.Nexthop))+" ("+pol+")"+ecmp+st.MutedText.Render(table))
+			}
+		}
+		if d.detail.Policies != nil && len(*d.detail.Policies) > 0 {
+			out = append(out, "", section(fmt.Sprintf("Policies (%d)", len(*d.detail.Policies))))
+			for _, p := range *d.detail.Policies {
+				act := string(p.Action)
+				var hops []string
+				if p.Nexthops != nil {
+					for _, nh := range *p.Nexthops {
+						hops = append(hops, m.formatNexthop(nh))
+					}
+				}
+				via := ""
+				if len(hops) > 0 {
+					via = " via " + strings.Join(hops, ", ")
+				}
+				out = append(out, " • prio "+st.PortBadge.Render(fmt.Sprint(p.Priority))+" "+st.Value.Render(act)+via)
+				out = append(out, "     match: "+st.MutedText.Render(p.Match))
+			}
+		}
+		if d.detail.Nats != nil && len(*d.detail.Nats) > 0 {
+			out = append(out, "", section(fmt.Sprintf("NAT (%d)", len(*d.detail.Nats))))
+			for _, nat := range *d.detail.Nats {
+				port := ""
+				if nat.LogicalPort != nil && *nat.LogicalPort != "" {
+					port = " port " + *nat.LogicalPort
+				}
+				out = append(out, " • "+st.Kind[kLR].Render(string(nat.Type))+" ext "+st.CIDR.Render(nat.ExternalIp)+" -> log "+st.Value.Render(nat.LogicalIp)+st.MutedText.Render(port))
+			}
+		}
 	}
 	return out
 }

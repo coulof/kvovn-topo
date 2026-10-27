@@ -160,8 +160,20 @@ func TestDefaultExpansionTwoLevels(t *testing.T) {
 
 func TestDetailPane(t *testing.T) {
 	m := selectRow(t, loaded(t, 140, 40, false), kLR, "ovn_cluster")
+	// Process the lazy detail fetch cmd triggered by selecting the LR
+	m = send(m, m.fetchNodeDetailCmd("lr:lr-default-uuid")())
 	view := ansi.Strip(m.View())
-	for _, want := range []string{"Details lr:lr-default-uuid", "Ports & interconnections (3)", "→ LS   default-subnet", "(shared interconnect)", "Active GW on node-1"} {
+	for _, want := range []string{
+		"Details lr:lr-default-uuid",
+		"Ports & interconnections (3)",
+		"→ LS   default-subnet",
+		"(shared interconnect)",
+		"Active GW on node-1",
+		"Static routes (1)",
+		"0.0.0.0/0 via 10.244.0.254 (dst-ip)",
+		"Policies (1)",
+		"prio 100 reroute via 10.244.0.254",
+	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("expected %q in the router's detail pane:\n%s", want, view)
 		}
@@ -337,6 +349,21 @@ func TestDescribeLoadsNodeDetail(t *testing.T) {
 	}
 	if m = press(m, "esc"); m.scr != scrMain {
 		t.Errorf("esc must close describe")
+	}
+
+	// Also test describe on an LR showing static routes & policies
+	m = selectRow(t, m, kLR, "ovn_cluster")
+	r, cmd = m.update(keyMsg("d"))
+	m = r.(model)
+	if m.scr != scrDescribe || cmd == nil {
+		t.Fatalf("d must open describe on LR")
+	}
+	m = send(m, cmd())
+	view = m.View()
+	for _, want := range []string{"Describe(lr)", "ovn_cluster", "Static routes (1)", "0.0.0.0/0", "Policies (1)", "prio 100"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected %q in LR describe:\n%s", want, view)
+		}
 	}
 }
 

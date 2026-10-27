@@ -107,6 +107,83 @@ func (m model) detailLines(n *xnode, w int) []string {
 		out = append(out, "", section("L3"),
 			kv("Routes", fmt.Sprint(pint(p, "routeCount")))+"   "+st.Label.Render("Policies ")+fmt.Sprint(pint(p, "policyCount")),
 			kv("NAT", fmt.Sprint(pint(p, "natCount")))+"   "+st.Label.Render("LBs      ")+fmt.Sprint(pint(p, "lbCount")))
+
+		id := n.id
+		if n.gn != nil {
+			id = n.gn.Id
+		}
+		if m.nodeLoading[id] {
+			out = append(out, "", "   "+st.MutedText.Render("loading routes & policies…"))
+		} else if err := m.nodeErrs[id]; err != nil {
+			out = append(out, "", "   "+st.Bad.Render("routes unavailable: "+err.Error()))
+			lrName := n.name
+			out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("kubectl ko nbctl lr-route-list %s", lrName)))
+		} else if detail := m.nodeDetails[id]; detail != nil {
+			// Static routes
+			if detail.StaticRoutes != nil && len(*detail.StaticRoutes) > 0 {
+				srs := *detail.StaticRoutes
+				out = append(out, "", section(fmt.Sprintf("Static routes (%d)", len(srs))))
+				limit := min(len(srs), 8)
+				for i := 0; i < limit; i++ {
+					r := srs[i]
+					pol := "dst-ip"
+					if r.Policy != nil && *r.Policy != "" {
+						pol = string(*r.Policy)
+					}
+					ecmp := ""
+					if r.Ecmp != nil && *r.Ecmp {
+						ecmp = " " + st.Label.Render("[ECMP]")
+					}
+					out = append(out, " • "+st.CIDR.Render(r.IpPrefix)+" via "+st.Value.Render(m.formatNexthop(r.Nexthop))+" ("+pol+")"+ecmp)
+				}
+				if len(srs) > limit {
+					out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("… %d more (d describe)", len(srs)-limit)))
+				}
+			}
+
+			// Policies
+			if detail.Policies != nil && len(*detail.Policies) > 0 {
+				pols := *detail.Policies
+				out = append(out, "", section(fmt.Sprintf("Policies (%d)", len(pols))))
+				limit := min(len(pols), 8)
+				for i := 0; i < limit; i++ {
+					pol := pols[i]
+					act := string(pol.Action)
+					var hops []string
+					if pol.Nexthops != nil {
+						for _, nh := range *pol.Nexthops {
+							hops = append(hops, m.formatNexthop(nh))
+						}
+					}
+					via := ""
+					if len(hops) > 0 {
+						via = " via " + strings.Join(hops, ", ")
+					}
+					out = append(out, " • prio "+st.PortBadge.Render(fmt.Sprint(pol.Priority))+" "+st.Value.Render(act)+via)
+					for _, l := range wrapText(pol.Match, w-7) {
+						out = append(out, "     "+st.MutedText.Render(l))
+					}
+				}
+				if len(pols) > limit {
+					out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("… %d more (d describe)", len(pols)-limit)))
+				}
+			}
+
+			// NAT
+			if detail.Nats != nil && len(*detail.Nats) > 0 {
+				nats := *detail.Nats
+				out = append(out, "", section(fmt.Sprintf("NAT (%d)", len(nats))))
+				limit := min(len(nats), 8)
+				for i := 0; i < limit; i++ {
+					nat := nats[i]
+					out = append(out, " • "+st.Kind[kLR].Render(string(nat.Type))+" "+st.CIDR.Render(nat.ExternalIp)+" -> "+st.Value.Render(nat.LogicalIp))
+				}
+				if len(nats) > limit {
+					out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("… %d more (d describe)", len(nats)-limit)))
+				}
+			}
+		}
+
 		if pint(p, "natCount") == 0 {
 			out = append(out, note("NAT 0 does not rule out VPC NAT Gateway (iptables in a pod) or centralized natOutgoing (policy reroute + node iptables).")...)
 		}
@@ -408,6 +485,57 @@ func (m model) switchNetworks(lsID string) []string {
 		nets = append(nets, c.Networks...)
 	}
 	return nets
+}
+
+// formatNexthop annotates an IP with its owner (node, LSP, LRP network) if known.
+func (m model) formatNexthop(ip string) string {
+	clean := extractCleanIP(ip)
+	if clean == "" {
+		return ip
+	}
+
+	// 1. Check LRPs (e.g. gateway networks or router peers)
+	for _, c := range m.portList {
+		for _, netCIDR := range c.Networks {
+			if strings.HasPrefix(netCIDR, clean+"/") || netCIDR == clean {
+				return fmt.Sprintf("%s (%s %s)", ip, c.PortName, c.RouterName)
+			}
+		}
+	}
+	for _, c := range m.gatewayPorts {
+		for _, netCIDR := range c.Networks {
+			if strings.HasPrefix(netCIDR, clean+"/") || netCIDR == clean {
+				return fmt.Sprintf("%s (%s %s)", ip, c.PortName, c.RouterName)
+			}
+		}
+	}
+
+	// 2. Check LSPs / workloads
+	for _, workloads := range m.switchWorkloads {
+		for _, w := range workloads {
+			wIP, _ := lspAddress(&w)
+			if wIP == clean {
+				if w.K8s != nil {
+					if w.K8s.Pod != nil && *w.K8s.Pod != "" {
+						return fmt.Sprintf("%s (pod %s)", ip, *w.K8s.Pod)
+					}
+					if w.K8s.Vmi != nil && *w.K8s.Vmi != "" {
+						return fmt.Sprintf("%s (vm %s)", ip, *w.K8s.Vmi)
+					}
+					if w.K8s.Node != nil && *w.K8s.Node != "" {
+						return fmt.Sprintf("%s (node %s)", ip, *w.K8s.Node)
+					}
+				}
+				if strings.HasPrefix(w.Name, "node-") {
+					nodeName := strings.TrimPrefix(w.Name, "node-")
+					return fmt.Sprintf("%s (node %s)", ip, nodeName)
+				}
+				return fmt.Sprintf("%s (%s)", ip, w.Name)
+			}
+		}
+	}
+
+	return ip
 }
 
 func gwRouter(lrp *xnode) string {

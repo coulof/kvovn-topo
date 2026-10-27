@@ -79,6 +79,11 @@ type model struct {
 	pdesc      bool
 	pinspect   bool
 
+	// Cached node details for the details pane (lazy fetch, invalidated on revision bump)
+	nodeDetails map[string]*api.NodeDetail
+	nodeErrs    map[string]error
+	nodeLoading map[string]bool
+
 	// Feedback and live updates
 	flash         string
 	flashAt       time.Time
@@ -202,6 +207,9 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kube 
 		touched:          make(map[string]bool),
 		changed:          make(map[string]time.Time),
 		pinspect:         true,
+		nodeDetails:      make(map[string]*api.NodeDetail),
+		nodeErrs:         make(map[string]error),
+		nodeLoading:      make(map[string]bool),
 		traceProtocol:    AvailableTraceProtocols[0].Protocol,
 		tracePort:        AvailableTraceProtocols[0].Port,
 		traceProtoIdx:    0,
@@ -252,7 +260,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		mm.needFlashTick = false
 		cmd = tea.Batch(cmd, flashTick())
 	}
+	// If details pane is visible and selected object is an LR whose detail isn't loaded, fetch it
+	if detailCmd := mm.lazyFetchSelectedDetailCmd(); detailCmd != nil {
+		cmd = tea.Batch(cmd, detailCmd)
+	}
 	return mm, cmd
+}
+
+// lazyFetchSelectedDetailCmd triggers a lazy fetch of /node/{id} if an LR is selected and inspector is visible.
+func (m *model) lazyFetchSelectedDetailCmd() tea.Cmd {
+	if !m.showPane() || m.scr != scrMain {
+		return nil
+	}
+	n := m.selectedXNode()
+	if n == nil || n.kind != kLR || n.gn == nil {
+		return nil
+	}
+	id := n.gn.Id
+	if m.nodeDetails[id] != nil || m.nodeLoading[id] || m.nodeErrs[id] != nil {
+		return nil
+	}
+	m.nodeLoading[id] = true
+	return m.fetchNodeDetailCmd(id)
 }
 
 func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -274,6 +303,11 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.tree == nil {
 			m.baseRevision = msg.resp.Revision
+		} else if msg.resp.Revision != m.baseRevision {
+			m.baseRevision = msg.resp.Revision
+			m.nodeDetails = make(map[string]*api.NodeDetail)
+			m.nodeErrs = make(map[string]error)
+			m.nodeLoading = make(map[string]bool)
 		}
 		switches, chassis := m.refetchPlan(m.pendingIDs)
 		m.pendingIDs = nil
@@ -307,6 +341,12 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case nodeDetailMsg:
+		m.nodeLoading[msg.id] = false
+		if msg.err != nil {
+			m.nodeErrs[msg.id] = msg.err
+		} else {
+			m.nodeDetails[msg.id] = msg.detail
+		}
 		if m.desc != nil && m.desc.node != nil && m.desc.node.gn != nil && m.desc.node.gn.Id == msg.id {
 			m.desc.loading = false
 			m.desc.detail, m.desc.err = msg.detail, msg.err
