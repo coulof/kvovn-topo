@@ -213,6 +213,8 @@ func (m model) treeKey(s string) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.rebuildRows()
+	case "!":
+		return m.startInspect()
 	case "i":
 		m.pinspect = !m.pinspect
 		if m.w() < paneMinW {

@@ -35,4 +35,12 @@ Enforcement:
 - The daemon's ServiceAccount never needs `pods/exec`; the extension keeps a clean read-only security review.
 - Point-and-click trace and tcpdump are TUI features at first. Bringing them to the extension would require a separate, opt-in component with its own ADR.
 - A limited, NB-only path computation (`pkg/trace`, no exec) is Tier 0 and may be used by the extension. Its results are approximate. The UI must label them "computed from configuration", distinct from `ovn-trace` results.
+- *Amendment (2026-10-27):* Tier 1 in the TUI may also run commands **locally**, the k9s-plugin way. The `!` key suspends the TUI and runs `kubectl` with the user's kubeconfig and context, and Enter returns to the TUI.
+  - The argv still comes from typed builders in `pkg/diag`:
+    - `kubectl ko nbctl show | lr-route-list | lr-policy-list | lr-nat-list | list Logical_Router_Port | list Logical_Switch_Port <obj>`;
+    - `kubectl ko sbctl list Chassis | find Port_Binding logical_port=<obj>`;
+    - `kubectl exec <vpc-nat-gw pod> -- iptables-save -t nat`.
+  - Arguments are built from graph objects only. Option-like and non-name characters are rejected.
+  - This is a closed set of read-only queries, not the excluded raw `nbctl` passthrough.
+  - It needs `--diag`. The process runner lives in `cmd/ovn-topo`, so the daemon and `pkg/mcp` are unaffected.
 - Kubernetes read access expands beyond `Node` to: `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, and `NetworkAttachmentDefinition`. All are get/list/watch. Kube-OVN CRDs remain out of scope.

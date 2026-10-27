@@ -80,6 +80,11 @@ type model struct {
 	pinspect   bool
 	zone       string // ovn-kubernetes zone (node) on screen, from --zone or a zone-<node> capture
 
+	// `!` runs an Inspect command (inspect.go)
+	inspectPick bool
+	inspectSel  int
+	kube        kubeTarget
+
 	// Cached node details for the details pane (lazy fetch, dropped when the
 	// graph revision moves past detailsRev). Not baseRevision: that one marks
 	// the first load, and moving it would stop changed rows from flashing.
@@ -358,6 +363,15 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildTree()
 		return m, nil
 
+	case inspectDoneMsg:
+		switch {
+		case msg.err != nil:
+			m.setFlash("run failed: "+msg.err.Error(), true)
+		default:
+			m.setFlash(fmt.Sprintf("ran: %s (exit %d)", msg.text, msg.code), msg.code != 0)
+		}
+		return m, nil
+
 	case nodeDetailMsg:
 		// Cache only answers to a fetch made in this revision; one still in
 		// flight when the revision moved would otherwise be kept as current.
@@ -443,6 +457,9 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.diagModal {
 			return m.updateDiagModal(msg)
+		}
+		if m.inspectPick {
+			return m.updateInspectPick(msg)
 		}
 		return m.handleKey(msg)
 	}
@@ -609,6 +626,10 @@ func main() {
 	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
 	m.zone = firstNonEmpty(zone, zoneOf(fixtureDir))
+	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext}
+	if raw, err := loader.RawConfig(); err == nil {
+		m.kube.currentContext = raw.CurrentContext
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)

@@ -298,7 +298,12 @@ The pane speaks the platform engineer's language first, then OVN's (ADR-0004):
   - its own ports.
 
   It replaces the generic "NAT 0 does not rule out…" note on those routers.
-- **Inspect.** The next command for the object, in the CNI's tooling: `kubectl ko nbctl|sbctl …` on Kube-OVN, `ovn-nbctl|ovn-sbctl …` otherwise. Near a NAT gateway, it adds `kubectl exec … iptables-save -t nat` for its rules.
+- **Inspect.** The next command for the object, in the CNI's tooling: `kubectl ko nbctl|sbctl …` on Kube-OVN, `ovn-nbctl|ovn-sbctl …` otherwise. Near a NAT gateway, it adds `kubectl exec … iptables-save -t nat` for its rules. Runnable lines are numbered.
+- **`!` runs an Inspect line** (Tier 1, `--diag`), like a k9s plugin:
+  - The TUI is suspended and the command runs in your terminal, with the same `--kubeconfig` and `--context` as the graph. When it exits, `[exit N] press Enter to return` brings the TUI back.
+  - With several lines, `!` opens a picker in the pane (`1`–`9` or `j/k` + `enter`, `esc` cancels).
+  - Only Kube-OVN lines run: `kubectl ko` needs the `kubectl-ko` plugin in `PATH`, and follows the kubeconfig's current context, so it refuses to run under a different `--context`. Plain `ovn-nbctl` lines are for copying.
+- **NAT gateways are counted where the router is shown.** The router row reads `nat 0 (+1 NAT gw)`, and its pane adds `+ 1 NAT gateway pod outside OVN (below)` under the NAT count. The Outside OVN entry lists the LAN side first: `LAN 192.168.54.46 on subnet-onewater`, then `WAN 10.144.124.15 on external`.
 
 | Selection | Pane |
 |---|---|

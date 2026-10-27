@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/coulof/ovn-topology/pkg/diag"
 	"github.com/coulof/ovn-topology/pkg/graph"
 )
 
@@ -154,7 +155,9 @@ func (m model) portIdentity(n *xnode) cniIdentity {
 	return cniIdentity{term: "Port", via: kubeOVNVia}
 }
 
-func (m model) hasLocalnet(ls *xnode) bool {
+func (m model) hasLocalnet(ls *xnode) bool { return hasLocalnet(ls) }
+
+func hasLocalnet(ls *xnode) bool {
 	if ls == nil {
 		return false
 	}
@@ -166,29 +169,37 @@ func (m model) hasLocalnet(ls *xnode) bool {
 	return false
 }
 
-func (m model) switchOf(lsp *xnode) *xnode {
+func (m model) switchOf(lsp *xnode) *xnode { return switchOfIn(m.tree, lsp) }
+
+func switchOfIn(t *xtree, lsp *xnode) *xnode {
+	if t == nil {
+		return nil
+	}
 	for _, r := range lsp.refs {
-		if r.label == "subnet" && m.tree != nil {
-			return m.tree.byID[r.to]
+		if r.label == "subnet" {
+			return t.byID[r.to]
 		}
 	}
 	return nil
 }
 
 // natGateway is a Kube-OVN VPC NAT gateway pod and its OVN switch ports: an
-// opaque hop (ADR-0004). OVN sees its interfaces, not its NAT.
+// opaque hop (ADR-0004). OVN sees its interfaces, not its NAT. ports lists the
+// LAN side (a VPC subnet) before the WAN side (a localnet underlay).
 type natGateway struct {
 	name, namespace, pod string
 	ports                []*xnode
 }
 
-// natGateways finds VPC NAT gateway pods from their ports' pod identity.
-func (m model) natGateways() []*natGateway {
-	if m.tree == nil {
+func (m model) natGateways() []*natGateway { return natGatewaysIn(m.tree) }
+
+// natGatewaysIn finds VPC NAT gateway pods in t from their ports' pod identity.
+func natGatewaysIn(t *xtree) []*natGateway {
+	if t == nil {
 		return nil
 	}
 	byPod := map[string]*natGateway{}
-	for _, n := range m.tree.byID {
+	for _, n := range t.byID {
 		if n.kind != kLSP || n.gn == nil || n.gn.K8s == nil {
 			continue
 		}
@@ -210,7 +221,13 @@ func (m model) natGateways() []*natGateway {
 	}
 	var out []*natGateway
 	for _, gw := range byPod {
-		sort.Slice(gw.ports, func(i, j int) bool { return gw.ports[i].name < gw.ports[j].name })
+		sort.Slice(gw.ports, func(i, j int) bool {
+			wi, wj := hasLocalnet(switchOfIn(t, gw.ports[i])), hasLocalnet(switchOfIn(t, gw.ports[j]))
+			if wi != wj {
+				return wj // LAN first
+			}
+			return gw.ports[i].name < gw.ports[j].name
+		})
 		out = append(out, gw)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].pod < out[j].pod })
@@ -228,31 +245,40 @@ func (m model) natGatewayOf(lsp *xnode) *natGateway {
 	return nil
 }
 
-// natGatewaysNear lists the gateways with a port on switch ls, or with their
+func (m model) natGatewaysNear(n *xnode) []*natGateway { return natGatewaysNearIn(m.tree, n) }
+
+// natGatewaysNearIn lists the gateways with a port on switch ls, or with their
 // LAN side on a switch of router lr. A shared underlay (the WAN side) does not
 // count: the gateway serves the VPC whose subnet it sits on, not every router
 // on the provider network.
-func (m model) natGatewaysNear(n *xnode) []*natGateway {
+func natGatewaysNearIn(t *xtree, n *xnode) []*natGateway {
+	if t == nil {
+		return nil
+	}
 	on := map[string]bool{}
 	switch n.kind {
 	case kLS:
 		on[n.id] = true
 	case kLR:
-		for _, c := range m.routerConns(n) {
-			if m.tree != nil && !m.hasLocalnet(m.tree.byID[c.SwitchID]) {
-				on[c.SwitchID] = true
+		for _, c := range n.children {
+			if c.conn != nil && !hasLocalnet(t.byID[c.conn.SwitchID]) {
+				on[c.conn.SwitchID] = true
 			}
 		}
 	case kLSP:
-		if gw := m.natGatewayOf(n); gw != nil {
-			return []*natGateway{gw}
+		for _, gw := range natGatewaysIn(t) {
+			for _, p := range gw.ports {
+				if p.id == n.id {
+					return []*natGateway{gw}
+				}
+			}
 		}
 		return nil
 	}
 	var out []*natGateway
-	for _, gw := range m.natGateways() {
+	for _, gw := range natGatewaysIn(t) {
 		for _, p := range gw.ports {
-			if ls := m.switchOf(p); ls != nil && on[ls.id] {
+			if ls := switchOfIn(t, p); ls != nil && on[ls.id] {
 				out = append(out, gw)
 				break
 			}
@@ -261,30 +287,77 @@ func (m model) natGatewaysNear(n *xnode) []*natGateway {
 	return out
 }
 
-// inspectCommands is the next command for n, in the CNI's own tooling.
-func (m model) inspectCommands(n *xnode) []string {
-	nb, sb := "ovn-nbctl", "ovn-sbctl"
-	if m.clusterFlavor() == flavorKubeOVN {
-		nb, sb = "kubectl ko nbctl", "kubectl ko sbctl"
+// interfaces is the gateway's addresses, LAN first, one per line:
+// "LAN 192.168.54.46 on subnet-onewater", "WAN 10.144.124.15 on external".
+func (gw *natGateway) interfaces(t *xtree) []string {
+	var ifs []string
+	for _, p := range gw.ports {
+		ls := switchOfIn(t, p)
+		if ls == nil {
+			continue
+		}
+		side := "LAN"
+		if hasLocalnet(ls) {
+			side = "WAN"
+		}
+		ip, _ := lspAddress(p.gn)
+		ifs = append(ifs, side+" "+firstNonEmpty(ip, "?")+" on "+ls.name)
 	}
-	var out []string
+	return ifs
+}
+
+// inspectCmd is one Inspect line. argv is set when the TUI can run it (`!`,
+// Tier 1): it is exactly the text shown, built by pkg/diag's typed builders.
+type inspectCmd struct {
+	text string
+	argv []string
+}
+
+// inspectCommands is the next command for n, in the CNI's own tooling. Only
+// Kube-OVN's (kubectl ko, kubectl exec) are runnable from a laptop; plain
+// ovn-nbctl lines are shown for copying.
+func (m model) inspectCommands(n *xnode) []inspectCmd {
+	kubeOVN := m.clusterFlavor() == flavorKubeOVN
+	var out []inspectCmd
+	add := func(sb bool, query, obj string) {
+		build, tool := diag.BuildKoNbctlCommand, "ovn-nbctl"
+		if sb {
+			build, tool = diag.BuildKoSbctlCommand, "ovn-sbctl"
+		}
+		if kubeOVN {
+			if argv, err := build(query, obj); err == nil {
+				out = append(out, inspectCmd{text: strings.Join(argv, " "), argv: argv})
+				return
+			}
+		}
+		words := strings.Fields(query)
+		if words[0] == "find" {
+			words[len(words)-1] += "=" + obj
+		} else {
+			words = append(words, obj)
+		}
+		out = append(out, inspectCmd{text: tool + " " + strings.Join(words, " ")})
+	}
 	switch n.kind {
 	case kLR:
-		for _, c := range []string{"lr-route-list", "lr-policy-list", "lr-nat-list"} {
-			out = append(out, nb+" "+c+" "+n.name)
+		for _, q := range []string{"lr-route-list", "lr-policy-list", "lr-nat-list"} {
+			add(false, q, n.name)
 		}
 	case kLS:
-		out = append(out, nb+" show "+n.name)
+		add(false, "show", n.name)
 	case kLRP:
-		out = append(out, nb+" list Logical_Router_Port "+n.name)
+		add(false, "list Logical_Router_Port", n.name)
 	case kLSP:
-		out = append(out, nb+" list Logical_Switch_Port "+n.name, sb+" find Port_Binding logical_port="+n.name)
+		add(false, "list Logical_Switch_Port", n.name)
+		add(true, "find Port_Binding logical_port", n.name)
 	case kChassis:
-		out = append(out, sb+" list Chassis "+firstNonEmpty(pstr(props(n.gn), "name"), n.name))
+		add(true, "list Chassis", firstNonEmpty(pstr(props(n.gn), "name"), n.name))
 	}
 	if n.kind == kLR || n.kind == kLS || n.kind == kLSP {
 		for _, gw := range m.natGatewaysNear(n) {
-			out = append(out, "kubectl -n "+gw.namespace+" exec "+gw.pod+" -- iptables-save -t nat")
+			if argv, err := diag.BuildNATGatewayIptablesCommand(gw.namespace, gw.pod); err == nil {
+				out = append(out, inspectCmd{text: strings.Join(argv, " "), argv: argv})
+			}
 		}
 	}
 	return out

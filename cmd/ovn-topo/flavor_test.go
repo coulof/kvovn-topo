@@ -10,9 +10,11 @@ import (
 )
 
 // labModel loads the hv-01 capture (Kube-OVN v1.16, three VPCs) fully expanded.
-func labModel(t *testing.T) model {
+func labModel(t *testing.T) model { return labModelDiag(t, false) }
+
+func labModelDiag(t *testing.T, diagMode bool) model {
 	t.Helper()
-	m := initialModel(testDaemon, "../../testdata/scenarios/hv-01-lab", "default", false, nil, "")
+	m := initialModel(testDaemon, "../../testdata/scenarios/hv-01-lab", "default", diagMode, nil, "")
 	m = send(m, tea.WindowSizeMsg{Width: 160, Height: 70})
 	m = send(m, m.fetchGraphCmd()())
 	m = send(m, m.fetchChassisCmd()())
@@ -20,6 +22,29 @@ func labModel(t *testing.T) model {
 		t.Fatalf("lab capture did not load: %v", m.err)
 	}
 	return expandAll(m)
+}
+
+// withNATGateway adds the one-water-nat gateway pod's LAN and WAN ports to the
+// lab model (the capture predates it), as the hv-01 lab has them.
+func withNATGateway(t *testing.T, m model) model {
+	t.Helper()
+	add := func(lsName, uuid, ip string) {
+		ls := ""
+		for id, n := range m.tree.byID {
+			if n.kind == kLS && n.name == lsName {
+				ls = id
+			}
+		}
+		pod, ns, addr := "vpc-nat-gw-one-water-nat-0", "kube-system", "00:00:00:00:00:01 "+ip
+		props := map[string]interface{}{"addresses": []interface{}{addr}, "boundState": "bound", "boundChassis": "hv-01"}
+		m.switchWorkloads[ls] = append(m.switchWorkloads[ls], api.GraphNode{Id: "lsp:" + uuid, Name: "vpc-nat-gw-one-water-nat-0." + lsName,
+			Type: api.GraphNodeTypeLSP, Properties: &props, K8s: &api.K8sMetadata{Pod: &pod, Namespace: &ns}})
+	}
+	add("subnet-onewater", "natgw-lan", "192.168.54.46")
+	add("external", "natgw-wan", "10.144.124.15")
+	m.rebuildTree()
+	m = expandAll(m)
+	return m
 }
 
 func pane(m model, kind, name string, t *testing.T) string {
@@ -69,27 +94,22 @@ func TestNATGatewayIsAnOpaqueHop(t *testing.T) {
 	before := pane(m, kLR, "vpc-onewater", t)
 	wantAll(t, "router before", before, "NAT 0 does not rule out")
 
-	add := func(lsName, uuid, ip string) {
-		ls := ""
-		for id, n := range m.tree.byID {
-			if n.kind == kLS && n.name == lsName {
-				ls = id
-			}
-		}
-		pod, ns, addr := "vpc-nat-gw-one-water-nat-0", "kube-system", "00:00:00:00:00:01 "+ip
-		props := map[string]interface{}{"addresses": []interface{}{addr}, "boundState": "bound", "boundChassis": "hv-01"}
-		m.switchWorkloads[ls] = append(m.switchWorkloads[ls], api.GraphNode{Id: "lsp:" + uuid, Name: "vpc-nat-gw-one-water-nat-0." + lsName,
-			Type: api.GraphNodeTypeLSP, Properties: &props, K8s: &api.K8sMetadata{Pod: &pod, Namespace: &ns}})
-	}
-	add("subnet-onewater", "natgw-lan", "192.168.54.46")
-	add("external", "natgw-wan", "10.144.124.15")
-	m.rebuildTree()
-	m = expandAll(m)
+	m = withNATGateway(t, m)
 
 	router := pane(m, kLR, "vpc-onewater", t)
 	wantAll(t, "router", router, "Outside OVN", "NAT gateway one-water-nat", "pod kube-system/vpc-nat-gw-one-water-nat-0",
-		"192.168.54.46 on subnet-onewater", "10.144.124.15 on external", "iptables inside the pod",
+		"LAN 192.168.54.46 on subnet-onewater", "WAN 10.144.124.15 on external", "iptables inside the pod",
+		"+ 1 NAT gateway pod outside OVN (below)",
 		"kubectl -n kube-system exec vpc-nat-gw-one-water-nat-0", "iptables-save -t nat")
+	if strings.Index(router, "LAN 192.168.54.46") > strings.Index(router, "WAN 10.144.124.15") {
+		t.Errorf("the LAN side must come first:\n%s", router)
+	}
+	if s := m.tree.byID[selectRow(t, m, kLR, "vpc-onewater").selectedXNode().id].summary; !strings.Contains(s, "nat 0 (+1 NAT gw)") {
+		t.Errorf("the router row must count the NAT gateway, got %q", s)
+	}
+	if s := selectRow(t, m, kLR, "vpc-twowater").selectedXNode().summary; strings.Contains(s, "NAT gw") {
+		t.Errorf("vpc-twowater only shares the underlay, got %q", s)
+	}
 	if strings.Contains(router, "NAT 0 does not rule out") {
 		t.Errorf("with the gateway shown, the generic NAT note must go:\n%s", router)
 	}

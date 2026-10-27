@@ -105,7 +105,7 @@ func (m model) hotkeys() [][2]string {
 	}
 	keys = append(keys, [2]string{"<d>", "describe"}, [2]string{"<y>", "raw"}, [2]string{"<b>", "back"})
 	if m.diagMode {
-		keys = append(keys, [2]string{"<x>", "diagnostics"})
+		keys = append(keys, [2]string{"<x>", "diagnostics"}, [2]string{"<!>", "run inspect"})
 	}
 	keys = append(keys, [2]string{"<r>", "refresh"}, [2]string{"<L>", "live on/off"}, [2]string{"<t>", "theme"},
 		[2]string{"<?>", "help"}, [2]string{"<q>", "quit"})

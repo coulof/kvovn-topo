@@ -286,6 +286,15 @@ func (m *model) rebuildTree() {
 		}
 	}
 
+	// --- routers: count the NAT gateway pods that serve them (outside OVN NAT)
+	for _, n := range t.byID {
+		if n.kind == kLR {
+			if gws := natGatewaysNearIn(t, n); len(gws) > 0 {
+				n.summary = strings.Replace(n.summary, " · pol ", fmt.Sprintf(" (+%d NAT gw) · pol ", len(gws)), 1)
+			}
+		}
+	}
+
 	// --- VPCs and the vpc-xray groups
 	var vpcs []*xnode
 	for _, name := range m.vpcNames {

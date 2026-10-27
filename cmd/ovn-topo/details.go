@@ -130,6 +130,9 @@ func (m model) detailLines(n *xnode, w int) []string {
 		out = append(out, "", section("L3"),
 			kv("Routes", fmt.Sprint(pint(p, "routeCount")))+"   "+st.Label.Render("Policies ")+fmt.Sprint(pint(p, "policyCount")),
 			kv("NAT", fmt.Sprint(pint(p, "natCount")))+"   "+st.Label.Render("LBs      ")+fmt.Sprint(pint(p, "lbCount")))
+		if gws := m.natGatewaysNear(n); len(gws) > 0 {
+			out = append(out, " "+pad("", kw)+st.ActiveGateway.Render(fmt.Sprintf("+ %s outside OVN (below)", plural(len(gws), "NAT gateway pod"))))
+		}
 
 		id := n.id
 		if n.gn != nil {
@@ -458,15 +461,8 @@ func (m model) detailLines(n *xnode, w int) []string {
 		out = append(out, "", section("Outside OVN"))
 		for _, gw := range gws {
 			out = append(out, " ▸ "+st.ActiveGateway.Render("NAT gateway "+gw.name)+st.MutedText.Render("  pod "+gw.namespace+"/"+gw.pod))
-			var ifs []string
-			for _, p := range gw.ports {
-				ip, _ := lspAddress(p.gn)
-				if ls := m.switchOf(p); ls != nil {
-					ifs = append(ifs, firstNonEmpty(ip, "?")+" on "+ls.name)
-				}
-			}
-			for _, l := range wrapText(strings.Join(ifs, " · "), w-5) {
-				out = append(out, "   "+st.CIDR.Render(l))
+			for _, l := range gw.interfaces(m.tree) {
+				out = append(out, "   "+st.CIDR.Render(fit(l, w-3)))
 			}
 			out = append(out, note("NAT rules and EIPs are iptables inside the pod: OVN does not see them, and the router shows no NAT for them.")...)
 		}
@@ -483,15 +479,29 @@ func (m model) detailLines(n *xnode, w int) []string {
 		out = append(out, "", section("Relations"))
 		out = append(out, rels...)
 	}
+	hintRun := ""
 	if cmds := m.inspectCommands(n); len(cmds) > 0 {
 		out = append(out, "", section("Inspect"))
+		runnable := 0
 		for _, c := range cmds {
-			for i, l := range wrapText(c, w-5) {
+			num := "  "
+			if c.argv != nil {
+				runnable++
+				num = st.Key.Render(fmt.Sprint(runnable)) + " "
+			}
+			for i, l := range wrapText(c.text, w-7) {
 				if i > 0 {
 					l = "  " + l
 				}
-				out = append(out, "   "+st.MutedText.Render(l))
+				lead := num
+				if i > 0 {
+					lead = "  "
+				}
+				out = append(out, "   "+lead+st.MutedText.Render(l))
 			}
+		}
+		if runnable > 0 && m.diagMode {
+			hintRun = " · ! run"
 		}
 	}
 	hint := "d describe · y raw"
@@ -499,7 +509,7 @@ func (m model) detailLines(n *xnode, w int) []string {
 		hint = "enter on a ⇢ row jumps · " + hint
 	}
 	if m.diagMode {
-		hint += " · x diag"
+		hint += " · x diag" + hintRun
 	}
 	out = append(out, "")
 	return append(out, note(hint+" · i hide")...)
@@ -672,5 +682,8 @@ func (m model) detailPane(h int) []string {
 		title += " " + m.styles.MutedText.Render(n.id)
 	}
 	w := m.w() - m.treeW()
+	if m.inspectPick {
+		return box(m.inspectPickLines(w-2), w, h, title, m.styles.Faint)
+	}
 	return box(m.detailLines(n, w-2), w, h, title, m.styles.Faint)
 }
