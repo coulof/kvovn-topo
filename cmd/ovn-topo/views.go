@@ -95,7 +95,7 @@ func (m model) diagLabel() string {
 
 // hotkeys are the keys hinted in the header for the current screen; ? has them all.
 func (m model) hotkeys() [][2]string {
-	keys := [][2]string{{"1-4", "views"}, {"/", "filter"}, {"i", "pane"}, {"d", "describe"}}
+	keys := [][2]string{{"1-5", "views"}, {"/", "filter"}, {"i", "pane"}, {"d", "describe"}}
 	if m.diagMode {
 		keys = append(keys, [2]string{"x", "diag"}, [2]string{"!", "run"})
 	}
@@ -249,6 +249,8 @@ func (m model) treeView() []string {
 		var line string
 		if r.problem != "" {
 			line = m.problemLine(r)
+		} else if r.change != nil {
+			line = m.changeLine(r)
 		} else if r.ref {
 			line = " " + st.Faint.Render(r.prefix) + st.MutedText.Render(r.relLabel+" ⇢ ") + m.kind(r.n) + " " +
 				st.Kind[r.n.kind].Render(r.n.name) + " " + m.badge(r.n)
@@ -293,6 +295,8 @@ func (m model) treeView() []string {
 			msg = "   no Kubernetes workloads resolved from LSP external_ids"
 		} else if m.mode == modeProblems {
 			msg = "   no problems found"
+		} else if m.mode == modeChanges {
+			msg = m.noChangesText()
 		}
 		body = append(body, "", st.MutedText.Render(msg))
 	}
@@ -353,6 +357,7 @@ func (m model) helpView() []string {
 		"   2  :xray chassis   chassis → bound ports",
 		"   3  :xray workload  namespace → VM/Pod → NICs",
 		"   4  :problems       what is wrong, most severe first",
+		"   5  :changes        what changed since start, newest first",
 		"",
 		" " + b("INSPECT"),
 		"   i  details pane",
@@ -395,7 +400,7 @@ func (m model) helpView() []string {
 	return box(l, m.w(), m.areaH(), st.Label.Render("Help"), st.Border)
 }
 
-var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "theme", "quit"}
+var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "changes", "theme", "quit"}
 
 func suggest(prefix string) string {
 	if prefix == "" {

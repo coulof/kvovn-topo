@@ -27,6 +27,7 @@ type row struct {
 	hasKids  bool
 	problem  string // Problems view: why this object is listed (problems.go)
 	sev      health
+	change   *change // Changes view entry (changes.go)
 }
 
 type histEntry struct {
@@ -144,9 +145,12 @@ func (m *model) rebuildRows() {
 			}
 		}
 	}
-	if m.mode == modeProblems {
+	switch m.mode {
+	case modeProblems:
 		m.problemRows()
-	} else {
+	case modeChanges:
+		m.changeRows()
+	default:
 		walk(m.tree.roots[m.mode], nil, string(m.mode), "", 0, 0)
 	}
 	// Restore the selection by row key; if that path vanished (object re-parented),

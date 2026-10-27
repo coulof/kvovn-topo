@@ -148,6 +148,8 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.runCmd("workload")
 	case "4":
 		return m.runCmd("problems")
+	case "5":
+		return m.runCmd("changes")
 	}
 	return m.treeKey(s)
 }
@@ -240,6 +242,8 @@ func (m model) runCmd(c string) (tea.Model, tea.Cmd) {
 		m.mode = modeWorkload
 	case c == "problems" || c == "problem" || c == "p":
 		m.mode = modeProblems
+	case c == "changes" || c == "change" || c == "log":
+		m.mode = modeChanges
 	case c == "q" || c == "quit":
 		return m, tea.Quit
 	case strings.HasPrefix(c, "theme"):

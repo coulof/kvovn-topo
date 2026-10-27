@@ -78,6 +78,8 @@ type model struct {
 	zone       string // ovn-kubernetes zone (node) on screen, from --zone or a zone-<node> capture
 
 	// `!` runs an Inspect command (inspect.go)
+	changes     []change // Changes view log (changes.go)
+	changeSeq   int
 	inspectPick bool
 	inspectSel  int
 	kube        kubeTarget

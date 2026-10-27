@@ -129,6 +129,9 @@ func (m *model) markChanged(next *xtree) {
 	if m.tree == nil || m.graphResp == nil {
 		return
 	}
+	if m.graphResp.Revision > m.baseRevision {
+		m.recordChanges(next, m.graphResp.Revision)
+	}
 	now := time.Now()
 	hit := false
 	for id, n := range next.byID {
