@@ -230,7 +230,7 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 **Keys:** keep a view open, with the header showing `● live`.
 
-- Each change on the daemon's event stream refetches only what changed. Changed rows flash for 3 s.
+- Each change on the daemon's event stream refetches only what changed. Changed rows flash for 3 s, and `5` (Changes) keeps the list: `r812 LSP vm-2… broken → ok`.
 - A migrating VM's NIC moves from one chassis to another. With the diagnostics modal open on it, the modal warns `moved: hv-01 → hv-02` and re-targets the new node.
 - `L` pauses and resumes the live updates; `r` reloads everything.
 
@@ -238,6 +238,14 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 |---|---|
 | ![UC13a — row flashing on change](images/tui/uc13-live-flash.png) | ![UC13 — live migration in progress](images/harvester/uc13-live-migration.png) |
 | ![UC13b — modal: target moved](images/tui/uc13-target-moved.png) | *Suggested:* Virtual Machines › *vm* › ⋮ › Migrate |
+
+## UC14. What is broken right now?
+
+**Keys:** `4` (Problems). The header shows the count, e.g. `! 3 problems (4)`.
+
+- One list, most severe first: unbound or disabled ports, gateway ports with no active chassis, chassis that match no node or share a hostname, and routers whose NAT gateway may be bypassed by replies.
+- `Enter` jumps to the object in its xray, `b` comes back.
+- The NAT-gateway line is a heuristic: it reads `checking…` while the router's routes load, then warns when `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway. That is the one-water incident.
 
 ---
 
@@ -298,6 +306,24 @@ Every pane ends with the Kubernetes identity and the object's relations (`label 
 | `·` (dim) | Infrastructure port (`router`, `localnet`, …): never reported as unbound |
 
 Shapes and colours both carry the state, so it stays readable without colour.
+
+## 3. Problems and Changes — `4` / `5`
+
+**Problems** (`4`, `:problems`) collects what the tree already knows is wrong, most severe first. It is computed in the TUI, an interim for M4's `/checks`:
+
+| Problem | Severity |
+|---|---|
+| Switch port unbound (no chassis claimed it) | ✗ |
+| Gateway port with no active chassis (the VPC has no egress) | ✗ |
+| Switch port disabled | ! |
+| Chassis matched by hostname only, or by no node; hostname shared by several chassis | ! |
+| Router with a NAT gateway: `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway (heuristic) | ! |
+
+Opening the view fetches the routes of every router with a NAT gateway, again after each revision.
+
+**Changes** (`5`, `:changes`) logs what moved between revisions, newest first: `added`, `removed`, a health change (`ok → broken`), a badge change (`[unbound] → [—]`), else the new summary. It keeps 500 entries in memory from when `ovn-topo` started; an offline fixture or paused updates say so. History across restarts is M8.
+
+In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes back, and `/` filters.
 
 ## 4. Describe & raw — `d` / `y`
 
@@ -393,7 +419,7 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 | Where | Keys |
 |---|---|
-| Everywhere | `1`–`3` switch view · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
+| Everywhere | `1`–`3` xray trees · `4` problems · `5` changes · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
 | Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
 | Xray trees | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
 | Describe / raw | `y` toggle raw · `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc` back |
