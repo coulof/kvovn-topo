@@ -2,22 +2,16 @@
 
 A read-only network topology visualizer for OVN as deployed by Kube-OVN on Rancher-managed RKE2 and Harvester clusters. On OpenShift (ovn-kubernetes, interconnect mode), the TUI shows one node at a time, live (`--diag --zone`) or from a capture. An in-cluster daemon there is proposed in [ADR-0005](docs/adr/0005-ovnk-interconnect.md).
 
-## Components
+It consists of:
+- **`ovn-topologyd`**: Go daemon that connects to OVN NB and SB databases, maintains an in-memory network graph, and serves it over HTTP JSON and SSE.
+- **`ovn-topo`**: Terminal UI (Bubble Tea) that renders an L3 topology tree, interconnect details, and port matrices directly in your terminal.
+- **`ovn-topo mcp`**: Model Context Protocol (MCP) server that lets AI agents (OpenCode, Claude Code, agy) query the network graph.
 
-- **`ovn-topologyd`**: Go daemon that connects to OVN Northbound (NB) and Southbound (SB) databases over OVSDB, monitors updates, maintains a joined in-memory network graph, and serves it over HTTP JSON and SSE.
-- **`ovn-topo`**: Terminal UI (Bubble Tea) that renders an L3 topology tree and an interconnection matrix of router ports directly in your terminal.
-- **`ovn-topo mcp`**: Model Context Protocol (MCP) stdio server that lets AI agents (OpenCode, Claude Code, agy) query the same graph, read-only.
-- **Rancher UI Extension**: paused; archived at tag `archive/ui-extension` (see below).
-- **`charts/ovn-topology/`**: Helm chart deployed once per downstream cluster.
+---
 
-## Design and Security Rules
+## Connection Architecture
 
-- **Strictly read-only**: OVSDB does not have a read-only user role. Read-only access is guaranteed in code and enforced during build by `golangci-lint` using `forbidigo`. The codebase contains no write operations (`Create`, `Update`, `Mutate`, `Delete`, `Transact`) against OVSDB or the Kubernetes API.
-- **OVSDB is the source of truth**: The daemon does not read Kube-OVN CRDs (such as Vpc, Subnet, or IP). Kubernetes metadata comes from OVN NB `external_ids`. Kubernetes reads are get/list/watch on `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachine`/`VirtualMachineInstance` and `NetworkAttachmentDefinition`, used only to enrich graph nodes (node names, workload identity), never to create them.
-- **Access control**: The daemon has no authentication of its own and is never exposed (no NodePort, LoadBalancer or Ingress). API access goes through the Kubernetes service proxy (`/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:http/proxy/api/v1/...`), which authenticates the caller; authorization is standard `services/proxy` RBAC. The TUI and `ovn-topo mcp` use this path by default.
-- **Air-gap friendly**: No runtime calls to the internet, no CDN dependencies, and non-root distroless container images.
-
-## Architecture
+All clients (`ovn-topo` TUI and `ovn-topo mcp`) connect through the standard Kubernetes service proxy. No port-forwards, public IPs, or Ingresses are needed:
 
 ```text
   Downstream Cluster (RKE2 / Harvester)
@@ -30,8 +24,7 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
   │  │ ovn-topologyd                                        │  │
   │  │   • In-memory joined graph (atomic snapshots)        │  │
   │  │   • K8s NodeMapper (chassis <-> node)                │  │
-  │  │   • HTTP REST + SSE API (ClusterIP :8080, no authn,  │  │
-  │  │     never exposed: no NodePort / LB / Ingress)       │  │
+  │  │   • HTTP REST + SSE API (ClusterIP :8080)            │  │
   │  └──────────────────────────▲───────────────────────────┘  │
   │                             │ service proxy                │
   │  ┌──────────────────────────┴───────────────────────────┐  │
@@ -46,242 +39,142 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
    (Bubble Tea)          (AI agents, stdio)   (paused)
 ```
 
-All clients use the same path (`pkg/kubeproxy`): they find the daemon Service (`kube-system/ovn-topologyd`, else by the chart label) and call it through the API server's service proxy with the kubeconfig's credentials. No port-forward is needed.
+Clients query the Service `kube-system/ovn-topologyd` using standard `kubeconfig` credentials. The API server handles authentication and checks `services/proxy` RBAC.
 
-## Quick Start
+For more details on security design, see the [API & Security Reference](docs/api.md).
 
-Install the chart per cluster as described in the [chart README](charts/ovn-topology/README.md#installation):
-- **RKE2 and Harvester (Kube-OVN):** `helm install ovn-topology coulof/ovn-topology --namespace kube-system`.
-- **OpenShift:** no daemon yet; there are two per-node modes:
-  - live: `ovn-topo --diag --zone <node>` (Tier 1, `pods/exec`);
-  - offline: capture with `KUBECTL=oc hack/capture-fixtures.sh <name> --flavor ovnk`, then `ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>`.
+---
 
-With the chart installed on the cluster, the TUI needs only a kubeconfig. It reaches the daemon through the Kubernetes service proxy (Rancher's `/k8s/clusters/<id>` or the API server directly), which enforces authentication and `services/proxy` RBAC. Nothing is exposed, and no port-forward is needed:
+## Installation
+
+### 1. In-Cluster Daemon (`ovn-topologyd`)
+Deploy the daemon to downstream clusters running Kube-OVN using the Helm chart:
+
+```bash
+helm repo add coulof https://coulof.github.io/ovn-topology
+helm install ovn-topology coulof/ovn-topology \
+  --namespace kube-system \
+  --set ovn.nbEndpoints="tcp:ovn-nb.kube-system.svc.cluster.local:6641" \
+  --set ovn.sbEndpoints="tcp:ovn-sb.kube-system.svc.cluster.local:6642"
+```
+
+For more configuration details, see the [Chart Documentation](charts/ovn-topology/README.md#installation).
+
+**OpenShift (ovn-kubernetes, interconnect mode):** there is no daemon yet ([ADR-0005](docs/adr/0005-ovnk-interconnect.md)); the TUI works per node:
+- live: `ovn-topo --diag --zone <node>` (Tier 1, `pods/exec`);
+- offline: capture with `KUBECTL=oc hack/capture-fixtures.sh <name> --flavor ovnk`, then `ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>`.
+
+### 2. Client CLI (`ovn-topo`)
+Download the precompiled static binary for your architecture from [GitHub Releases](https://github.com/coulof/ovn-topology/releases) and place it on your `PATH`.
+
+---
+
+## Terminal UI (`ovn-topo`)
+
+To run the TUI, point it to your cluster's kubeconfig:
 
 ```bash
 export KUBECONFIG=~/.kube/hv-01.yaml
-mise run tui        # or: ./bin/ovn-topo
+ovn-topo
 ```
 
-See [Accessing the API](charts/ovn-topology/README.md#accessing-the-api-harvester-and-rke2) for the URLs and the optional viewer role.
+### Controls & Navigation
+- **`1` – `4`**: Switch views:
+  - **`1`** (or `:xray vpc`): L3 View (VPCs, Routers, Subnets)
+  - **`2`** (or `:xray chassis`): OVN Chassis bindings and encap IPs
+  - **`3`** (or `:xray workload`): Kubernetes workloads (Pods, VMs, Namespaces)
+  - **`4`** (or `:ports`): Router port matrix
+- **`j`/`k`**, **`h`/`l`**, **`Space`**: Navigate, fold/unfold, and toggle tree items.
+- **`e`/`E`**: Expand or fold all nodes.
+- **`Enter`**: Follow a relation (e.g. hop from a port to its connected switch).
+- **`b`**: Go back in navigation history.
+- **`i`**: Toggle the right-side **Details Pane** (shows IP/MAC, active gateways, peers, and subnets).
+- **`/`**: Filter the tree. Keeps ancestors of matched items.
+- **`d`**: Describe selected object.
+- **`y`**: View raw OVSDB columns.
+- **`r`**: Force refresh.
+- **`L`**: Toggle live SSE updates.
+- **`t`**: Cycle UI themes (e.g., `--theme=suse`, `dracula`, `nord`, `catppuccin`).
+- **`?`**: Help overlay.
+- **`q`**: Quit.
 
-Check the in-cluster daemon's API from the shell, again through the service proxy:
+### Tier 1 Diagnostics (`x` key)
+Launch the TUI with `--diag` to enable interactive diagnostic executions directly on cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`):
 
 ```bash
-mise run test-live              # readyz, version, graph, chassis, find
-mise run api-find 10.244.0.10   # also api-ready, api-version, api-graph, api-chassis, api-events
+ovn-topo --diag
 ```
 
-### Local daemon development
+From any supported object in the tree, press **`x`** to run:
+1. **`ovn-trace`**: Run point-and-click packet simulations to trace routing, ACLs, and NAT.
+2. **Conntrack dump**: View connection tracking tables on the active chassis node.
+3. **OVS interfaces**: View OVS port bindings and statuses via `ovs-vsctl`.
+4. **Controller logs**: Tail logs from `ovn-controller` on the host node.
 
-Only a daemon you run on your laptop needs port-forwards: it must reach the cluster's OVN databases. The `[dev]` tasks in `mise tasks` cover this flow.
+See the complete [TUI Guide](docs/tui-guide.md) for screenshots and walkthroughs.
 
-A plain `kubectl port-forward svc/ovn-nb` cannot do it. The ovn-central pods use `hostNetwork` and the databases listen on the node IP, while `port-forward` always connects to `localhost` inside the pod. So `mise run pf` first creates a small relay pod, `ovn-topology-proxy` in `kube-system`. It runs a Python TCP relay in the Kube-OVN image (set `PROXY_IMAGE` to match your version or mirror) that forwards 6641/6642 to the `ovn-nb`/`ovn-sb` Services, and `pf` port-forwards to that pod. It is the only thing any task creates in the cluster; remove it when you are done.
-
-```bash
-# 1. Forward OVN database ports to localhost
-mise run pf
-
-# 2. Run the daemon locally (terminal 1)
-mise run daemon
-
-# 3. Test the API or launch the TUI against it (terminal 2)
-mise run test-local
-mise run tui-local
-```
-
-When finished, stop the port-forwards and delete the relay pod:
-
-```bash
-mise run pf-proxy-remove   # runs pf-stop first
-```
-
-## TUI Controls (`ovn-topo`)
-
-k9s-style navigation; see [`docs/tui-guide.md`](docs/tui-guide.md) for the full guide.
-
-- **`1` - `4`** (or `:xray vpc`, `:xray chassis`, `:xray workload`, `:ports`): switch between the three xray trees and the router-port table.
-- **`j`/`k`**, **`h`/`l`**, **`Space`**: move, fold/unfold, toggle. **`e`/`E`** expands/folds everything.
-- **`Enter`** on a `⇢` relation (chassis, workload, peer port…) jumps to that object; **`b`** goes back.
-- **`i`**: show/hide the right **details pane** (interconnections of the selection: router ports and peers, connected routers, path out of a subnet, gateways); the tree starts with two levels open.
-- **`/`**: filter (keeps the ancestors of every match). **`d`** describe, **`y`** raw columns.
-- **`x`**: open **Tier 1 Diagnostics** on the selection (interactive `ovn-trace` with fzf search & custom IP, live `tcpdump`, conntrack, `ovs-vsctl show`, controller logs).
-- **`r`** refresh, **`L`** pause/resume live (SSE) updates, **`t`** cycle themes, **`?`** help, **`q`** quit.
-
-Launch with Tier 1 diagnostics enabled:
-```bash
-mise run tui-diag
-```
-
-Launch with a preferred theme:
-```bash
-./bin/ovn-topo --theme=suse
-./bin/ovn-topo --theme=dracula
-./bin/ovn-topo --theme=nord
-./bin/ovn-topo --theme=tokyonight
-./bin/ovn-topo --theme=catppuccin
-```
-
-### Tier 1 Diagnostics Mode (ADR-0001)
-
-Launch `ovn-topo` with `--diag` to enable read-only execution diagnostics in cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`). The exec uses the same kubeconfig and `--context` as the graph, so it always targets the cluster on screen:
-
-```bash
-# Launch with diagnostics enabled
-./bin/ovn-topo --diag --kubeconfig=~/.kube/config --context harvester
-
-# Or using mise
-mise run tui-diag
-```
-
+### OpenShift: one node at a time (`--zone`)
 On ovn-kubernetes in interconnect mode (OpenShift 4.14+), `--zone <node>` shows one node's OVN live without a daemon. `ovn-topo` reads that node's NB/SB unix sockets through a `pods/exec` stream to `socat` in its `ovnkube-node` pod. It runs libovsdb monitors over that stream and serves the graph to itself on loopback. `--zone list` prints the nodes:
 
 ```bash
-./bin/ovn-topo --diag --zone list
-./bin/ovn-topo --diag --zone <node>
+ovn-topo --diag --zone list
+ovn-topo --diag --zone <node>
 ```
 
-Available diagnostic actions from the TUI (`x` key):
-1. **`ovn-trace`**: point-and-click microflow packet trace against `ovn-central` to inspect routing, ACLs, and NAT stage-by-stage.
-2. **Conntrack dump**: dump connection tracking entries on the active chassis node.
-3. **OVS interfaces**: inspect physical interfaces and port bindings via `ovs-vsctl`.
-4. **Controller logs**: tail `ovn-controller` logs on the target node.
-
-If RBAC denies `pods/exec`, the TUI header shows the `DIAG` badge as degraded with the reason and falls back to passive mode without crashing.
+---
 
 ## Model Context Protocol (MCP)
 
-`ovn-topo` includes an [MCP](https://modelcontextprotocol.io/) server (`ovn-topo mcp`) that communicates over stdio using JSON-RPC 2.0. With no flags it finds the in-cluster `ovn-topologyd` Service (`kube-system/ovn-topologyd`, else by the chart label in any namespace) and reads it through the Kubernetes service proxy of your kubeconfig (`services/proxy` RBAC); it can also read a daemon URL, OVSDB directly, or a fixture ([backends](docs/mcp.md#backends)).
+`ovn-topo` contains an MCP server (`ovn-topo mcp`) that communicates with AI agents over stdio. 
 
-Every tool is read-only (Tier 0, ADR-0001): no writes, no `exec`, no packet capture. Object names and `external_ids` are returned as data only, never in the one-line `summary` ([design](docs/adr/0003-mcp-server.md)).
-
-### Available MCP Tools
-
-| Tool | Description | Key Parameters |
-|---|---|---|
-| `find` | Search routers, switches, ports and chassis by name, IP, MAC, namespace, pod, VM, chassis hostname or encap IP | `query`, `type` (LR, LS, LRP, LSP, Chassis), `limit`, `cursor` |
-| `get_graph` | Topology graph for a view, optionally around one object | `view` (l3, l2, chassis), `focus`, `depth`, `cursor` |
-| `get_node` | Full detail of one object: OVSDB columns, external_ids, Kubernetes identity, related objects | `id` |
-| `list_chassis` | Chassis with encaps, node name, binding counts, gateway roles and HA priorities | `cursor` |
-
-Path computation, ACLs, consistency checks and history tools arrive with milestones M4, M5 and M8 (see `ROADMAP.md`).
+### Available Tools
+- `find`: Search routers, switches, ports, and chassis by name, IP, MAC, namespace, pod, or VM.
+- `get_graph`: Retrieve the L3, L2, or chassis topology graph.
+- `get_node`: Show full detail of one node, including OVSDB columns and Kubernetes identity.
+- `list_chassis`: List OVN chassis with binding counts and gateway roles.
 
 ### Tool Setup
 
+To configure your agent, use the corresponding snippet below. Ensure `ovn-topo` is on your `PATH`, or use an absolute path.
+
 #### 1. OpenCode
-
-Add this entry to the `mcp` object of `opencode.json` (or `~/.config/opencode/opencode.json`):
-
-```jsonc
-"ovn-topology": {
-    "type": "local",
-    "command": ["ovn-topo", "mcp"],
-    "enabled": false
-},
-```
-
-`"enabled": false` keeps the server off (and its tools out of the context) until you switch it on in OpenCode. With no flags, `ovn-topo mcp` uses the kubeconfig OpenCode inherits (`$KUBECONFIG`, else `~/.kube/config`) and reaches the daemon through the Kubernetes service proxy.
-
-With a custom kubeconfig:
-
-```jsonc
-"ovn-topology": {
-    "type": "local",
-    "command": ["ovn-topo", "mcp", "--kubeconfig", "/path/to/kubeconfig"],
-    "enabled": false
-},
-```
-
-In a new file, the entry goes inside `{"$schema": "https://opencode.ai/config.json", "mcp": { … }}`.
-
-#### 2. Claude Code
-
-Add `ovn-topology` using the CLI:
-
-```bash
-claude mcp add ovn-topology -- ovn-topo mcp
-
-# With custom kubeconfig
-claude mcp add ovn-topology -- ovn-topo mcp --kubeconfig /path/to/kubeconfig
-```
-
-Or configure via `.mcp.json` in your repository root:
+Add this to your `opencode.json` (or `~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "mcpServers": {
+  "mcp": {
     "ovn-topology": {
-      "command": "ovn-topo",
-      "args": ["mcp"]
+      "type": "local",
+      "command": ["ovn-topo", "mcp"],
+      "enabled": false
     }
   }
 }
 ```
 
+#### 2. Claude Code
+Run the CLI command:
+```bash
+claude mcp add ovn-topology -- ovn-topo mcp
+```
+
 #### 3. agy
-
-Add `ovn-topology` using `agy mcp`:
-
+Run the CLI command:
 ```bash
-agy mcp add ovn-topology ovn-topo mcp
-
-# With custom kubeconfig
-agy mcp add ovn-topology -- ovn-topo mcp --kubeconfig /path/to/kubeconfig
+agy mcp add ovn-topology -- ovn-topo mcp
 ```
 
-Check a setup with `mise run mcp-offline` (fixture) or `mise run mcp-live` (cluster). For ready-to-use troubleshooting prompts, see the [MCP Prompt Guide](docs/mcp-prompts.md); for backends, result format and caps, see [docs/mcp.md](docs/mcp.md).
+For backends, result limits, and offline/fixture mode setups, see [MCP Guide](docs/mcp.md) and [MCP Prompt Guide](docs/mcp-prompts.md).
 
-## Rancher UI Extension (paused)
+---
 
-The Rancher/Harvester UI extension is paused. Its code is archived at tag `archive/ui-extension` (`git checkout archive/ui-extension -- ui`). The daemon API stays usable by any client.
+## Documentation Directory
 
-## Release Artifacts
+The `docs/` directory contains full technical and operational details:
 
-Every version tag (`vX.Y.Z`) publishes:
-
-| Artifact | Registry Path | Description |
-|---|---|---|
-| **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:X.Y.Z` | `linux/amd64` distroless daemon |
-| **Daemon Chart** | `oci://ghcr.io/coulof/charts/ovn-topology:X.Y.Z` | OCI Helm chart for downstream clusters |
-| **Binaries** | GitHub Releases | Static `ovn-topologyd` + `ovn-topo` archives for Linux (amd64) and macOS (arm64); `ovn-topo` zip for Windows (amd64) |
-
-### Air-Gapped Environments (Hauler)
-
-Each release includes a `hauler.yaml` manifest bundling the daemon image and Helm chart:
-
-```bash
-# Sync release artifacts into a local Hauler store
-hauler store sync -f hauler.yaml
-
-# Copy artifacts to an internal air-gapped registry
-hauler store copy registry://registry.internal.example.com
-```
-
-## Development
-
-Prerequisites: Go 1.27+, `golangci-lint`, `make` (or `mise install`, which pins both).
-
-```bash
-make generate    # Regenerate OVSDB models and OpenAPI Go types
-make lint        # Run golangci-lint (enforcing forbidigo read-only check)
-make test        # Run unit tests and golden-file comparisons
-make build       # Build bin/ovn-topologyd and bin/ovn-topo
-make image       # Build container image
-```
-
-## API Summary
-
-Base path: `/api/v1`
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/graph?view=l3` | GET | Aggregated L3 graph (VPCs, LRs, LSs, external networks) |
-| `/graph?view=l2&focus=ls:<id>` | GET | Paginated L2 switch ports and chassis bindings |
-| `/graph?view=chassis` | GET | Chassis list with encaps and binding counts |
-| `/node/{id}` | GET | Full details and raw OVSDB columns for a node |
-| `/chassis` | GET | Chassis details, HA groups, and gateway roles |
-| `/find?q=<text>&type=&limit=&offset=` | GET | Search objects by name, IP, MAC, namespace, pod, VM |
-| `/events` | GET | SSE stream emitting graph revision changes |
-| `/readyz` | GET | Readiness probe (returns 200 after initial DB sync) |
-| `/healthz` | GET | Liveness probe |
-| `/version` | GET | Daemon version and OVN schema versions |
+- [TUI Guide](docs/tui-guide.md) – Step-by-step UI instructions and screenshots.
+- [MCP Server Guide](docs/mcp.md) – Detailed tool descriptions, caps, and backend modes.
+- [MCP Prompt Guide](docs/mcp-prompts.md) – Pre-written troubleshooting prompts for AI sessions.
+- [Development Guide](docs/development.md) – Compiling, testing, local daemon proxy, and release packaging.
+- [API & Security Reference](docs/api.md) – REST and SSE endpoint details, service proxy schemas, and safety guarantees.
+- [Architecture Decision Records (ADRs)](docs/adr/) – ADRs covering privilege tiers, history stores, the MCP server, CNI flavors and ovn-kubernetes interconnect.

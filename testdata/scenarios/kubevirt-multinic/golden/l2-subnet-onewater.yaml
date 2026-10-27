@@ -1,0 +1,145 @@
+edges:
+- id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0-contains
+  source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
+  target: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
+  type: contains
+- id: edge:lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0-chassis:b31870eb-31b2-420c-b2b2-a98af839670c-bound-on
+  source: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
+  target: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
+  type: bound-on
+- id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5-contains
+  source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
+  target: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
+  type: contains
+- id: edge:lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5-chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969-bound-on
+  source: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
+  target: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
+  type: bound-on
+- id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:bcf7b5c4-6108-48c4-9af4-bf4e61c642a7-contains
+  source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
+  target: lsp:bcf7b5c4-6108-48c4-9af4-bf4e61c642a7
+  type: contains
+- id: edge:ls:16805dfb-1658-44d4-b724-ccedaad81ee0-lsp:eb3b329f-43d0-4784-adca-ce144d9692ec-contains
+  source: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
+  target: lsp:eb3b329f-43d0-4784-adca-ce144d9692ec
+  type: contains
+- id: edge:lsp:eb3b329f-43d0-4784-adca-ce144d9692ec-chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7-bound-on
+  source: lsp:eb3b329f-43d0-4784-adca-ce144d9692ec
+  target: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
+  type: bound-on
+nodes:
+- id: ls:16805dfb-1658-44d4-b724-ccedaad81ee0
+  k8s:
+    vendor: kube-ovn
+  name: subnet-onewater
+  properties:
+    portCount: 4
+  type: LS
+- id: lsp:773caecd-4afb-471b-b8c0-71a26fb3a8c0
+  k8s:
+    namespace: onewater
+    networkAttachment: onewater/onewater
+    node: hv-04
+    owner: VirtualMachine/vm-2
+    pod: vm-2
+    subnet: subnet-onewater
+    vendor: kube-ovn
+    vmi: vm-2
+    workloadKind: VirtualMachine
+    workloadName: vm-2
+  name: vm-2.onewater.onewater.onewater.ovn
+  properties:
+    addresses:
+    - d6:c4:54:0b:7b:5b 192.168.54.36
+    boundChassis: b31870eb-31b2-420c-b2b2-a98af839670c
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:8818713d-83af-4aa7-b52c-9aab832ab4d5
+  k8s:
+    namespace: onewater
+    networkAttachment: onewater/onewater
+    node: hv-03
+    owner: VirtualMachine/vm-onewater
+    pod: vm-onewater
+    subnet: subnet-onewater
+    vendor: kube-ovn
+    vmi: vm-onewater
+    workloadKind: VirtualMachine
+    workloadName: vm-onewater
+  name: vm-onewater.onewater.onewater.onewater.ovn
+  properties:
+    addresses:
+    - e6:10:52:5b:4f:fd 192.168.54.35
+    boundChassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:bcf7b5c4-6108-48c4-9af4-bf4e61c642a7
+  k8s:
+    subnet: subnet-onewater
+    vendor: kube-ovn
+  name: subnet-onewater-vpc-onewater
+  properties:
+    addresses:
+    - router
+    boundChassis: ""
+    boundState: unbound
+    enabled: true
+    type: router
+    up: true
+  type: LSP
+- id: lsp:eb3b329f-43d0-4784-adca-ce144d9692ec
+  k8s:
+    namespace: default
+    networkAttachment: onewater/onewater
+    node: hv-01
+    owner: VirtualMachine/test-2-nics-2-vpc
+    pod: test-2-nics-2-vpc
+    subnet: subnet-onewater
+    vendor: kube-ovn
+    vmi: test-2-nics-2-vpc
+    workloadKind: VirtualMachine
+    workloadName: test-2-nics-2-vpc
+  name: test-2-nics-2-vpc.default.onewater.onewater.ovn
+  properties:
+    addresses:
+    - f6:1a:b7:18:6e:13 192.168.54.39
+    boundChassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: chassis:43519f69-444f-4b57-8fa0-be222c9fc4e7
+  name: hv-01
+  properties:
+    chassis: 43519f69-444f-4b57-8fa0-be222c9fc4e7
+    hostname: hv-01
+    nodeName: hv-01
+  type: Chassis
+- id: chassis:a5e5d41a-75b3-4b11-bd7c-8ddc695db969
+  name: hv-03
+  properties:
+    chassis: a5e5d41a-75b3-4b11-bd7c-8ddc695db969
+    hostname: hv-03
+    nodeName: hv-03
+  type: Chassis
+- id: chassis:b31870eb-31b2-420c-b2b2-a98af839670c
+  name: hv-04
+  properties:
+    chassis: b31870eb-31b2-420c-b2b2-a98af839670c
+    hostname: hv-04
+    nodeName: hv-04
+  type: Chassis
+pagination:
+  page: 1
+  pageSize: 1000
+  totalItems: 4
+  totalPages: 1
+revision: 1
+view: l2

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/coulof/ovn-topology/pkg/api"
@@ -666,6 +667,9 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 	var nodeName string
 	var related []api.RelatedObject
 	var detailK8s *api.K8sMetadata
+	var detailStaticRoutes *[]api.StaticRoute
+	var detailPolicies *[]api.RouterPolicy
+	var detailNats *[]api.NatRule
 
 	switch {
 	case strings.HasPrefix(id, PrefixLR):
@@ -707,11 +711,164 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 		}
 		// NATs
 		for _, natUUID := range lr.Nat {
-			related = append(related, api.RelatedObject{
+			rel := api.RelatedObject{
 				Id:           PrefixNAT + natUUID,
 				Type:         "NAT",
 				Relationship: "nat",
+			}
+			if natRule, ok := s.NATs[natUUID]; ok {
+				name := fmt.Sprintf("%s %s -> %s", natRule.Type, natRule.ExternalIP, natRule.LogicalIP)
+				rel.Name = &name
+			}
+			related = append(related, rel)
+		}
+
+		// Static routes: ordered by longest prefix match; ECMP flagged if (routeTable, policy, prefix) repeats
+		if len(lr.StaticRoutes) > 0 {
+			type routeGroupKey struct {
+				table  string
+				policy string
+				prefix string
+			}
+			prefixCounts := make(map[routeGroupKey]int)
+			var validRoutes []*nbmodel.LogicalRouterStaticRoute
+			for _, rUUID := range lr.StaticRoutes {
+				if r, ok := s.StaticRoutes[rUUID]; ok {
+					validRoutes = append(validRoutes, r)
+					pol := "dst-ip"
+					if r.Policy != nil && *r.Policy != "" {
+						pol = string(*r.Policy)
+					}
+					prefixCounts[routeGroupKey{table: r.RouteTable, policy: pol, prefix: r.IPPrefix}]++
+				}
+			}
+
+			// Sort by longest prefix descending (e.g. /32 before /24 before /0)
+			prefixLen := func(cidr string) int {
+				parts := strings.Split(cidr, "/")
+				if len(parts) == 2 {
+					if n, err := strconv.Atoi(parts[1]); err == nil {
+						return n
+					}
+				}
+				return 0
+			}
+			sort.Slice(validRoutes, func(i, j int) bool {
+				pi := prefixLen(validRoutes[i].IPPrefix)
+				pj := prefixLen(validRoutes[j].IPPrefix)
+				if pi != pj {
+					return pi > pj
+				}
+				if validRoutes[i].IPPrefix != validRoutes[j].IPPrefix {
+					return validRoutes[i].IPPrefix < validRoutes[j].IPPrefix
+				}
+				return validRoutes[i].Nexthop < validRoutes[j].Nexthop
 			})
+
+			routes := make([]api.StaticRoute, 0, len(validRoutes))
+			for _, r := range validRoutes {
+				rID := r.UUID
+				polStr := "dst-ip"
+				if r.Policy != nil && *r.Policy != "" {
+					polStr = string(*r.Policy)
+				}
+				routePol := api.StaticRoutePolicy(polStr)
+				key := routeGroupKey{table: r.RouteTable, policy: polStr, prefix: r.IPPrefix}
+				ecmp := prefixCounts[key] > 1
+
+				sr := api.StaticRoute{
+					Id:       &rID,
+					IpPrefix: r.IPPrefix,
+					Nexthop:  r.Nexthop,
+					Policy:   &routePol,
+					Ecmp:     &ecmp,
+				}
+				if r.RouteTable != "" {
+					sr.RouteTable = &r.RouteTable
+				}
+				if r.OutputPort != nil && *r.OutputPort != "" {
+					sr.OutputPort = r.OutputPort
+				}
+				if r.BFD != nil && *r.BFD != "" {
+					sr.Bfd = r.BFD
+				}
+				routes = append(routes, sr)
+			}
+			detailStaticRoutes = &routes
+		}
+
+		// Policies: ordered by priority descending
+		if len(lr.Policies) > 0 {
+			var validPolicies []*nbmodel.LogicalRouterPolicy
+			for _, pUUID := range lr.Policies {
+				if pol, ok := s.Policies[pUUID]; ok {
+					validPolicies = append(validPolicies, pol)
+				}
+			}
+			sort.Slice(validPolicies, func(i, j int) bool {
+				if validPolicies[i].Priority != validPolicies[j].Priority {
+					return validPolicies[i].Priority > validPolicies[j].Priority
+				}
+				return validPolicies[i].Match < validPolicies[j].Match
+			})
+
+			policies := make([]api.RouterPolicy, 0, len(validPolicies))
+			for _, pol := range validPolicies {
+				pID := pol.UUID
+				action := api.RouterPolicyAction(pol.Action)
+				rp := api.RouterPolicy{
+					Id:       &pID,
+					Priority: pol.Priority,
+					Match:    pol.Match,
+					Action:   action,
+				}
+				var hops []string
+				if pol.Nexthop != nil && *pol.Nexthop != "" {
+					hops = append(hops, *pol.Nexthop)
+				}
+				for _, nh := range pol.Nexthops {
+					if nh != "" && (pol.Nexthop == nil || nh != *pol.Nexthop) {
+						hops = append(hops, nh)
+					}
+				}
+				if len(hops) > 0 {
+					rp.Nexthops = &hops
+				}
+				policies = append(policies, rp)
+			}
+			detailPolicies = &policies
+		}
+
+		// NAT: ordered by type, then external IP
+		if len(lr.Nat) > 0 {
+			var validNats []*nbmodel.NAT
+			for _, natUUID := range lr.Nat {
+				if n, ok := s.NATs[natUUID]; ok {
+					validNats = append(validNats, n)
+				}
+			}
+			sort.Slice(validNats, func(i, j int) bool {
+				if validNats[i].Type != validNats[j].Type {
+					return validNats[i].Type < validNats[j].Type
+				}
+				return validNats[i].ExternalIP < validNats[j].ExternalIP
+			})
+
+			nats := make([]api.NatRule, 0, len(validNats))
+			for _, n := range validNats {
+				nID := n.UUID
+				nr := api.NatRule{
+					Id:          &nID,
+					Type:        api.NatRuleType(n.Type),
+					ExternalIp:  n.ExternalIP,
+					LogicalIp:   n.LogicalIP,
+					LogicalPort: n.LogicalPort,
+					ExternalMac: n.ExternalMAC,
+					GatewayPort: n.GatewayPort,
+				}
+				nats = append(nats, nr)
+			}
+			detailNats = &nats
 		}
 
 	case strings.HasPrefix(id, PrefixLS):
@@ -841,14 +998,17 @@ func (s *Snapshot) GetNodeDetail(id string) (*api.NodeDetail, error) {
 
 	revision := int(s.Revision)
 	detail := &api.NodeDetail{
-		Id:          id,
-		Type:        nodeType,
-		Name:        nodeName,
-		Raw:         rawMap,
-		ExternalIds: extIds,
-		K8s:         detailK8s,
-		Related:     &related,
-		Revision:    &revision,
+		Id:           id,
+		Type:         nodeType,
+		Name:         nodeName,
+		Raw:          rawMap,
+		ExternalIds:  extIds,
+		K8s:          detailK8s,
+		Related:      &related,
+		StaticRoutes: detailStaticRoutes,
+		Policies:     detailPolicies,
+		Nats:         detailNats,
+		Revision:     &revision,
 	}
 
 	return detail, nil

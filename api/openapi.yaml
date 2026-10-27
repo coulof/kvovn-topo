@@ -411,6 +411,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelatedObject'
+        staticRoutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticRoute'
+          description: Static routes configured on this LR, ordered by longest prefix match.
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouterPolicy'
+          description: Routing policies configured on this LR, ordered by priority descending.
+        nats:
+          type: array
+          items:
+            $ref: '#/components/schemas/NatRule'
+          description: NAT rules configured on this LR, ordered by type then external IP.
         revision:
           type: integer
           description: Graph revision the detail was read from.
@@ -477,6 +492,78 @@ components:
         relationship:
           type: string
         name:
+          type: string
+
+    StaticRoute:
+      type: object
+      required:
+        - ipPrefix
+        - nexthop
+      properties:
+        id:
+          type: string
+          description: OVSDB UUID.
+        ipPrefix:
+          type: string
+        nexthop:
+          type: string
+        outputPort:
+          type: string
+        policy:
+          type: string
+          enum: [dst-ip, src-ip]
+        routeTable:
+          type: string
+        bfd:
+          type: string
+        ecmp:
+          type: boolean
+          description: True when multiple routes share the same (routeTable, policy, ipPrefix).
+
+    RouterPolicy:
+      type: object
+      required:
+        - priority
+        - match
+        - action
+      properties:
+        id:
+          type: string
+          description: OVSDB UUID.
+        priority:
+          type: integer
+        match:
+          type: string
+        action:
+          type: string
+          enum: [allow, drop, reroute]
+        nexthops:
+          type: array
+          items:
+            type: string
+
+    NatRule:
+      type: object
+      required:
+        - type
+        - externalIp
+        - logicalIp
+      properties:
+        id:
+          type: string
+          description: OVSDB UUID.
+        type:
+          type: string
+          enum: [dnat, snat, dnat_and_snat]
+        externalIp:
+          type: string
+        logicalIp:
+          type: string
+        logicalPort:
+          type: string
+        externalMac:
+          type: string
+        gatewayPort:
           type: string
 
     ChassisList:

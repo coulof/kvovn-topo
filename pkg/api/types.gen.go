@@ -168,6 +168,66 @@ func (e GraphResponseView) Valid() bool {
 	}
 }
 
+// Defines values for NatRuleType.
+const (
+	Dnat        NatRuleType = "dnat"
+	DnatAndSnat NatRuleType = "dnat_and_snat"
+	Snat        NatRuleType = "snat"
+)
+
+// Valid indicates whether the value is a known member of the NatRuleType enum.
+func (e NatRuleType) Valid() bool {
+	switch e {
+	case Dnat:
+		return true
+	case DnatAndSnat:
+		return true
+	case Snat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RouterPolicyAction.
+const (
+	Allow   RouterPolicyAction = "allow"
+	Drop    RouterPolicyAction = "drop"
+	Reroute RouterPolicyAction = "reroute"
+)
+
+// Valid indicates whether the value is a known member of the RouterPolicyAction enum.
+func (e RouterPolicyAction) Valid() bool {
+	switch e {
+	case Allow:
+		return true
+	case Drop:
+		return true
+	case Reroute:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StaticRoutePolicy.
+const (
+	DstIp StaticRoutePolicy = "dst-ip"
+	SrcIp StaticRoutePolicy = "src-ip"
+)
+
+// Valid indicates whether the value is a known member of the StaticRoutePolicy enum.
+func (e StaticRoutePolicy) Valid() bool {
+	switch e {
+	case DstIp:
+		return true
+	case SrcIp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FindObjectsParamsType.
 const (
 	FindObjectsParamsTypeChassis FindObjectsParamsType = "Chassis"
@@ -397,6 +457,22 @@ type K8sMetadata struct {
 	WorkloadName *string `json:"workloadName,omitempty"`
 }
 
+// NatRule defines model for NatRule.
+type NatRule struct {
+	ExternalIp  string  `json:"externalIp"`
+	ExternalMac *string `json:"externalMac,omitempty"`
+	GatewayPort *string `json:"gatewayPort,omitempty"`
+
+	// Id OVSDB UUID.
+	Id          *string     `json:"id,omitempty"`
+	LogicalIp   string      `json:"logicalIp"`
+	LogicalPort *string     `json:"logicalPort,omitempty"`
+	Type        NatRuleType `json:"type"`
+}
+
+// NatRuleType defines model for NatRule.Type.
+type NatRuleType string
+
 // NodeDetail defines model for NodeDetail.
 type NodeDetail struct {
 	ExternalIds map[string]string `json:"externalIds"`
@@ -404,13 +480,22 @@ type NodeDetail struct {
 	K8s         *K8sMetadata      `json:"k8s,omitempty"`
 	Name        string            `json:"name"`
 
+	// Nats NAT rules configured on this LR, ordered by type then external IP.
+	Nats *[]NatRule `json:"nats,omitempty"`
+
+	// Policies Routing policies configured on this LR, ordered by priority descending.
+	Policies *[]RouterPolicy `json:"policies,omitempty"`
+
 	// Raw Raw columns from OVSDB.
 	Raw     map[string]interface{} `json:"raw"`
 	Related *[]RelatedObject       `json:"related,omitempty"`
 
 	// Revision Graph revision the detail was read from.
-	Revision *int   `json:"revision,omitempty"`
-	Type     string `json:"type"`
+	Revision *int `json:"revision,omitempty"`
+
+	// StaticRoutes Static routes configured on this LR, ordered by longest prefix match.
+	StaticRoutes *[]StaticRoute `json:"staticRoutes,omitempty"`
+	Type         string         `json:"type"`
 }
 
 // PaginationInfo defines model for PaginationInfo.
@@ -428,6 +513,39 @@ type RelatedObject struct {
 	Relationship string  `json:"relationship"`
 	Type         string  `json:"type"`
 }
+
+// RouterPolicy defines model for RouterPolicy.
+type RouterPolicy struct {
+	Action RouterPolicyAction `json:"action"`
+
+	// Id OVSDB UUID.
+	Id       *string   `json:"id,omitempty"`
+	Match    string    `json:"match"`
+	Nexthops *[]string `json:"nexthops,omitempty"`
+	Priority int       `json:"priority"`
+}
+
+// RouterPolicyAction defines model for RouterPolicy.Action.
+type RouterPolicyAction string
+
+// StaticRoute defines model for StaticRoute.
+type StaticRoute struct {
+	Bfd *string `json:"bfd,omitempty"`
+
+	// Ecmp True when multiple routes share the same (routeTable, policy, ipPrefix).
+	Ecmp *bool `json:"ecmp,omitempty"`
+
+	// Id OVSDB UUID.
+	Id         *string            `json:"id,omitempty"`
+	IpPrefix   string             `json:"ipPrefix"`
+	Nexthop    string             `json:"nexthop"`
+	OutputPort *string            `json:"outputPort,omitempty"`
+	Policy     *StaticRoutePolicy `json:"policy,omitempty"`
+	RouteTable *string            `json:"routeTable,omitempty"`
+}
+
+// StaticRoutePolicy defines model for StaticRoute.Policy.
+type StaticRoutePolicy string
 
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/coulof/ovn-topology/pkg/api"
@@ -241,6 +242,53 @@ func TestNodeDetail(t *testing.T) {
 	}
 	if len(*lrDetail.Related) == 0 {
 		t.Errorf("expected related objects on LR")
+	}
+	if lrDetail.StaticRoutes == nil || len(*lrDetail.StaticRoutes) != 1 {
+		t.Fatalf("expected 1 static route on LR, got %v", lrDetail.StaticRoutes)
+	}
+	sr := (*lrDetail.StaticRoutes)[0]
+	if sr.IpPrefix != "0.0.0.0/0" || sr.Nexthop != "10.244.0.254" {
+		t.Errorf("unexpected static route: %+v", sr)
+	}
+	if sr.Policy == nil || *sr.Policy != api.DstIp {
+		t.Errorf("expected policy dst-ip, got %v", sr.Policy)
+	}
+	if sr.Ecmp == nil || *sr.Ecmp != false {
+		t.Errorf("expected ecmp false, got %v", sr.Ecmp)
+	}
+
+	if lrDetail.Policies == nil || len(*lrDetail.Policies) != 1 {
+		t.Fatalf("expected 1 policy on LR, got %v", lrDetail.Policies)
+	}
+	pol := (*lrDetail.Policies)[0]
+	if pol.Priority != 100 || pol.Action != api.Reroute || pol.Match != "ip4.dst == 0.0.0.0/0" {
+		t.Errorf("unexpected policy: %+v", pol)
+	}
+
+	// LR with NAT
+	lrCustomDetail, err := snap.GetNodeDetail("lr:lr-custom-uuid")
+	if err != nil {
+		t.Fatalf("GetNodeDetail for lr-custom-uuid failed: %v", err)
+	}
+	if lrCustomDetail.Nats == nil || len(*lrCustomDetail.Nats) != 1 {
+		t.Fatalf("expected 1 NAT rule on lr-custom-uuid, got %v", lrCustomDetail.Nats)
+	}
+	nat := (*lrCustomDetail.Nats)[0]
+	if nat.Type != api.DnatAndSnat || nat.ExternalIp != "172.16.1.100" || nat.LogicalIp != "10.100.0.10" {
+		t.Errorf("unexpected NAT rule: %+v", nat)
+	}
+	// Check related NAT gets a readable name
+	foundNatRel := false
+	for _, rel := range *lrCustomDetail.Related {
+		if rel.Type == "NAT" {
+			foundNatRel = true
+			if rel.Name == nil || !strings.Contains(*rel.Name, "172.16.1.100") {
+				t.Errorf("expected readable NAT name in related objects, got %v", rel.Name)
+			}
+		}
+	}
+	if !foundNatRel {
+		t.Errorf("expected NAT related object on lr-custom-uuid")
 	}
 
 	// 2. LS detail
