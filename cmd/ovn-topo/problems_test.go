@@ -66,3 +66,49 @@ func TestNATReturnPathProblem(t *testing.T) {
 		t.Errorf("a src-ip route to the gateway must clear the warning")
 	}
 }
+
+// TestSharedHostnameFlagsOnlyTheStaleRow: hv-01's chassis is named by the
+// node annotation; a second row with the same hostname is the suspect.
+func TestSharedHostnameFlagsOnlyTheStaleRow(t *testing.T) {
+	m := labModel(t)
+	for _, p := range m.problems() {
+		if p.n.kind == kChassis {
+			t.Errorf("the lab's chassis are each named by their node; got %q on %s", p.reason, p.n.name)
+		}
+	}
+
+	live := ""
+	for i, g := range m.chassisNodes {
+		props := map[string]interface{}{}
+		for k, v := range *g.Properties {
+			props[k] = v
+		}
+		if pstr(props, "hostname") == "hv-01" {
+			live = pstr(props, "name")
+			props["hostnameShared"], props["hostnameSharedWith"] = 2.0, []interface{}{"stale-hv-01"}
+			m.chassisNodes[i].Properties = &props
+		}
+	}
+	stale := map[string]interface{}{"name": "stale-hv-01", "hostname": "hv-01", "nodeName": "hv-01", "nodeMatch": "hostname",
+		"hostnameShared": 2.0, "hostnameSharedWith": []interface{}{live}}
+	m.chassisNodes = append(m.chassisNodes, api.GraphNode{Id: "chassis:stale-hv-01", Name: "hv-01", Type: api.GraphNodeTypeChassis, Properties: &stale})
+	m.rebuildTree()
+
+	var flagged []string
+	for _, p := range m.problems() {
+		if p.n.kind == kChassis {
+			flagged = append(flagged, p.n.id+": "+p.reason)
+		}
+	}
+	want := "chassis:stale-hv-01: possibly stale: node hv-01's chassis is " + live
+	if len(flagged) != 1 || flagged[0] != want {
+		t.Errorf("only the stale row must be flagged:\n got %q\nwant %q", flagged, want)
+	}
+	if !refTo(m.tree.byID["chassis:"+live], "same hostname", "chassis:stale-hv-01") {
+		t.Errorf("the live chassis must link to the stale row")
+	}
+	gw := selectRow(t, expandAll(m), kLRP, "vpc-onewater-external").selectedXNode()
+	if !refTo(gw, "gateway", "chassis:"+live) || refTo(gw, "gateway", "chassis:stale-hv-01") {
+		t.Errorf("the gateway must stay on the live chassis, not the stale row sharing its hostname: %v", gw.relations())
+	}
+}

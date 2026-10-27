@@ -62,7 +62,7 @@ Replies to traffic the gateway DNATs must return through it: the router needs a 
 
 ## Chassis
 
-A chassis is one `ovn-controller`, identified by its host's OVS system-id. It claims ports and builds Geneve tunnels to the other chassis. It is normally one per node: Kube-OVN names it in the node annotation `ovn.kubernetes.io/chassis`, ovn-kubernetes in `k8s.ovn.org/node-chassis-id`. `Chassis.hostname` is informational only. The pane shows which rule matched a node, and flags a hostname-only match or a stale chassis left by a reinstall. An interconnect chassis is not a host of this cluster.
+A chassis is one `ovn-controller`, identified by its host's OVS system-id. It claims ports and builds Geneve tunnels to the other chassis. It is normally one per node: Kube-OVN names it in the node annotation `ovn.kubernetes.io/chassis`, ovn-kubernetes in `k8s.ovn.org/node-chassis-id`. `Chassis.hostname` is informational only. The pane shows which rule matched a node. When two rows share a hostname, the one the node's annotation names is the live `ovn-controller`; the other is likely a stale row left by a reinstall, and that is the one Problems lists. An interconnect chassis is not a host of this cluster.
 
 ## VPC
 

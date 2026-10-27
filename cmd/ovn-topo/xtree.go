@@ -150,7 +150,9 @@ func (m *model) rebuildTree() {
 		chassis = append(chassis, n)
 		for _, a := range []string{g.Id, strings.TrimPrefix(g.Id, graph.PrefixChassis), g.Name, host,
 			pstr(p, "chassis"), pstr(p, "hostname"), pstr(p, "nodeName"), pstr(p, "uuid")} {
-			if a != "" {
+			// A hostname or node name shared with a stale row stays with the
+			// chassis the node's annotation names.
+			if prev := alias[a]; a != "" && (prev == nil || !authoritative(prev) || authoritative(n)) {
 				alias[a] = n
 			}
 		}
@@ -298,6 +300,7 @@ func (m *model) rebuildTree() {
 	}
 
 	linkNATGateways(t)
+	linkSameHostname(t)
 
 	// --- VPCs and the vpc-xray groups
 	var vpcs []*xnode

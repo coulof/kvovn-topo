@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/ovn-topology/pkg/ovsdb/sbmodel"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
@@ -380,5 +381,34 @@ func TestGoldenFiles(t *testing.T) {
 				t.Errorf("output does not match golden file %s. Run with -update to regenerate.", tc.filename)
 			}
 		})
+	}
+}
+
+// TestChassisHostnameSharedWith: a second chassis row with node-1's hostname
+// (a reinstall leaves one behind) is named on both rows.
+func TestChassisHostnameSharedWith(t *testing.T) {
+	snap := LoadTestSnapshot(t)
+	snap.Chassis["stale-node-1"] = &sbmodel.Chassis{UUID: "stale-uuid", Name: "stale-node-1", Hostname: "node-1"}
+	got := map[string][]interface{}{}
+	for _, n := range snap.BuildChassisView("", 0).Nodes {
+		p := *n.Properties
+		with, _ := p["hostnameSharedWith"].([]string)
+		var as []interface{}
+		for _, w := range with {
+			as = append(as, w)
+		}
+		got[n.Id] = as
+		if p["hostnameShared"] != len(with)+1 {
+			t.Errorf("%s: hostnameShared %v disagrees with %v", n.Id, p["hostnameShared"], with)
+		}
+	}
+	if w := got[PrefixChassis+"chassis-node-1"]; len(w) != 1 || w[0] != "stale-node-1" {
+		t.Errorf("chassis-node-1 shares with %v, want [stale-node-1]", w)
+	}
+	if w := got[PrefixChassis+"stale-node-1"]; len(w) != 1 || w[0] != "chassis-node-1" {
+		t.Errorf("stale-node-1 shares with %v, want [chassis-node-1]", w)
+	}
+	if w := got[PrefixChassis+"chassis-node-2"]; len(w) != 0 {
+		t.Errorf("chassis-node-2 shares with nobody, got %v", w)
 	}
 }

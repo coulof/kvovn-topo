@@ -443,11 +443,16 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 		chassisID := PrefixChassis + ch.Name
 		nodeName, nodeMatch := s.NodeMapper.MatchChassis(ch.Hostname, ch.Name)
 		hostnameShared := 0
+		sharedWith := []string{} // the other rows with this hostname, by name
 		for _, other := range s.Chassis {
 			if other.Hostname == ch.Hostname {
 				hostnameShared++
+				if other.Name != ch.Name {
+					sharedWith = append(sharedWith, other.Name)
+				}
 			}
 		}
+		sort.Strings(sharedWith)
 
 		// Count bindings
 		bindingCount := 0
@@ -468,15 +473,16 @@ func (s *Snapshot) BuildChassisView(focus string, depth int) *api.GraphResponse 
 		}
 
 		props := map[string]interface{}{
-			"hostname":       ch.Hostname,
-			"name":           ch.Name, // the OVS system-id: the chassis identity
-			"nodeName":       nodeName,
-			"nodeMatch":      nodeMatch,
-			"hostnameShared": hostnameShared,
-			"isInterconn":    ch.OtherConfig["is-interconn"] == "true",
-			"bindingCount":   bindingCount,
-			"encaps":         encapList,
-			"uuid":           ch.UUID,
+			"hostname":           ch.Hostname,
+			"name":               ch.Name, // the OVS system-id: the chassis identity
+			"nodeName":           nodeName,
+			"nodeMatch":          nodeMatch,
+			"hostnameShared":     hostnameShared,
+			"hostnameSharedWith": sharedWith,
+			"isInterconn":        ch.OtherConfig["is-interconn"] == "true",
+			"bindingCount":       bindingCount,
+			"encaps":             encapList,
+			"uuid":               ch.UUID,
 		}
 
 		nodes = append(nodes, api.GraphNode{

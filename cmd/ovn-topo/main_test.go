@@ -774,17 +774,32 @@ func TestChassisPaneExplainsNodeMapping(t *testing.T) {
 		t.Errorf("a cleanly mapped chassis must not warn:\n%s", view)
 	}
 
-	// hostname-only match, duplicate hostname and an interconnect chassis are flagged
+	// The node's own chassis: another row with its hostname is mentioned, not warned about.
 	ch := m.selectedXNode()
+	own := map[string]interface{}{}
+	for k, v := range *ch.gn.Properties {
+		own[k] = v
+	}
+	own["hostnameSharedWith"] = []interface{}{"stale-node-1"}
+	saved := ch.gn.Properties
+	ch.gn.Properties = &own
+	view = ansi.Strip(m.View())
+	if !strings.Contains(view, "Same hostname  stale-node-1 (stale row?)") || strings.Contains(view, "⚠") {
+		t.Errorf("the node's own chassis must mention the other row without warning:\n%s", view)
+	}
+	ch.gn.Properties = saved
+
+	// hostname-only match, a shared hostname on that row and an interconnect chassis are flagged
 	p := *ch.gn.Properties
 	cp := map[string]interface{}{}
 	for k, v := range p {
 		cp[k] = v
 	}
 	cp["nodeMatch"], cp["hostnameShared"], cp["isInterconn"] = "hostname", 2.0, true
+	cp["hostnameSharedWith"] = []interface{}{"stale-node-1"}
 	ch.gn.Properties = &cp
 	view = ansi.Strip(m.View())
-	for _, want := range []string{"matched by hostname only", "2 chassis share hostname node-1", "interconnect chassis"} {
+	for _, want := range []string{"matched by hostname only", "possibly stale: shares its hostname with stale-node-1", "interconnect chassis"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("expected warning %q:\n%s", want, view)
 		}

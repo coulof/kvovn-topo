@@ -345,8 +345,12 @@ func (m model) detailLines(n *xnode, w int) []string {
 		case "fallback-hostname", "fallback-name":
 			warn = append(warn, "no Kubernetes node matches this chassis")
 		}
-		if c := pint(p, "hostnameShared"); c > 1 {
-			warn = append(warn, fmt.Sprintf("%d chassis share hostname %s — stale chassis after a reinstall?", c, pstr(p, "hostname")))
+		if others := sameHostname(n); len(others) > 0 {
+			if authoritative(n) { // the node's own chassis: the other rows are the suspects
+				out = append(out, kv("Same hostname", st.MutedText.Render(strings.Join(others, ", ")+" (stale row?)")))
+			} else {
+				warn = append(warn, "possibly stale: shares its hostname with "+strings.Join(others, ", "))
+			}
 		}
 		if b, _ := p["isInterconn"].(bool); b {
 			warn = append(warn, "interconnect chassis (OVN-IC): not a host of this cluster")

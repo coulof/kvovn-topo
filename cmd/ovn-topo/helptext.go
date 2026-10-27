@@ -118,7 +118,7 @@ var concepts = map[string]concept{
 		ovn:      "One `ovn-controller`, identified by the host's OVS system-id. It claims ports (Port_Binding) and builds the Geneve tunnels to the other chassis.",
 		kubeOVN:  "Normally one per node. The node annotation `ovn.kubernetes.io/chassis` names it (ovn-kubernetes: `k8s.ovn.org/node-chassis-id`).",
 		read:     "Node and the rule that matched it, encaps, bound ports, and the gateways it holds.",
-		problems: "Matched by hostname only, or a stale chassis left by a reinstall. An interconnect chassis is not a host of this cluster.",
+		problems: "Matched by hostname only. When two rows share a hostname, the one the node's annotation names is live; the other is likely stale (a reinstall). An interconnect chassis is not a host of this cluster.",
 	},
 	"vpc": {
 		title: "VPC", anchor: "vpc",

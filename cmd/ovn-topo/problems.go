@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/ovn-topology/pkg/graph"
 )
 
 const modeProblems mode = "problems"
@@ -38,14 +39,35 @@ func (m model) problems() []problem {
 				add(hWarn, n, "port disabled (enabled=false)")
 			}
 		case kChassis:
+			shared := len(sameHostname(n)) > 0
 			switch pstr(p, "nodeMatch") {
 			case "hostname":
+				if shared {
+					break // the stale-row line below says more
+				}
 				add(hWarn, n, "matched to a node by hostname only, not by ovn.kubernetes.io/chassis")
 			case "fallback-hostname", "fallback-name":
 				add(hWarn, n, "no Kubernetes node matches this chassis")
 			}
-			if c := pint(p, "hostnameShared"); c > 1 {
-				add(hWarn, n, fmt.Sprintf("%d chassis share hostname %s (stale chassis after a reinstall?)", c, pstr(p, "hostname")))
+			// A shared hostname is only suspect on a row the node does not name.
+			if others := sameHostname(n); len(others) > 0 && !authoritative(n) {
+				live := ""
+				for _, o := range others {
+					if c := m.tree.byID[graph.PrefixChassis+o]; c != nil && authoritative(c) {
+						live = o
+					}
+				}
+				sev, reason := hWarn, fmt.Sprintf("possibly stale: hostname %s is also chassis %s", pstr(p, "hostname"), strings.Join(others, ", "))
+				if live != "" {
+					reason = fmt.Sprintf("possibly stale: node %s's chassis is %s", firstNonEmpty(pstr(p, "nodeName"), pstr(p, "hostname")), live)
+				}
+				switch {
+				case n.badge == "gateway":
+					sev, reason = hBad, reason+"; this row still holds a gateway"
+				case len(n.children) > 0:
+					sev, reason = hBad, reason+fmt.Sprintf("; this row still holds %s", plural(len(n.children), "port"))
+				}
+				add(sev, n, reason)
 			}
 		case kLR:
 			gws, _ := p["gateways"].([]interface{})

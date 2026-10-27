@@ -316,7 +316,8 @@ Shapes and colours both carry the state, so it stays readable without colour.
 | Switch port unbound (no chassis claimed it) | ✗ |
 | Gateway port with no active chassis (the VPC has no egress) | ✗ |
 | Switch port disabled | ! |
-| Chassis matched by hostname only, or by no node; hostname shared by several chassis | ! |
+| Chassis matched by hostname only, or by no node | ! |
+| Chassis row that shares its hostname with the node's own chassis (the one its annotation names): possibly stale; ✗ while it still holds ports or a gateway. The node's own chassis is never listed for this | ! / ✗ |
 | Router with a NAT gateway: `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway (heuristic) | ! |
 
 Opening the view fetches the routes of every router with a NAT gateway, again after each revision.
