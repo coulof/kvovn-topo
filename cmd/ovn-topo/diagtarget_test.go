@@ -88,11 +88,6 @@ func TestDiagTargetIsAlwaysTheSelection(t *testing.T) {
 			check(string(m.mode)+"/"+r.key, r.n, m.resolveDiagTarget(m.selectedXNode()))
 		}
 	}
-	m := press(base, "4")
-	for i, r := range m.portRows() {
-		m.pcur = i
-		check("ports/"+r.conn.PortName, m.selectedXNode(), m.resolveDiagTarget(m.selectedXNode()))
-	}
 }
 
 // newClusterDiagModel has one OVS and one CNI pod per node, so tests can see which node an action ran on.

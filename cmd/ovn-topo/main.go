@@ -74,9 +74,6 @@ type model struct {
 	cmdEdit    bool
 	cmd        string
 	desc       *descState
-	pcur, poff int
-	psort      int
-	pdesc      bool
 	pinspect   bool
 	zone       string // ovn-kubernetes zone (node) on screen, from --zone or a zone-<node> capture
 

@@ -13,7 +13,6 @@ const (
 	modeVPC      mode = "vpc"
 	modeChassis  mode = "chassis"
 	modeWorkload mode = "workload"
-	modePorts    mode = "ports"
 )
 
 // row is one visible line of an xray tree. key is the path of IDs from the
@@ -77,7 +76,7 @@ func visibleRefs(t *xtree, n *xnode, parent *xnode) []xref {
 func (m *model) rebuildRows() {
 	sel := m.selKey()
 	m.rows = m.rows[:0]
-	if m.tree == nil || m.mode == modePorts {
+	if m.tree == nil {
 		return
 	}
 	memo := map[*xnode]bool{}
@@ -166,14 +165,8 @@ func (m *model) rebuildRows() {
 	m.offset = window(m.cursor, m.offset, len(m.rows), m.bodyH())
 }
 
-// selKey identifies the selection in the current mode (row key, or LRP id in :ports).
+// selKey identifies the selection in the current mode.
 func (m model) selKey() string {
-	if m.mode == modePorts {
-		if rows := m.portRows(); len(rows) > 0 {
-			return lrpID(rows[min(m.pcur, len(rows)-1)].conn)
-		}
-		return ""
-	}
 	if m.cursor < len(m.rows) {
 		return m.rows[m.cursor].key
 	}
@@ -181,7 +174,7 @@ func (m model) selKey() string {
 }
 
 func (m model) selectedRow() *row {
-	if m.mode == modePorts || len(m.rows) == 0 {
+	if len(m.rows) == 0 {
 		return nil
 	}
 	return &m.rows[min(m.cursor, len(m.rows)-1)]
@@ -189,12 +182,6 @@ func (m model) selectedRow() *row {
 
 // selectedXNode is the object the user is pointing at (a ref row points at its target).
 func (m model) selectedXNode() *xnode {
-	if m.mode == modePorts {
-		if rows := m.portRows(); len(rows) > 0 && m.tree != nil {
-			return m.tree.byID[lrpID(rows[min(m.pcur, len(rows)-1)].conn)]
-		}
-		return nil
-	}
 	if r := m.selectedRow(); r != nil {
 		return r.n
 	}
@@ -263,14 +250,6 @@ func (m *model) back() {
 	m.history = m.history[:len(m.history)-1]
 	m.mode = h.mode
 	m.rebuildRows()
-	if m.mode == modePorts {
-		for i, r := range m.portRows() {
-			if lrpID(r.conn) == h.key {
-				m.pcur = i
-			}
-		}
-		return
-	}
 	for i, r := range m.rows {
 		if r.key == h.key {
 			m.cursor = i

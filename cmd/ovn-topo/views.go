@@ -24,7 +24,7 @@ func (m model) headerH() int {
 	if m.height < 18 {
 		return 1
 	}
-	return 5
+	return 2
 }
 
 // areaH is the height of the main box (borders included).
@@ -58,8 +58,6 @@ func (m model) View() string {
 		out = append(out, m.describeView()...)
 	case m.graphResp == nil:
 		out = append(out, m.stateView()...)
-	case m.mode == modePorts:
-		out = append(out, m.portsView(m.areaH())...)
 	default:
 		out = append(out, m.treeView()...)
 	}
@@ -95,88 +93,55 @@ func (m model) diagLabel() string {
 	return st.DiagBadgeDisabled.Render("DIAG") + " " + st.Warn.Render(firstNonEmpty(m.diagReason, "probing…"))
 }
 
+// hotkeys are the keys hinted in the header for the current screen; ? has them all.
 func (m model) hotkeys() [][2]string {
-	keys := [][2]string{{"<:>", "command"}, {"</>", "filter"}, {"<1-4>", "vpc/ch/wl/ports"}}
-	if m.mode == modePorts {
-		keys = append(keys, [2]string{"<s/S>", "sort"}, [2]string{"<i>", "inspector"}, [2]string{"<enter>", "open in xray"})
-	} else {
-		keys = append(keys, [2]string{"<h/l>", "fold/unfold"}, [2]string{"<enter>", "toggle/goto"}, [2]string{"<e/E>", "expand/fold"},
-			[2]string{"<i>", "details pane"})
-	}
-	keys = append(keys, [2]string{"<d>", "describe"}, [2]string{"<y>", "raw"}, [2]string{"<b>", "back"})
+	keys := [][2]string{{"1-3", "views"}, {"/", "filter"}, {"i", "pane"}, {"d", "describe"}}
 	if m.diagMode {
-		keys = append(keys, [2]string{"<x>", "diagnostics"}, [2]string{"<!>", "run inspect"})
+		keys = append(keys, [2]string{"x", "diag"}, [2]string{"!", "run"})
 	}
-	keys = append(keys, [2]string{"<r>", "refresh"}, [2]string{"<L>", "live on/off"}, [2]string{"<t>", "theme"},
-		[2]string{"<?>", "help"}, [2]string{"<q>", "quit"})
-	return keys
+	return append(keys, [2]string{"b", "back"}, [2]string{"?", "help"}, [2]string{"q", "quit"})
 }
 
-var logo = []string{
-	` ___ _ _ _ _    _____ ___  ___  ___ `,
-	`/ _ \ | | ' \  |_   _/ _ \| _ \/ _ \`,
-	`\___/\_/|_||_|   |_| \___/|  _/\___/`,
-	`                          |_|       `,
-	``,
-}
-
+// header is one status line (source, revision, CNI, size, diag) and one line
+// of key hints; a single compact line on short terminals.
 func (m model) header() []string {
 	st := m.styles
 	daemon := firstNonEmpty(m.via, m.daemonURL)
 	if m.fixturePath != "" {
 		daemon = "fixture: " + m.fixturePath
 	}
-	rev, topo := "—", "loading…"
-	if m.graphResp != nil {
-		rev = fmt.Sprintf("%d", m.graphResp.Revision)
+	clip := func(s string) string { // before the first WindowSizeMsg the width is unknown
+		if m.w() <= 0 {
+			return s
+		}
+		return fit(s, m.w())
 	}
+	rev := "rev —"
+	if m.graphResp != nil {
+		rev = fmt.Sprintf("rev %d", m.graphResp.Revision)
+	}
+	if m.height < 18 {
+		return []string{clip(" " + st.Label.Render("ovn-topo") + " " + st.MutedText.Render(daemon) + "  " + rev + " " + m.liveLabel() + "  " + st.MutedText.Render("? help"))}
+	}
+	sep := st.Faint.Render(" · ")
+	// Most useful first: a narrow terminal cuts the source path, not the state.
+	parts := []string{st.Label.Render("ovn-topo"), rev + " " + m.liveLabel(), st.Value.Render(m.cniLabel())}
 	if m.tree != nil {
 		s := m.tree.stats
-		topo = fmt.Sprintf("%d VPC · %d LS · %d LSP · %d chassis", s.vpcs, s.switches, s.ports, s.chassis)
+		parts = append(parts, st.MutedText.Render(fmt.Sprintf("%d VPC %d LS %d LSP %d ch", s.vpcs, s.switches, s.ports, s.chassis)))
 	}
-	if m.height < 18 { // compact single-line header
-		return []string{" " + st.Label.Render("ovn-topo") + " " + st.MutedText.Render(daemon) + "  rev " + rev + " " + m.liveLabel() + "  " + st.MutedText.Render("? help")}
+	parts = append(parts, "diag "+m.diagLabel(), st.MutedText.Render(daemon))
+	var hints []string
+	for _, k := range m.hotkeys() {
+		hints = append(hints, st.Key.Render(k[0])+" "+st.MutedText.Render(k[1]))
 	}
-	info := [][2]string{
-		{"Daemon:", daemon},
-		{"Revision:", rev + "  " + m.liveLabel()},
-		{"Topology:", topo},
-		{"Diag:", m.diagLabel()},
-		{"CNI:", m.cniLabel()}, // t flashes the theme name
-	}
-	const infoW = 46
-	keys := m.hotkeys()
-	cols := max((m.w()-infoW-2)/24, 1)
-	logoFits := m.w() >= infoW+2+cols*24+38
-	if logoFits {
-		cols = max((m.w()-infoW-2-38)/24, 1)
-	}
-	var out []string
-	for i := 0; i < 5; i++ {
-		line := " " + st.Label.Render(pad(info[i][0], 10)) + fit(st.Value.Render(info[i][1]), infoW-11)
-		line = pad(line, infoW) + "  "
-		for c := 0; c < cols; c++ {
-			idx := c*5 + i
-			if idx < len(keys) {
-				line += st.Key.Render(pad(keys[idx][0], 8)) + st.MutedText.Render(pad(keys[idx][1], 16))
-			}
-		}
-		if logoFits {
-			line = pad(line, m.w()-38) + st.Label.Render(logo[i])
-		}
-		out = append(out, line)
-	}
-	return out
+	return []string{clip(" " + strings.Join(parts, sep)), clip(" " + strings.Join(hints, "  "))}
 }
 
 func (m model) crumbs() string {
 	st := m.styles
 	pill := func(s string, style lipgloss.Style) string { return style.Render(" " + s + " ") }
-	first := "xray"
-	if m.mode == modePorts {
-		first = "table"
-	}
-	c := pill(first, st.Pill) + " " + pill(string(m.mode), st.PillAlt)
+	c := pill("xray", st.Pill) + " " + pill(string(m.mode), st.PillAlt)
 	switch {
 	case m.diagModal:
 		c += " " + pill("diagnostics", st.DiagBadgeActive)
@@ -380,10 +345,9 @@ func (m model) helpView() []string {
 		"   1  :xray vpc       VPC → LR → LRP · LS → LSP",
 		"   2  :xray chassis   chassis → bound ports",
 		"   3  :xray workload  namespace → VM/Pod → NICs",
-		"   4  :ports          router-port matrix (table)",
 		"",
 		" " + b("INSPECT"),
-		"   i  details pane (xray) / inspector (:ports)",
+		"   i  details pane",
 		"   d  describe (/node detail, external_ids)",
 		"   y  raw columns",
 		"   x  Tier 1 diagnostics (--diag, ADR-0001)",
@@ -395,9 +359,8 @@ func (m model) helpView() []string {
 		"   space     toggle          e/E    expand/fold all",
 		"   enter     toggle · on a ⇢ relation: jump there",
 		"   b         back after a jump",
-		" " + b("FIND & TABLE"),
+		" " + b("FIND"),
 		"   /text     filter (keeps ancestors) · esc clears",
-		"   s / S     sort column / reverse",
 		"   r refresh · L live on/off · t theme · q quit",
 	}
 	var l []string
@@ -424,7 +387,7 @@ func (m model) helpView() []string {
 	return box(l, m.w(), m.areaH(), st.Label.Render("Help"), st.Border)
 }
 
-var commands = []string{"xray vpc", "xray chassis", "xray workload", "ports", "lrp", "matrix", "vpc", "chassis", "workload", "theme", "quit"}
+var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "theme", "quit"}
 
 func suggest(prefix string) string {
 	if prefix == "" {

@@ -1,6 +1,6 @@
 # OVN Topology TUI Guide (`ovn-topo`)
 
-`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **xray trees** (objects and what they contain) and a **`:ports` table** (the router-port matrix), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
+`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **xray trees** (objects and what they contain), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
 
 ```bash
 ovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
@@ -36,11 +36,8 @@ The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.
 ## 1. Screen layout
 
 ```text
- Daemon:   service proxy kube-system/ovn-top…  <:>     command         <e/E>   expand/fold     <r>  refresh
- Revision: 1842  ● live                        </>     filter          <i>     details pane    <L>  live on/off
- Topology: 2 VPC · 4 LS · 412 LSP · 3 chassis  <1-4>   vpc/ch/wl/ports <d>     describe        <t>  theme
- Diag:     DIAG ready                          <h/l>   fold/unfold     <y>     raw             <?>  help
- CNI:      Kube-OVN · central NB/SB            <enter> toggle/goto     <b>     back            <q>  quit
+ ovn-topo · rev 1842 ● live · Kube-OVN · central NB/SB · 2 VPC 4 LS 412 LSP 3 ch · diag DIAG ready · service…
+ 1-3 views  / filter  i pane  d describe  x diag  ! run  b back  ? help  q quit
 ┌──────────────────────── Xray(vpc)[18] ─────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
 │ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
 │ ├─ ▾ ● VPC  default  1 router · 1 switch [default]             ││   ports 3 · routes 1 · nat 0 · pol 1 · lb 1  │
@@ -57,19 +54,13 @@ The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.
  xray  vpc  lr:lr-default-uuid
 ```
 
-- **Header (5 rows):**
-  - how the daemon is reached: `service proxy <namespace>/<service>:<port>`, `direct <url>` with `--daemon-url`, or `fixture: …`;
-  - revision and live state: `● live` over SSE, `◌ polling` when the stream is unavailable, `‖ paused`, `○ offline fixture`;
-  - topology totals, diagnostics state, theme;
-  - the hotkeys of the current screen.
-
-  Terminals shorter than 18 rows get a one-line header.
-- **Main box:** the title shows the screen (`Xray(vpc)`, `Ports(lrp)`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
+- **Header (2 rows).** The first is the state, most useful first so a narrow terminal cuts the end: revision and live state (`● live` over SSE, `◌ polling`, `‖ paused`, `○ offline fixture`), the CNI, topology totals, diagnostics state, and how the daemon is reached (`service proxy <ns>/<svc>:<port>`, `direct <url>`, `fixture: …`). The second hints the main keys; `?` has them all. Terminals shorter than 18 rows get one line.
+- **Main box:** the title shows the screen (`Xray(vpc)`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
 - **Details pane** (right side, on terminals at least 100 columns wide): explains the selected object and how it interconnects. `i` hides or shows it.
-- **Crumbs (bottom row):** `xray`/`table` › current root › selected object ID, and on the right any message (jump targets, errors, refresh failures).
+- **Crumbs (bottom row):** `xray` › current root › selected object ID, and on the right any message (jump targets, errors, refresh failures).
 
 Every frame is laid out to exactly the terminal size: nothing scrolls off the top, and lists scroll to keep the cursor visible.
-- Tree rows and table cells that do not fit are cut with `…`; the details pane carries the full information.
+- Tree rows that do not fit are cut with `…`; the details pane carries the full information.
 - Describe and raw views wrap long values instead.
 
 ---
@@ -142,16 +133,16 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 ## UC6. How does a VPC reach the outside? (gateway, EIP, underlay)
 
-**Keys:** `4` (`:ports`), then `1` → *External networks*.
+**Keys:** `1` → a VPC → its router → the gateway port, then *External networks*.
 
-- In `:ports`, a centralized gateway row shows `active <chassis>`. The inspector says **Centralized**: traffic leaves through the chassis that holds the `cr-<port>` redirect port.
-- A subnet gateway row is **Distributed**: every chassis routes it locally.
+- A centralized gateway port carries `[GW active <chassis>]`. Its pane says **Centralized**: traffic leaves through the chassis that holds the `cr-<port>` redirect port, and *Routes out this port* shows the default route that uses it.
+- A subnet gateway port is **Distributed**: every chassis routes it locally.
 - *External networks* lists the provider network (the physical underlay) with its `localnet from ⇢` switch.
 
 | TUI | Harvester |
 |---|---|
-| ![UC6a — centralized gateway in :ports](images/tui/uc06-ports-gateway.png) | ![UC6a — VM network / provider config](images/harvester/uc06-vm-network-config.png) |
-| `4`, gateway row + inspector | *Suggested:* Networks › Virtual Machine Networks |
+| ![UC6a — centralized gateway port](images/tui/uc06-gateway-port.png) | ![UC6a — VM network / provider config](images/harvester/uc06-vm-network-config.png) |
+| `1`, gateway LRP selected, details pane | *Suggested:* Networks › Virtual Machine Networks |
 | ![UC6b — provider network (localnet)](images/tui/uc06-external-network.png) | ![UC6b — cluster network / VLAN uplink](images/harvester/uc06-cluster-network.png) |
 | `1`, External networks unfolded | *Suggested:* Networks › Cluster Network Configuration |
 
@@ -308,22 +299,6 @@ Every pane ends with the Kubernetes identity and the object's relations (`label 
 
 Shapes and colours both carry the state, so it stays readable without colour.
 
-## 3. Router-port table — `4` / `:ports`
-
-The Port Matrix as a resource table: one row per logical router port, including gateway ports known only from the router's properties.
-
-- **Columns:**
-  - VPC, router port, networks;
-  - peer switch (`*` = shared by more than one router);
-  - MAC;
-  - gateway (`distributed` or `active <chassis>`);
-  - role (`subnet gateway`, `node transit (join)`, `interconnect`, `external gateway`).
-
-  On narrow terminals MAC, then ROLE, then NETWORKS are hidden instead of wrapping.
-- **`s` / `S`** cycles the sort column / reverses it (the header shows `↑`/`↓`). **`/`** filters across all columns.
-- **Inspector (bottom):** router and VPC, peer switch and its summary, peer LSP, routers on that switch, gateway, the routing mode (distributed vs centralized) and a one-line explanation of the port's role. It docks when the terminal is tall enough; **`i`** toggles it.
-- **`Enter`** opens the port in the VPC xray, and **`b`** comes back to the same table row. **`d`** / **`y`** describe it.
-
 ## 4. Describe & raw — `d` / `y`
 
 - **`d` (describe):** everything known about the selected object:
@@ -418,10 +393,9 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 | Where | Keys |
 |---|---|
-| Everywhere | `1`–`4` switch view · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
+| Everywhere | `1`–`3` switch view · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
 | Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
 | Xray trees | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
-| `:ports` | `j`/`k` · `g`/`G` · `s`/`S` sort / reverse · `i` inspector · `Enter` open in xray · `d`/`y` describe |
 | Describe / raw | `y` toggle raw · `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc` back |
 | Diagnostics menu | `1`–`6` actions · `c` choose chassis (distributed port) · `Esc`/`x` close |
 | Trace picker | type to search or enter an IP · `Tab`/`Shift+Tab` category · `Ctrl+P`, `F1`–`F5` protocol · `↑`/`↓` · `Enter` trace · `Esc` back |

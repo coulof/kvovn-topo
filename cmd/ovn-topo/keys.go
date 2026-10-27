@@ -60,7 +60,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.filter += keyText(k)
 			}
 		}
-		m.pcur, m.poff, m.offset = 0, 0, 0
+		m.offset = 0
 		m.rebuildRows()
 		return m, nil
 	}
@@ -146,15 +146,6 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.runCmd("chassis")
 	case "3":
 		return m.runCmd("workload")
-	case "4":
-		return m.runCmd("ports")
-	}
-
-	if m.mode == modePorts {
-		if res, cmd, ok := m.portKey(s); ok {
-			return res, cmd
-		}
-		return m, nil
 	}
 	return m.treeKey(s)
 }
@@ -245,9 +236,6 @@ func (m model) runCmd(c string) (tea.Model, tea.Cmd) {
 		m.mode = modeChassis
 	case c == "workload" || c == "wl" || c == "ns" || c == "vm" || c == "pod" || c == "pods":
 		m.mode = modeWorkload
-	case c == "ports" || c == "port" || c == "lrp" || c == "matrix":
-		m.mode = modePorts
-		m.pcur, m.poff = 0, 0
 	case c == "q" || c == "quit":
 		return m, tea.Quit
 	case strings.HasPrefix(c, "theme"):

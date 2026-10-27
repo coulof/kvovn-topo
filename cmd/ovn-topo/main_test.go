@@ -291,41 +291,6 @@ func TestFilterKeepsAncestors(t *testing.T) {
 	}
 }
 
-func TestPortsTable(t *testing.T) {
-	m := press(loaded(t, 140, 50, false), "4")
-	view := m.View()
-	for _, want := range []string{"Ports(lrp)", "ROUTER PORT (LRP)", "lrp-default", "join *", "Inspector", "Routing"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("expected %q in :ports:\n%s", want, view)
-		}
-	}
-	rows := m.portRows()
-	if len(rows) != len(m.portList)+1 {
-		t.Errorf("expected router-peer ports plus the gateway-only lrp-gw, got %d rows", len(rows))
-	}
-	m = press(m, "s") // sort by port name
-	rows = m.portRows()
-	if !sort.SliceIsSorted(rows, func(i, j int) bool { return rows[i].conn.PortName < rows[j].conn.PortName }) {
-		t.Errorf("expected rows sorted by port name after s")
-	}
-	for i, r := range rows {
-		if r.conn.PortName == "lrp-join-def" {
-			m.pcur = i
-		}
-	}
-	if !strings.Contains(m.View(), "Interconnect: 'join' is attached to 2 routers") {
-		t.Errorf("expected the inspector to explain the shared join switch")
-	}
-	m = press(m, "enter")
-	if n := m.selectedXNode(); m.mode != modeVPC || n == nil || n.name != "lrp-join-def" {
-		t.Fatalf("enter must open the port in the vpc xray, got mode=%s node=%+v", m.mode, n)
-	}
-	m = press(m, "b")
-	if m.mode != modePorts || m.portRows()[m.pcur].conn.PortName != "lrp-join-def" {
-		t.Errorf("b must return to the same table row")
-	}
-}
-
 func TestDescribeLoadsNodeDetail(t *testing.T) {
 	m := selectRow(t, loaded(t, 140, 50, false), kLSP, "app-pod-1.default")
 	r, cmd := m.update(keyMsg("d"))
@@ -404,8 +369,8 @@ func newDiagModel(t *testing.T) model {
 func TestDiagnosticsMode(t *testing.T) {
 	m := newDiagModel(t)
 	view := m.View()
-	if !strings.Contains(view, "DIAG") || !strings.Contains(view, "ready") || !strings.Contains(view, "<x>") {
-		t.Errorf("expected DIAG ready badge and <x> hotkey in header:\n%s", view)
+	if !strings.Contains(view, "DIAG") || !strings.Contains(view, "ready") || !strings.Contains(view, "x diag") || !strings.Contains(view, "! run") {
+		t.Errorf("expected DIAG ready badge and the x/! hints in the header:\n%s", view)
 	}
 
 	// Groups are not diagnosable: x explains instead of opening an empty modal.
