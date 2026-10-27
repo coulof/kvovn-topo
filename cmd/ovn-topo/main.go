@@ -393,8 +393,10 @@ func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewNa
 	var err error
 
 	if fixturePath != "" {
-		snap := graph.LoadTestSnapshot(nil)
-		resp, err = snap.BuildGraph(viewName, focusID, 1, 1, 100)
+		var snap *graph.Snapshot
+		if snap, err = fixtureSnapshot(fixturePath); err == nil {
+			resp, err = snap.BuildGraph(viewName, focusID, 1, 1, 100)
+		}
 	} else {
 		q := url.Values{"view": {viewName}}
 		if focusID != "" {
@@ -433,6 +435,7 @@ func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewNa
 func main() {
 	var daemonURL string
 	var useFixture bool
+	var fixtureDir string
 	var themeName string
 	var diagMode bool
 	var kubeconfig string
@@ -448,6 +451,7 @@ func main() {
 	flag.StringVar(&service, "service", kubeproxy.Default.Name, "name of the ovn-topologyd Service; setting it (or --namespace) skips discovery")
 	flag.StringVar(&port, "port", "", "ovn-topologyd Service port name or number (default: the port named http)")
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
+	flag.StringVar(&fixtureDir, "fixture-dir", "", "Explore a captured scenario offline (testdata/scenarios/<name>, or one zone-<node> of an ovn-kubernetes capture)")
 	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
 	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
 	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
@@ -469,7 +473,15 @@ func main() {
 
 	fixturePath := ""
 	if useFixture {
-		fixturePath = "dev-fixture"
+		fixturePath = devFixture
+	}
+	if fixtureDir != "" {
+		// Load once up front so a bad directory fails here, not inside the TUI.
+		if _, err := fixtureSnapshot(fixtureDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		fixturePath = fixtureDir
 	}
 
 	// Without --daemon-url, reach the in-cluster daemon the supported way: the
@@ -485,7 +497,7 @@ func main() {
 			kubeproxy.ServiceRef{Namespace: namespace, Name: service, Port: port}, pinned)
 		cancel()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\nUse --daemon-url for a daemon you can reach directly, or --fixture to explore offline.\n", err)
+			fmt.Fprintf(os.Stderr, "Error: %v\nUse --daemon-url for a daemon you can reach directly, or --fixture / --fixture-dir to explore offline.\n", err)
 			os.Exit(1)
 		}
 		daemonURL, client, via = conn.BaseURL, conn.Client, "service proxy "+conn.Service.String()

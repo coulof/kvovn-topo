@@ -18,6 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coulof/ovn-topology/pkg/api"
 	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/ovn-topology/pkg/ovsdb"
 )
 
 // RouterPortConnection represents an L3 interconnection between an LR port and an LS.
@@ -137,8 +138,11 @@ func (m model) fetchGraphCmd() tea.Cmd {
 	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
-			snap := graph.LoadTestSnapshot(nil)
-			resp, err := snap.BuildGraph("l3", "", 1, 1, 100)
+			snap, err := fixtureSnapshot(fixture)
+			var resp *api.GraphResponse
+			if err == nil {
+				resp, err = snap.BuildGraph("l3", "", 1, 1, 100)
+			}
 			if err == nil {
 				err = viaJSON(resp)
 			}
@@ -158,12 +162,27 @@ func (m model) fetchGraphCmd() tea.Cmd {
 	}
 }
 
+// devFixture is the fixturePath of --fixture: the bundled dev dataset.
+const devFixture = "dev-fixture"
+
+// fixtureSnapshot builds the offline snapshot for fixturePath: the bundled dev
+// dataset, or a scenario directory captured by hack/capture-fixtures.sh.
+func fixtureSnapshot(fixturePath string) (*graph.Snapshot, error) {
+	if fixturePath == devFixture {
+		return graph.LoadTestSnapshot(nil), nil
+	}
+	return ovsdb.LoadFixture(fixturePath)
+}
+
 // fetchL2All returns every LSP of a switch, following pagination.
 func fetchL2All(fixture, daemon string, client *http.Client, lsID string) ([]api.GraphNode, error) {
 	var lsps []api.GraphNode
 	var snap *graph.Snapshot
 	if fixture != "" {
-		snap = graph.LoadTestSnapshot(nil)
+		var err error
+		if snap, err = fixtureSnapshot(fixture); err != nil {
+			return nil, err
+		}
 	}
 	for page := 1; ; page++ {
 		var resp *api.GraphResponse
@@ -211,8 +230,11 @@ func (m model) fetchChassisCmd() tea.Cmd {
 	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
-			snap := graph.LoadTestSnapshot(nil)
-			resp, err := snap.BuildGraph("chassis", "", 1, 1, 100)
+			snap, err := fixtureSnapshot(fixture)
+			var resp *api.GraphResponse
+			if err == nil {
+				resp, err = snap.BuildGraph("chassis", "", 1, 1, 100)
+			}
 			if err == nil {
 				err = viaJSON(resp)
 			}
@@ -233,7 +255,11 @@ func (m model) fetchNodeDetailCmd(id string) tea.Cmd {
 	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
 	return func() tea.Msg {
 		if fixture != "" {
-			d, err := graph.LoadTestSnapshot(nil).GetNodeDetail(id)
+			snap, err := fixtureSnapshot(fixture)
+			var d *api.NodeDetail
+			if err == nil {
+				d, err = snap.GetNodeDetail(id)
+			}
 			if err == nil {
 				err = viaJSON(d)
 			}

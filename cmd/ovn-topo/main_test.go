@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -607,6 +608,23 @@ func TestMachineOutput(t *testing.T) {
 	}
 	if err := runMachineOutput("", nil, "dev-fixture", "chassis", "", "yaml"); err != nil {
 		t.Errorf("expected machine output yaml to succeed, got: %v", err)
+	}
+}
+
+func TestFixtureDir(t *testing.T) {
+	dir := filepath.Join("..", "..", "testdata", "scenarios", "hv-01-lab")
+	snap, err := fixtureSnapshot(dir)
+	if err != nil {
+		t.Fatalf("fixtureSnapshot(%s): %v", dir, err)
+	}
+	if len(snap.LogicalRouters) == 0 {
+		t.Errorf("scenario %s loaded no logical routers", dir)
+	}
+	if err := runMachineOutput("", nil, dir, "l3", "", "json"); err != nil {
+		t.Errorf("machine output from --fixture-dir: %v", err)
+	}
+	if _, err := fixtureSnapshot(t.TempDir()); err == nil {
+		t.Errorf("an empty directory must fail to load")
 	}
 }
 
