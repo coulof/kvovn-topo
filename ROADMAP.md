@@ -28,73 +28,57 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M9 | MCP server (T0 tools only) | T0 | AI agents via `ovn-topo mcp` | M5; history tools gated on M8 |
 | Backlog | ACL hit counters, OVN-IC, metrics overlay, logical flow browser, history archival to S3, segmentation audit report, fleet view | mixed | — | — |
 
-## Status and tech-debt register (2026-10-21, refreshed 2026-10-25)
+## Status and tech-debt register (refreshed 2026-10-27)
 
-**Order rule broken.** M2, M3 and M6 were built while the M0 and M1 DoD were still open, and M6 ahead of M4. This is recorded here rather than hidden. **Before M4 starts, the foundation items below take priority.** The M2 and M6 work stays, and new feature work waits.
+**The order rule keeps being broken.** M2, M3 and M6 were built while the M0 and M1 DoD were open, and M6 ahead of M4. The 2026-10-25 review froze feature work behind the foundation pass below. Features landed anyway, each on an explicit request:
+- M9 MCP server (ADR-0003), service-proxy access (`pkg/kubeproxy`), OpenFlow inspection in diag (`92d27f9`);
+- the ovn-kubernetes zone view, `--zone` and `--fixture-dir` (ADR-0005);
+- the M2 router rows (`ee985f3`), the CNI-aware details pane and the `!` Inspect runner (ADR-0004 interim, ADR-0001 amendment).
 
-**2026-10-25 review: the rule was not followed.** Since the audit, every commit has been a feature or a fix:
-- M9 (MCP server, ADR-0003);
-- service-proxy access for the TUI and MCP (`pkg/kubeproxy`, chart viewer RBAC);
-- diag OpenFlow flow inspection.
-
-Only the cheap debt items closed (C1, C2, C3, A6, E2, F2). The structural ones (B1–B4) are untouched, and E1 and E3 grew. The order of work from here is in "Foundation pass" below. No new feature work until it is done.
+Only small debt items closed. The foundation pass is still the next work.
 
 | M | DoD | Reality |
 |---|---|---|
-| M0 | 0/4 | Lint and deps guards work, and `hack/capture-fixtures.sh` exists. No `test/` tree, no `make dev-cluster` run recorded. |
-| M1 | 0/5 | API and goldens exist on a single hand-written fixture. The live data path was fixed and unit-tested on 2026-10-21 (see the M1 follow-up). The layer 2/3 tests, scale test and API freeze are missing. |
-| M2 | 5/6 | LR routes/policies/NAT open. Scenario navigation was checked on the lab, not on committed fixtures. |
-| M3 | 2/3 | **No live updates in the extension** (no SSE, no polling) and no API-version banner. See the M3 DoD. |
-| M4, M5 | 0 | Not started. |
-| M6 | 5/5 | Done out of order. Layer 3 verification was manual on `hv-01`; there is no automated suite. The detrace follow-up is open, and OpenFlow flow inspection was added on 2026-10-24 (`8296532`). |
-| M7, M8 | 0 | Not started. |
-| M9 | 2/5 | **Started out of order (2026-10-23, explicit request; ADR-0003)** while M4/M5 are not started. Shipped: `find`, `get_graph`, `get_node`, `list_chassis` on both backends, plus `GET /find`. The M4/M5/M8 tools wait for their data. |
+| M0 | 0/4 | Lint and deps guards work; `hack/capture-fixtures.sh` exists. No `test/` tree, no recorded `make dev-cluster` run. |
+| M1 | 0/5 | API and goldens on one hand-written fixture plus two lab captures. Live data path fixed 2026-10-21. Layer 2/3 tests, scale test and API freeze missing. |
+| M2 | 6/6 | Done. Scenario navigation checked on the lab, not on scenario fixtures. |
+| M3 | 2/3 | Paused. No live updates and no API-version banner in the extension. |
+| M4, M5 | 0 | Not started. An interim NAT-gateway "Outside OVN" view lives in the TUI (`cmd/ovn-topo/flavor.go`). |
+| M6 | 5/5 | Done out of order; verified by hand on `hv-01`. Detrace follow-up open. |
+| M7, M8 | 0 | Not started. Two pre-releases (v0.1.0-dev, v0.1.1-dev) ran `release.yml` end to end. |
+| M9 | 2/5 | Started out of order (ADR-0003). `find`, `get_graph`, `get_node`, `list_chassis` on both backends; the rest waits for M4/M5/M8 data. |
 
-**Tech-debt register** (from the 2026-10-21 audit; fixed items moved to milestone follow-ups):
+**Tech-debt register** (open items; closed ones are in git history):
 
 | # | Item | Where it closes |
 |---|---|---|
-| B1 | Only one hand-written fixture. `hack/capture-fixtures.sh` (2026-10-21) writes `testdata/scenarios/<name>/`, which `pkg/ovsdb.LoadFixture` decodes through the libovsdb cache, and `TestScenarioGoldens` renders each scenario. One real capture is committed: `testdata/scenarios/hv-01-lab` (2026-10-23, Kube-OVN v1.16.2, OVN 25.03.4). It is the whole lab as it was, not a scenario. **To do: recapture clean testdata**, one capture per named scenario (`overlay-default`, `custom-vpc-ovn-nat`, `kubevirt-multinic` first), each from a cluster prepared to contain exactly that scenario. Each capture's NB must differ from the others, or it is not a new scenario; record in its `meta.json` what was set up. The lab runs OVN 25.03.4 while `hack/ovn-version` pins v24.03.2 (Q4): align the pin with the captured version before relying on columns newer than 24.03. | M0 / M1 |
+| B1 | Scenario fixtures. Two lab captures are committed: `hv-01-lab` (the whole lab, not a scenario) and `kubevirt-multinic` (its `meta.json` does not say what was set up). Still to do: one clean capture per named scenario (`overlay-default`, `custom-vpc-ovn-nat`, `vpc-nat-gw` first), each with a distinct NB and a `meta.json` describing the setup. The lab runs OVN 25.03.4 while `hack/ovn-version` pins v24.03.2 (Q4): align it before relying on newer columns, such as the policy `jump` action. | M0 / M1 |
 | B2 | No `test/` tree: layers 2–5 absent. | M0 / M1 / M7 |
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
-| B4 | ~~`make generate` output for `pkg/ovsdb/*model` differs between machines (`validate` tags), and CI skips the diff.~~ **Done 2026-10-25:** the cause is CPU architecture, not OS. libovsdb v0.8.1 `MaxLength()` computes `int(math.Pow(2, 63)) - 1`. That float → int conversion overflows: amd64 emits no tag, while arm64 emits a meaningless `max=9223372036854775806`. `hack/normalize-models.py` (run by `hack/generate.sh`) rewrites arm64 output to the amd64 form; the committed arm64 files, normalized, came out byte-identical to an amd64 run. Models are regenerated in that form, and CI now runs `git diff --exit-code pkg/ovsdb pkg/api`. Worth reporting upstream. | done |
 | B5 | Extension has one unit test (`layout.test.ts`). | M3 (paused) |
-| C1 | ~~`forbidigo` misses `.Patch`, `.Apply` and `.Evict`.~~ **Done 2026-10-23:** a type-aware rule forbids `Patch`/`Apply*`/`Evict*`/`DeleteCollection` on `k8s.io/client-go` types (scoped so `graph.Store.Apply` stays allowed). | done |
-| C2 | ~~No `depguard` rule for `pkg/mcp` yet.~~ **Done 2026-10-23:** `depguard` and `hack/check-deps.sh` cover `pkg/mcp` (the script checks it once the package exists). | done |
-| C3 | ~~OVN schemas are downloaded by `make generate`, not vendored.~~ **Not debt:** `hack/schema/*.ovsschema` are committed since the first commit; `make generate` only downloads when they are missing. | closed |
-| A6 | ~~SSE has no heartbeat; idle streams may be cut by proxies.~~ **Done 2026-10-23:** `/events` sends a `: keepalive` comment every 15s. | done |
-| E1 | `cmd/ovn-topo/diag_ui.go` (1.3k lines, one modal, flag-driven state). **Growing:** 1,397 lines on 2026-10-25. | before M5 |
-| E2 | ~~Three chassis → node resolvers.~~ **Done 2026-10-23:** the TUI and `pkg/diag` use only the daemon's `nodeName` (`graph.MatchChassis`); the `ovn-sbctl list Chassis` exec at diag start and the client-side re-mapping in `pkg/diag` are gone. A chassis with no matched node falls back to its OVN hostname, and the diag target says so. | done |
-| F2 | ~~CORS `*` on the daemon.~~ **Done 2026-10-23:** removed; the extension calls through the Rancher service proxy (same origin). | done |
-| E3 | `ovn-trace` output parsed with regexes (`ofproto/trace` and `ovn-detrace` will add two more formats). **Growing:** `8296532` added more text parsing of OVS output in `pkg/diag/ovs.go`. | M5 / M6 detrace follow-up |
-| F1 | Version `0.1.0` everywhere; no release has run end to end. | M7 |
-| N1 | The `services/proxy` resourceName form in `charts/ovn-topology/templates/viewer-rbac.yaml` is unverified: both the bare Service name and `http:<svc>:http` are listed. | Foundation pass step 2 |
-| N2 | The service-proxy path (TUI default, `ovn-topo mcp` default, `mise run test-live`) is tested only against a fake API server (`cmd/ovn-topo/proxy_test.go`). It has never run against a live cluster through Rancher or the Harvester VIP. | Foundation pass step 2 |
+| E1 | `cmd/ovn-topo/diag_ui.go`: one 1.4k-line modal with flag-driven state. | before M5 |
+| E3 | `ovn-trace` and OVS output parsed with regexes (`pkg/diag/ovs.go` grew with `92d27f9`); `ofproto/trace` and `ovn-detrace` would add two more formats. | M5 / M6 detrace follow-up |
+| F1 | Versions are `0.x-dev` pre-releases; no stable release yet. | M7 |
+| N1 | The `services/proxy` resourceName form in `charts/ovn-topology/templates/viewer-rbac.yaml` is unverified (both the bare Service name and `http:<svc>:http` are listed). | Foundation pass step 2 |
+| N2 | The service-proxy path (TUI and `ovn-topo mcp` default, `mise run test-live`) is tested only against a fake API server (`cmd/ovn-topo/proxy_test.go`), never through Rancher or the Harvester VIP. | Foundation pass step 2 |
 | N3 | ADR-0003 (MCP server) is still `Proposed`. | Foundation pass step 2 |
 
-### Foundation pass (2026-10-25)
+Closed since 2026-10-21: B4 (deterministic codegen: libovsdb's `MaxLength()` overflows on amd64 only; `hack/normalize-models.py` and a CI diff check), C1 (`forbidigo` on client-go `Patch`/`Apply*`/`Evict*`), C2 (`depguard` for `pkg/mcp`), C3 (schemas were vendored all along), A6 (SSE keepalive), E2 (one chassis → node resolver), F2 (CORS removed).
 
-One PR per step, in this order. Feature work (M4 onward, more MCP tools, more diag actions) waits until it is done.
+### Foundation pass
 
-1. **Register refresh** (this section). *Done 2026-10-25.*
-2. **Lab checks on hv-01** (N1–N3).
-   - Deploy the latest image, then run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP.
-   - Bind a test user to `ovn-topologyd-viewer` only, keep the resourceName form that works, and record which.
-   - Accept or amend ADR-0003.
-3. **B4: deterministic codegen.** *Done 2026-10-25 (see B4).*
-   - Make modelgen output identical across machines (the `validate` tag drift).
-   - Have CI run `git diff --exit-code pkg/ovsdb pkg/api`.
-4. **B1: scenario fixtures.**
-   - Align `hack/ovn-version` with the lab's OVN 25.03 (re-answer Q4) and regenerate.
-   - Capture `overlay-default`, `custom-vpc-ovn-nat` and `kubevirt-multinic`, with scenario goldens and MCP goldens per scenario.
-5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2). Then the layer 3 `overlay-default` e2e on kind (M1 DoD 4, M0 DoD 3).
-6. **B3: scale.**
-   - A 10k-LSP synthetic fixture and a `/graph?view=l3` benchmark: p95 < 200 ms and payload < 1 MB.
-   - A per-revision view cache if needed. Closes M1 DoD 3.
+One PR per step, in this order. Steps 1 and 3 are done.
+
+1. ~~Register refresh.~~
+2. **Lab checks on hv-01 (N1–N3).** Deploy the latest image; run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP. Bind a test user to `ovn-topologyd-viewer` only and record which resourceName form works. Accept or amend ADR-0003.
+3. ~~B4: deterministic codegen.~~
+4. **B1: scenario fixtures.** Align `hack/ovn-version` with OVN 25.03 (re-answer Q4) and regenerate. Capture `overlay-default`, `custom-vpc-ovn-nat` and `vpc-nat-gw`, with scenario and MCP goldens.
+5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2), then the layer 3 `overlay-default` e2e on kind (M1 DoD 4, M0 DoD 3).
+6. **B3: scale.** A 10k-LSP synthetic fixture and a `/graph?view=l3` benchmark (p95 < 200 ms, payload < 1 MB); a per-revision view cache if needed. Closes M1 DoD 3.
 7. **M1 API freeze.** `api/openapi.yaml` v1, including `/find`; breaking changes after this need an ADR.
-8. **E1: split `diag_ui.go`** into per-action models. Pure refactor, guarded by `TestDiagTargetIsAlwaysTheSelection` and the executor tests.
+8. **E1: split `diag_ui.go`** into per-action models, guarded by `TestDiagTargetIsAlwaysTheSelection` and the executor tests.
 
-Then the M4 prep below, then M4. M4 also unlocks the MCP tools `resolve_ip`, `effective_acls` and `run_checks`. E3, F1 and the detrace follow-up stay with their milestones.
+Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls` and `run_checks`.
 
 ---
 
@@ -163,22 +147,7 @@ Then the M4 prep below, then M4. M4 also unlocks the MCP tools `resolve_ip`, `ef
 - [ ] Layer 3 e2e `overlay-default` green in PR CI.
 - [ ] `api/openapi.yaml` v1 frozen for M2/M3. Breaking changes after this point require an ADR.
 
-**Follow-up (2026-10-21): live data path audit.** A read of the syncer against libovsdb v0.8.1 found that the snapshot could silently diverge from OVSDB while `/readyz` stayed green.
-- **Reconnects:** with reconnect enabled, libovsdb purges and repopulates its cache with no Delete events and no `DisconnectNotify`. Rows deleted during an outage stayed forever, readiness never dropped, and the reconnect rebuild was dead code. The configured inactivity check was never passed to the client either, so half-open connections went undetected.
-- **Overflow:** a full event queue dropped events and logged a resync that did not exist.
-- **Rebuild:** the rebuild ignored `List` errors.
-- **Ignored tables:** routes, policies, gateway/HA chassis, load balancers, encaps, datapaths and BFD were monitored but ignored by incremental updates.
-- **Kubernetes:** Nodes and Pods were listed once at start.
-
-The fix:
-- **Health probe:** an `Echo` probe drives readiness and triggers a resync (a rebuild from the caches) on reconnect.
-- **Overflow:** an overflow triggers a resync that discards stale queued events.
-- **Rebuild:** the rebuild publishes nothing on error.
-- **Inactivity check:** it is now applied to both clients.
-- **Ignored tables:** all monitored tables are applied incrementally.
-- **Kubernetes:** Node/Pod informers (list + watch, pods trimmed) bump the revision when identity changes.
-- **Tests:** `pkg/ovsdb/syncer_test.go` drives a real libovsdb `TableCache` through `Populate2`/`Purge` (reconnect ghost rows, overflow, rebuild error), mutation-checked. `pkg/graph/kubewatch_test.go` covers late pods and nodes.
-- **Still open:** the layer 2 DoD above, against a real clustered `ovsdb-server`.
+**Follow-up (2026-10-21): live data path audit.** *Done.* The snapshot could silently diverge from OVSDB while `/readyz` stayed green: libovsdb's reconnect repopulates its cache without Delete events, a full event queue dropped events, rebuilds ignored `List` errors, several monitored tables were never applied incrementally, and Nodes/Pods were listed once. Now an `Echo` probe drives readiness and resyncs on reconnect, overflow triggers a resync, a failed rebuild publishes nothing, all monitored tables apply incrementally, and Node/Pod informers bump the revision. Covered by `pkg/ovsdb/syncer_test.go` and `pkg/graph/kubewatch_test.go`. The layer 2 DoD against a real clustered `ovsdb-server` is still open.
 
 ---
 
@@ -188,8 +157,7 @@ The fix:
 
 **Scope**
 - `cmd/ovn-topo`, Bubble Tea (or a better-suited library if justified in the PR).
-  - Left navigation tree (VPC → LR → LS → LSP; Chassis), central detail view.
-  - Layer toggle: L2 / L3 / Chassis.
+  - Navigation tree (VPC → LR → LS → LSP; chassis) and a detail view, with L2, L3 and chassis layers (since replaced by xray trees, see the follow-up).
   - NAT, routes and policies visible in the LR detail.
 - Data source: either embedded `pkg/graph` against OVSDB via port-forward, or a running daemon's API. Same view code either way.
 - Workload identity (extends daemon and API):
@@ -198,28 +166,9 @@ The fix:
   - Multi-NIC: LSP `pod.ns.provider` → `NetworkAttachmentDefinition`. A VM shows all its interfaces across switches.
   - Node join ports (`node-<name>`) → k8s Node.
   - Adds read-only K8s watches on Pod, VMI, VM, NAD (as ADR-0001 allows). Missing CRDs (no KubeVirt) are handled silently.
-- **Workload Relationship Display (Pod & KubeVirt VM)**:
-  - **Tree View Expansion**: Allow expanding any Logical Switch to list its attached LSPs mapped directly to their Kubernetes workloads:
-    - Pods: `[Pod] <name>` (`namespace/<name>`, owner: Deployment/StatefulSet/DaemonSet, IP/MAC).
-    - KubeVirt VMs: `[VM] <name>` (resolved from `virt-launcher` pod → VMI → VM, suppressing launcher noise).
-    - Multi-NIC VMs: Display all interfaces belonging to the same VM across different subnets.
-  - **Port Interconnection Inspector**: When highlighting any port, show the full workload relationship card:
-    - Workload Name & Kind (`Pod` or `VirtualMachine`)
-    - Kubernetes Namespace
-    - Assigned Node & Chassis Hostname
-    - Associated Host Veth Interface (`<hash>_h`)
-- Machine output: `ovn-topo graph --view l3 -o json|yaml` for scripting (same shape as the API).
-- **TUI Interpretation Guide & Screenshot Catalog (`docs/tui-guide.md`)**:
-  - User documentation explaining how to navigate and interpret the TUI screens (Topology Tree, Port Interconnection Matrix, and Diagnostics Modal).
-  - Recommended screenshot inventory capturing all core OVN / Kube-OVN architectural objects:
-    1. **Compound VPC Container**: Logical Router (`LR`) and attached Logical Switches (`LS`) enclosed in a rounded VPC boundary.
-    2. **Multi-VPC Interconnect (Transit Switch)**: Shared switch (e.g. `join`) linked to multiple routers for cross-VPC routing.
-    3. **Centralized HA Gateway & EIP**: Gateway port highlighted in Persimmon (`#fe7c3f`) showing active chassis node (e.g. `[GW: hv-01]`, `cr-` redirect port).
-    4. **Distributed Subnet Gateway**: Internal subnet interface acting as default gateway for workloads (`[GW IP: 10.54.0.1/16]`).
-    5. **External Provider Underlay**: Provider network integration via `localnet` port to physical bridge (`br-external`).
-    6. **Port Interconnection Inspector**: Detailed inspection box showing MAC, Subnet Prefix, Interface IP, Peer LSP, and Topology Role.
-    7. **Tier 1 Diagnostics (`ovn-trace`)**: Logical pipeline simulation with endpoints, visual Hop-by-Hop Flow Path (`[Switch] ➔ [Router] ➔ [Switch] ➔ Port`), and DELIVERED/DROPPED verdict.
-    8. **Live `tcpdump` on Dedicated VETH**: Packet capture on isolated workload host veth interface (`<hash>_h`).
+- On a port: workload name and kind, namespace, node, chassis and host veth (`<hash>_h`).
+- Machine output: `ovn-topo graph --view l3 -o json|yaml` (same shape as the API).
+- `docs/tui-guide.md`: how to read each screen, organised by use case, with TUI/Harvester screenshot pairs.
 
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
 
@@ -231,42 +180,9 @@ The fix:
 - [x] TUI visual guide (`docs/tui-guide.md`) covering interpretation and screenshot inventory of all OVN object types. (Done 2026-10-20)
 - [x] LR detail lists static routes, policies and NAT rules, not just their counts (scope item "NAT, routes and policies visible in the LR detail"). (Done 2026-10-27)
 
-**Follow-up (2026-10-21): navigation redesign.** After comparing runnable k9s-xray and Miller-column mockups, the four fixed views were replaced by k9s-style xray trees (`:xray vpc|chassis|workload`) with relation jumps, plus the Port Matrix kept as a sortable `:ports` table with an inspector; describe uses `/node/{id}`. Fixes found while doing it: the old layout overflowed 80×24 (header scrolled off, side panel clipped), so the 80×24 item above was not actually met. Every frame is now sized to the terminal, with a test at 60×14, 80×24, 120×40 and 200×60. L2 fetches stopped at the server's default page of 50 ports and now follow all pages. The trace source came from the tree index in other views and now uses the selection. The TUI now consumes `/events` (SSE) with `If-None-Match` polling fallback. Still to do: re-run the three scenarios on a live cluster with the new navigation (verified so far on the fixture and a local fake daemon only).
+**Follow-up (2026-10-21): navigation redesign.** *Done.* The four fixed views became k9s-style xray trees (`:xray vpc|chassis|workload`) with relation jumps, plus the `:ports` table. Every frame is sized to the terminal (tested at 60×14 to 200×60), L2 fetches follow all pages, and the TUI consumes `/events` with `If-None-Match` polling fallback. Still to do: re-run the three scenarios on a live cluster with the new navigation.
 
-**Follow-up (2026-10-21): LR routes, policies & NAT.** *Done 2026-10-27.* On a live cluster the LR details pane shows `routes 1 · pol 10 · nat 0` but not the rows.
-- **Gap:** the daemon already monitors `Logical_Router_Static_Route`, `Logical_Router_Policy` and `NAT` (`pkg/ovsdb/syncer.go`, `Snapshot.StaticRoutes/Policies/NATs`). Only counts reach clients: the `/graph` LR properties (`pkg/graph/views.go`), and `/node/{id}`, which lists LRPs, switches and bare NAT IDs.
-- **API:** add optional arrays to `NodeDetail`, filled for LR only. Regenerate the Go and TS types in the same PR.
-  - `staticRoutes[]` (`StaticRoute`): `ipPrefix`, `nexthop`, `outputPort`, `policy` (dst-ip/src-ip), `routeTable`, `bfd`, `ecmp`.
-  - `policies[]` (`RouterPolicy`): `priority`, `match`, `action` (allow/drop/reroute), `nexthops[]`.
-  - `nats[]` (`NatRule`): `type`, `externalIp`, `logicalIp`, `logicalPort`, `externalMac`, `gatewayPort`.
-- **Daemon:**
-  - Routes are ordered by longest prefix; `ecmp` is set when a `(routeTable, policy, prefix)` repeats.
-  - Policies are ordered by priority, descending. NAT is ordered by type, then external IP.
-  - Dangling UUIDs are skipped.
-  - The existing NAT related objects get a readable name.
-- **TUI:**
-  - The LR detail is fetched lazily when the details pane is on a router, and cached per revision.
-  - The pane shows *Static routes / Policies / NAT* with about 8 rows each, then `… N more (d describe)`. It shows a loading state, and on error the equivalent `kubectl ko nbctl` command.
-  - `d` shows the full lists. A gateway LRP shows the default route that uses it.
-- **Next hops:** route nexthops and policy reroute targets are annotated with their owner when the IP is already known to the TUI (LSP addresses, LRP networks). For example, a Kube-OVN node reroute `100.64.0.2` is shown as `node hv-01`. This is an interim client-side lookup; M4's IP resolver replaces it.
-- **Modelling choice:** routes, policies and NAT stay rows of the LR detail, not nodes or edges in `/graph`, which keeps `/graph` aggregated. The `NAT`/`Route`/`Policy` node types in AGENTS.md remain addressable through `/node` until a view needs them as graph nodes (M5 path computation). This is an additive T0 field of the existing `/node` contract, so no ADR is needed.
-- **Tests:**
-  - `pkg/graph`: `GetNodeDetail` ordering and fields, on the fixture's routes and policies.
-  - TUI: the pane sections and loading state; the existing fit test covers wrapped matches.
-- **Delivered (2026-10-27):**
-  - API and daemon: `a319a51`.
-  - TUI: the next commit.
-  - Review fixes:
-    - the detail cache no longer moves `baseRevision`, which had stopped changed rows from flashing;
-    - a reply still in flight across a revision is not cached;
-    - a router port lists **Routes out this port**, by next hop in its networks or by output port;
-    - the error fallback names all three `kubectl ko nbctl` commands.
-  - Tests:
-    - the ordering contract is checked on every captured scenario;
-    - per-router goldens (`testdata/scenarios/*/golden/lr-*.yaml`);
-    - MCP `get_node` goldens for a router with routes and policies and one with NAT.
-  - TS types were not regenerated (extension paused).
-  - **Open:** OVN 25.03 adds the `Logical_Router_Policy` `jump` action (`chain`/`jump_chain`). The models and `RouterPolicy.action` are pinned to 24.03 (`allow/drop/reroute`); this closes with B1's version alignment (Q4).
+**Follow-up (2026-10-21): LR routes, policies & NAT.** *Done 2026-10-27* (`ecb89b7` API, `ee985f3` TUI, `90fc635` fixes). `NodeDetail` carries `staticRoutes[]` (longest prefix first, `ecmp` flagged), `policies[]` (priority descending) and `nats[]` (type, then external IP). The details pane shows 8 rows of each, `d` all of them, and a router port lists the routes that leave through it. Next hops are annotated client-side until M4's IP resolver. The ordering contract is checked on every captured scenario, with per-router goldens and MCP `get_node` goldens. **Open:** OVN 25.03's policy `jump` action (`chain`/`jump_chain`) is not in the 24.03-pinned models or in `RouterPolicy.action`; it closes with B1's version alignment.
 
 ---
 
@@ -376,27 +292,18 @@ Extension: add the L2 and Chassis views here.
 - Features (in this order):
   1. **Point-and-click `ovn-trace`.**
      - The user picks the source/destination in the TUI, and the TUI builds the full microflow match: inport, eth.src/dst (next-hop router MAC), ip.src/dst, proto/port.
-     - Supports real-time fzf-style fuzzy search, category filtering (`[VM]`, `[Pod]`, `[Gateway]`, `[Node]`, `[Public DNS]`), and direct Custom Target IP entry (`Search / Target IP: <ip>[:port]`).
+     - Fuzzy search, category filtering (`[VM]`, `[Pod]`, `[Gateway]`, `[Node]`, `[Public DNS]`), and direct Custom Target IP entry (`Search / Target IP: <ip>[:port]`).
      - Supported protocols: ICMP (Ping), TCP 22 (SSH), TCP 80 (HTTP), TCP 443 (HTTPS), UDP 53 (DNS).
      - It runs in `ovn-central` leader (`ovn-sb-leader=true`) using 4x `--ct=new` conntrack evaluation.
-     - Output is parsed into stages, overlaid with visual Hop-by-Hop flow paths, and evaluated with clear verdicts (`DELIVERED`, `DROPPED`, `NO-ROUTE`). Raw output toggling (`o` key) is always available.
+     - Output is parsed into stages with a hop-by-hop path and a verdict (`DELIVERED`, `DROPPED`, `NO-ROUTE`); `o` toggles the raw output.
   2. **tcpdump.**
      - *Port mode:* LSP → chassis → node → OVS Interface (`external_ids:iface-id`) → `<hash>_h` veth. Runs line-buffered (`-l`) tcpdump in that node's `kube-ovn-cni` container.
-     - Fallbacks safely to UP physical interfaces (`br-external`, `ovn0`) rather than down `br-int`.
      - Filter presets available: ICMP, TCP, filtered Port IP.
-  3. **Physical wiring.** `ovs-vsctl show` executed inside the node's OVS pod. Displays bridges (`br-int`, `br-external`), ports, interfaces, and VXLAN/Geneve tunnel endpoints.
-  4. **Filtered Conntrack.** Active flows for port IP dumped via `ovs-appctl dpctl/dump-conntrack` on the hosting node and filtered in real-time.
-  5. **Log tails.** `ovn-controller` logs tailed on the port's node with dynamic node hostname resolution.
-  6. **k9s-inspired UI layout.** Clean top bar for view tabs and diag status, spacious explorer in the center, and a 2-row docked bottom footer with real-time connection status and `<key>` action badges.
+  3. **Physical wiring.** `ovs-vsctl show` in the node's OVS pod: bridges, ports, interfaces and tunnel endpoints.
+  4. **Conntrack.** `ovs-appctl dpctl/dump-conntrack` on the port's node, filtered by the port IP.
+  5. **Log tails.** `ovn-controller` logs on the port's node.
 
-- **Relationship with `kubectl ko` (`pkg/ko`)**:
-  Rather than importing `github.com/kubeovn/kube-ovn` as a Go module (which would violate `AGENTS.md` by pulling in GoBGP, Calico/Felix, and querying CRDs), `pkg/diag` adopts the proven command patterns from `pkg/ko` directly:
-  - **`ovn-trace` formula**: Matches `pkg/ko/trace.go` using `ip.ttl == 255`, protocol matchers, and 4x `--ct=new` for multi-tier NAT/ACL conntrack simulation.
-  - **Physical OpenFlow trace**: *Not implemented* (correction 2026-10-23: `pkg/diag` has no `ofproto/trace` builder). Planned in the follow-up below.
-  - **Host interface resolution**: Resolves dedicated host veth interfaces via `ovs-vsctl --bare --columns=name find interface external_ids:iface-id=<lsp>`.
-  - **Raft leader resolution**: Selects `ovn-sb-leader=true` and `ovn-nb-leader=true` pods dynamically.
-  - **Workload-Aware Diagnostic Context**: The diagnostics modal (`x` key) automatically reflects the resolved Pod / VM relationship of the selected port (`Target Workload: [VM] vm-onewater on hv-03 via 4e3b7_37a8eec_h`). `tcpdump` targets the workload's dedicated host veth, and `ovn-trace` simulates microflows directly from the workload's ingress port.
-  - **Dual-Pane L2 Subnets Explorer**: Allows navigating subnets on the left pane and focusing individual workload cards on the right pane with `Tab`/`←`/`→`/`Enter`, targeting diagnostics directly on any selected VM or Pod.
+- **`kubectl ko` patterns without the dependency.** Importing `github.com/kubeovn/kube-ovn` would pull in GoBGP and Calico and read CRDs (Q7), so `pkg/diag` reuses `pkg/ko`'s command patterns instead: the `ovn-trace` formula (`ip.ttl == 255`, 4× `--ct=new`), host veth lookup by `external_ids:iface-id`, and raft leader selection (`ovn-nb-leader`/`ovn-sb-leader`). The diag modal targets the selected port's workload, e.g. `[VM] vm-onewater on hv-03 via 4e3b7_37a8eec_h`.
 
 **Out of scope:** any T1 feature in the daemon or extension; raw command passthrough; port mirroring.
 
@@ -407,35 +314,9 @@ Extension: add the L2 and Chassis views here.
 - [x] Automated regression tests prevent view and pane index mismatches (now `TestDiagTargetIsAlwaysTheSelection` and the executor-level tests, see the follow-up below).
 - [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
 
-**Follow-up (2026-10-21): diagnostic target audit.** The git history had a series of "the diagnostic acted on something other than the selection" fixes. An audit of the selection → command path found the root cause: the target was never captured. Every action and every modal redraw re-derived it from the cursor, through helpers with silent fallbacks.
-- **Wrong object:**
-  - A switch took its first pod; a router took its first port.
-  - A chassis traced from the cluster's first router port; a multi-NIC VM took its first NIC.
-  - A switch shared by several routers took the first router's MAC.
-  - The trace defaulted to `ovn-default` / `10.244.0.1`.
-- **Wrong host:**
-  - A port's node came from Kubernetes metadata, falling back to the gateway node.
-  - With no node, actions ran on the first cluster node or on the literal `cluster-node`.
-- **Wrong interface:** `FindOVSInterface` never failed. It fell back to `ovn0`/`br-external` (by name substring) or `br-int`, while the header still named the port.
-- **Drift:** a live update that moved the row put the cursor at the top, and the next action ran on that row.
+**Follow-up (2026-10-21): diagnostic target audit.** *Done.* Diagnostics often acted on something other than the selection: the target was re-derived from the cursor on every redraw, through helpers that fell back to the first pod, the first node, `ovn0` or `br-int`. `cmd/ovn-topo/diagtarget.go` now captures one immutable target when `x` is pressed (port, datapath, IP/MAC, node and how it was found). Actions that can't be derived from the selection are disabled with the reason, the interface lookup returns `ErrIfaceNotFound` instead of guessing, and the target is revalidated on live updates. `TestDiagTargetIsAlwaysTheSelection` checks every xray row, and the suite is mutation-checked.
 
-The fix:
-- **Captured target:** `cmd/ovn-topo/diagtarget.go` resolves one immutable target when `x` is pressed. It records the port, datapath, IP/MAC, and the node with its source (Port_Binding chassis, active gateway chassis or selected chassis). Every action reads only that target.
-- **No borrowing:** anything not derivable from the selected object disables the action, with the reason shown in the menu. Switches, routers and VPCs ask for a port. A multi-NIC workload asks which NIC. An ambiguous next hop is an error.
-- **Live updates:** the target is revalidated by ID. It goes stale if the object disappears, and you are told if it moves (e.g. live migration).
-- **`pkg/diag`:** the interface lookup runs only on the target's node, with a typed `BuildFindIfaceByIfaceIDCommand`, and returns `ErrIfaceNotFound` instead of guessing. Pod lookups re-check `spec.nodeName`. The tcpdump interface lookup moved off the UI goroutine.
-- **Tests:**
-  - Every row of every xray must resolve to itself.
-  - Each action is checked through `MockExecutor` for the pod, node and arguments it uses.
-  - No-guess cases are covered.
-  - Drift and the multi-NIC picker are covered.
-  - Mutation-checked: re-adding "switch → first pod" or "missing iface → ovn0" fails the suite.
-
-**Planned follow-up (2026-10-27, ADR-0004): opaque-hop inspection.** Not started; needs M4 item 7. For an opaque hop with `inspect: iptables-nat`, add typed allowlist entries in the hop's pod:
-- `iptables-save -t nat -c`, legacy or nft variant detected from the image;
-- `ip -4 -o addr`.
-
-The result shows the live EIPs and DNAT/SNAT rules with hit counters. The pod is taken from the graph object, never from user input. The ovn-kubernetes `nft-ruleset` kind waits for an ovn-kubernetes adapter.
+**Follow-up (2026-10-27, ADR-0004): opaque-hop inspection.** *Partly done.* The details pane's `!` runs `kubectl exec <vpc-nat-gw pod> -- iptables-save -t nat` locally, suspended (ADR-0001 amendment, `27dac63`). Still open, once M4 item 7 exists: the same inspection inside the diag modal through `pkg/diag` (`iptables-save -t nat -c`, legacy or nft variant, and `ip -4 -o addr` for the EIPs). The ovn-kubernetes `nft-ruleset` kind waits for an ovn-kubernetes adapter.
 
 **Planned follow-up (2026-10-23): OpenFlow trace + `ovn-detrace`.** Not started; needs Q11 answered first.
 
@@ -545,7 +426,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   Streamable HTTP inside the daemon is backlog, not this milestone.
 - **T0 only, always.** No `pkg/diag` tool is exposed through MCP, even when `--diag` is set. An agent must not be able to start a tcpdump or exec into nodes. This is enforced by `depguard` (`pkg/mcp` must not import `pkg/diag`).
 - Every tool is annotated read-only (`readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`).
-- SDK: the official Go MCP SDK (`github.com/modelcontextprotocol/go-sdk`), unless kvtop already uses a different one. In that case align with kvtop and note it in the PR.
+- SDK: the official Go MCP SDK (`github.com/modelcontextprotocol/go-sdk`); kvtop uses none (Q9).
 
 **Scope**
 - `pkg/mcp`: tool definitions and handlers over a `Backend` interface (daemon client or embedded graph).
@@ -639,7 +520,7 @@ Record answers here with evidence (date, link to test run or doc).
 | Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | **Resolved (2026-10-20)**: Reverse proxies may buffer chunked HTTP. Clients must degrade: attempt SSE on `/events` and fall back to polling `/graph` with `If-None-Match`. The TUI does this. **The extension does not consume either yet** (2026-10-21, see the M3 DoD). Whether the Rancher proxy actually buffers has not been measured. |
 | Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | **Resolved (2026-10-20)**: No. Reusable workflows hardcode `working-directory: ./`. Solved via custom workflow steps in `.github/workflows/ui.yml` and `release.yml`. |
 | Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. As a result, `kubectl port-forward` to them cannot reach NB/SB (it dials the pod's localhost), so local dev uses the `ovn-topology-proxy` relay pod (`mise run pf`). |
-| Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`. Pinned to `v24.03.2` in `hack/ovn-version`. |
+| Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Resolved (2026-10-20, lab hv-01)**: OVN `24.03`, pinned to `v24.03.2`. **To re-answer:** the lab now runs OVN 25.03.4 (foundation pass step 4). |
 | Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | **Resolved (2026-10-20, lab hv-01)**: KubeVirt VMs attached to Kube-OVN NADs follow the pattern `<vm-name>.<namespace>.<nad-name>.<vlan|subnet>.ovn`. Default management interfaces (`multus: default/default`) bind to the physical bridge `mgmt-br` outside OVN and do not create OVN LSPs. |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |
 | Q7 | Should `pkg/diag` import `github.com/kubeovn/kube-ovn/pkg/ko` directly? | M6 | **Resolved (2026-10-20)**: **No.** Importing `github.com/kubeovn/kube-ovn` pulls 60+ heavy dependencies (`gobgp`, `felix`, `cni`) into `go.mod` and violates `AGENTS.md` rule 2 by querying Kube-OVN CRDs (`Subnet`, `Vpc`). Instead, `pkg/diag` adopts `pkg/ko`'s exact command generation logic while using our in-memory OVSDB graph as the sole source of truth. |
@@ -647,7 +528,7 @@ Record answers here with evidence (date, link to test run or doc).
 | Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | **Resolved (2026-10-23, ADR-0003)**: kvtop uses **no SDK**. `internal/mcp` is hand-written JSON-RPC pinned to protocol `2024-11-05`, which predates tool annotations. We use the official `github.com/modelcontextprotocol/go-sdk` v1.8.0 for annotations, `structuredContent`/`outputSchema`, version negotiation and the in-memory test transport. kvtop should adopt it when it next touches MCP. |
 | Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |
 | Q11 | Is `ovn-detrace` (and its python `ovs` bindings) shipped in the Kube-OVN images on Harvester, and in which pod can it reach NB, SB and the node's OVS db? Candidates: `ovs-ovn` (local OVS db; NB/SB over the `ovn-nb`/`ovn-sb` services, TLS?) or `ovn-central` (NB/SB sockets; `--ovsdb` only names ports?). | M6 detrace follow-up | open; check `which ovn-detrace` and a dry run in both pods on `hv-01` |
-| Q12 | Which Pod labels, annotations and owner identify a Kube-OVN VPC NAT gateway pod, and do its two LSPs carry `external_ids:pod`? Expected but unverified: label `ovn.kubernetes.io/vpc-nat-gw=true`, annotation `ovn.kubernetes.io/vpc_nat_gw=<name>`, owner `StatefulSet/vpc-nat-gw-<name>`. | M4 item 7 (ADR-0004) | open; `kubectl -n kube-system get pod vpc-nat-gw-one-water-nat-0 -o yaml` and `kubectl ko nbctl find logical_switch_port 'external_ids:pod="kube-system/vpc-nat-gw-one-water-nat-0"'` on `hv-01`. **Partly answered (2026-10-27, lab hv-01, TUI on `feat/tui-cni-details`):** both gateway ports carry `external_ids:pod=kube-system/vpc-nat-gw-one-water-nat-0`, which the TUI uses to detect the gateway. They are attached through NADs, named `<pod>.<ns>.<nad>.<subnet>.ovn`: `vpc-nat-gw-one-water-nat-0.kube-system.onewater.onewater.ovn` (LAN, `subnet-onewater`) and `….kube-system.external.default.ovn` (WAN, `external`). The Pod labels, annotation and owner are still unverified, so detection is by pod name. |
+| Q12 | Which Pod labels, annotations and owner identify a Kube-OVN VPC NAT gateway pod, and do its two LSPs carry `external_ids:pod`? | M4 item 7 (ADR-0004) | **Partly answered (2026-10-27, lab hv-01):** both ports carry `external_ids:pod=kube-system/vpc-nat-gw-one-water-nat-0` and are attached through NADs, named `<pod>.<ns>.<nad>.<subnet>.ovn` (LAN on `subnet-onewater`, WAN on `external`). The TUI detects the gateway by pod name. Still unverified: the expected label `ovn.kubernetes.io/vpc-nat-gw=true`, annotation `ovn.kubernetes.io/vpc_nat_gw=<name>` and owner `StatefulSet/vpc-nat-gw-<name>` (`kubectl -n kube-system get pod vpc-nat-gw-one-water-nat-0 -o yaml`). |
 | Q13 | Is ovn-kubernetes in scope? The targets (Rancher RKE2, Harvester) do not ship it, so supporting it means OpenShift or vanilla clusters. | ovn-kubernetes adapter | **Resolved (2026-10-27)**: yes, OpenShift is in scope (user request; lab `hol-powerflex-lab`, OCP 4.19.19). The chart does not work there today: the daemon stays unready with `lookup ovn-nb.kube-system.svc.cluster.local ... no such host`, because there is no central NB/SB. Moving the chart to another namespace does not help. Support is the ADR-0005 work, not a chart setting. |
 | Q14 | ovn-kubernetes interconnect mode runs one NB/SB per node on a unix socket in `ovnkube-node`, with no central database. Which model: (a) DaemonSet zone collectors and a merger, (b) per-zone view, (c) central-DB deployments only? | ovn-kubernetes adapter, ADR-0002 | **Spike done (2026-10-27, `hol-powerflex-lab`, OCP 4.19.19, OVN 25.03.1)**; the model is proposed in ADR-0005, pending acceptance. Evidence: (1) each node is one zone: `nbdb`/`sbdb` containers in `ovnkube-node`, sockets `/var/run/ovn/ovn{nb,sb}_db.sock` (host `/var/run/ovn-ic`), `root:root 0750`, no Service; (2) zone snapshots share **no** row UUIDs; `ovn_cluster_router`, `transit_switch`, all Port_Groups/Address_Sets and most Load_Balancers are replicated by name; (3) every `type=remote` `tstor-<node>` port resolves to exactly one zone's local `tstor-<node>` (same MAC/IP), and every zone routes each other zone's pod subnet to that transit IP (6/6); (4) `Chassis.name` == node annotation `k8s.ovn.org/node-chassis-id`, with `other_config:is-remote` marking copies; (5) the pinned 24.03 models load the live NB 7.11.0 / SB 20.41.0 schemas with no errors. Captured with `hack/capture-fixtures.sh --flavor ovnk`. The fixtures hold lab data and are not committed. |
 | Q15 | Do upstream ovn-kubernetes (kind, `contrib/kind.sh` interconnect) and OpenShift agree on pod labels, container names, socket paths and `external_ids`? Does local gateway mode change the per-zone NB as ADR-0004 decision 4 expects? | ADR-0005 | open; rerun the capture on a kind lab and commit an anonymous `ovnk-ic-kind` scenario |
