@@ -95,7 +95,7 @@ func (m model) diagLabel() string {
 
 // hotkeys are the keys hinted in the header for the current screen; ? has them all.
 func (m model) hotkeys() [][2]string {
-	keys := [][2]string{{"1-3", "views"}, {"/", "filter"}, {"i", "pane"}, {"d", "describe"}}
+	keys := [][2]string{{"1-4", "views"}, {"/", "filter"}, {"i", "pane"}, {"d", "describe"}}
 	if m.diagMode {
 		keys = append(keys, [2]string{"x", "diag"}, [2]string{"!", "run"})
 	}
@@ -129,6 +129,9 @@ func (m model) header() []string {
 	if m.tree != nil {
 		s := m.tree.stats
 		parts = append(parts, st.MutedText.Render(fmt.Sprintf("%d VPC %d LS %d LSP %d ch", s.vpcs, s.switches, s.ports, s.chassis)))
+	}
+	if c := m.problemCount(); c > 0 {
+		parts = append(parts, st.Warn.Render(fmt.Sprintf("! %s (4)", plural(c, "problem"))))
 	}
 	parts = append(parts, "diag "+m.diagLabel(), st.MutedText.Render(daemon))
 	var hints []string
@@ -244,7 +247,9 @@ func (m model) treeView() []string {
 	for i := off; i < min(off+h, len(m.rows)); i++ {
 		r := m.rows[i]
 		var line string
-		if r.ref {
+		if r.problem != "" {
+			line = m.problemLine(r)
+		} else if r.ref {
 			line = " " + st.Faint.Render(r.prefix) + st.MutedText.Render(r.relLabel+" ⇢ ") + m.kind(r.n) + " " +
 				st.Kind[r.n.kind].Render(r.n.name) + " " + m.badge(r.n)
 		} else {
@@ -286,6 +291,8 @@ func (m model) treeView() []string {
 			msg = "   no chassis reported by the daemon (view=chassis is empty)"
 		} else if m.mode == modeWorkload {
 			msg = "   no Kubernetes workloads resolved from LSP external_ids"
+		} else if m.mode == modeProblems {
+			msg = "   no problems found"
 		}
 		body = append(body, "", st.MutedText.Render(msg))
 	}
@@ -345,6 +352,7 @@ func (m model) helpView() []string {
 		"   1  :xray vpc       VPC → LR → LRP · LS → LSP",
 		"   2  :xray chassis   chassis → bound ports",
 		"   3  :xray workload  namespace → VM/Pod → NICs",
+		"   4  :problems       what is wrong, most severe first",
 		"",
 		" " + b("INSPECT"),
 		"   i  details pane",
@@ -387,7 +395,7 @@ func (m model) helpView() []string {
 	return box(l, m.w(), m.areaH(), st.Label.Render("Help"), st.Border)
 }
 
-var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "theme", "quit"}
+var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "theme", "quit"}
 
 func suggest(prefix string) string {
 	if prefix == "" {

@@ -25,6 +25,8 @@ type row struct {
 	ref      bool
 	relLabel string
 	hasKids  bool
+	problem  string // Problems view: why this object is listed (problems.go)
+	sev      health
 }
 
 type histEntry struct {
@@ -142,7 +144,11 @@ func (m *model) rebuildRows() {
 			}
 		}
 	}
-	walk(m.tree.roots[m.mode], nil, string(m.mode), "", 0, 0)
+	if m.mode == modeProblems {
+		m.problemRows()
+	} else {
+		walk(m.tree.roots[m.mode], nil, string(m.mode), "", 0, 0)
+	}
 	// Restore the selection by row key; if that path vanished (object re-parented),
 	// fall back to the same object elsewhere before giving up and going to the top.
 	m.cursor = 0

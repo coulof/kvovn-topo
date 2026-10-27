@@ -267,6 +267,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if detailCmd := mm.lazyFetchSelectedDetailCmd(); detailCmd != nil {
 		cmd = tea.Batch(cmd, detailCmd)
 	}
+	if mm.mode == modeProblems { // a new revision drops the details the return-path check needs
+		if c := mm.problemsFetchCmd(); c != nil {
+			cmd = tea.Batch(cmd, c)
+		}
+	}
 	return mm, cmd
 }
 
