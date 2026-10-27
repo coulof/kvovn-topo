@@ -94,7 +94,7 @@ One PR per step, in this order. Feature work (M4 onward, more MCP tools, more di
 7. **M1 API freeze.** `api/openapi.yaml` v1, including `/find`; breaking changes after this need an ADR.
 8. **E1: split `diag_ui.go`** into per-action models. Pure refactor, guarded by `TestDiagTargetIsAlwaysTheSelection` and the executor tests.
 
-Then M4 starts. M4 also unlocks the MCP tools `resolve_ip`, `effective_acls` and `run_checks`. E3, F1 and the detrace follow-up stay with their milestones.
+Then the M4 prep below, then M4. M4 also unlocks the MCP tools `resolve_ip`, `effective_acls` and `run_checks`. E3, F1 and the detrace follow-up stay with their milestones.
 
 ---
 
@@ -308,6 +308,16 @@ The fix:
    - stale chassis (no Node), Node without chassis
    - duplicate MAC/IP
    - tunnel-key collisions
+   - **asymmetric return around an opaque hop** (ADR-0004 decision 5): an LR with an opaque hop on one of its switches, a different egress, and no `src-ip` route or reroute policy sending that switch to the hop's LAN IP. A warning, labelled heuristic. Origin: the 2026-10 `vpc-onewater` / `one-water-nat` incident on `hv-01`.
+7. **Opaque hops (ADR-0004).** The `OpaqueHop` node type, for points where OVN hands traffic to something it cannot see. First case: the Kube-OVN VPC NAT gateway pod, joined to its LAN/WAN LSPs, with `inspect: iptables-nat`. It replaces the "not OVN NAT" footnote in the TUI (`cmd/ovn-topo/views.go`) with an object.
+
+**M4 prep (2026-10-27, ADR-0004): CNI adapter boundary.** Before item 1, move the Kube-OVN conventions in `pkg/graph` behind a flavor adapter interface, with Kube-OVN as the only implementation:
+- identity from `external_ids`;
+- `cr-` gateway ports and `join`;
+- the chassis annotation;
+- UI notes.
+
+It is a pure refactor: all goldens stay unchanged. With no adapter matched, the graph must still be valid raw OVN. This was the backlog item "Identity adapter boundary".
 
 Extension: add the L2 and Chassis views here.
 
@@ -335,7 +345,7 @@ Extension: add the L2 and Chassis views here.
 **Out of scope:** conntrack state, OpenFlow, anything requiring exec.
 
 **DoD**
-- [ ] Path fixtures across scenarios: intra-LS, inter-LS same VPC, VPC → external via SNAT, FIP inbound, default-VPC reroute to gateway node, ACL drop, no route.
+- [ ] Path fixtures across scenarios: intra-LS, inter-LS same VPC, VPC → external via SNAT, FIP inbound, default-VPC reroute to gateway node, ACL drop, no route, and DNAT return bypassing an opaque hop (the `vpc-nat-gw` scenario before its `src-ip` route: verdict `external` via the VPC's external LRP, noting that it skips the NAT gateway).
 - [ ] Where M6 exists, an e2e comparing `pkg/trace` verdicts with `ovn-trace` verdicts on the same inputs. Discrepancies are logged as known limitations, not hidden.
 
 ---
@@ -407,6 +417,12 @@ The fix:
   - No-guess cases are covered.
   - Drift and the multi-NIC picker are covered.
   - Mutation-checked: re-adding "switch → first pod" or "missing iface → ovn0" fails the suite.
+
+**Planned follow-up (2026-10-27, ADR-0004): opaque-hop inspection.** Not started; needs M4 item 7. For an opaque hop with `inspect: iptables-nat`, add typed allowlist entries in the hop's pod:
+- `iptables-save -t nat -c`, legacy or nft variant detected from the image;
+- `ip -4 -o addr`.
+
+The result shows the live EIPs and DNAT/SNAT rules with hit counters. The pod is taken from the graph object, never from user input. The ovn-kubernetes `nft-ruleset` kind waits for an ovn-kubernetes adapter.
 
 **Planned follow-up (2026-10-23): OpenFlow trace + `ovn-detrace`.** Not started; needs Q11 answered first.
 
@@ -567,7 +583,8 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 - **MCP over streamable HTTP in the daemon:** needs an auth story beyond kubeconfig; own ADR.
 - **Segmentation audit report:** reachability matrix (namespace/VPC) from ACL/PG/AS + path engine, exported as signed evidence. Configuration-based, labelled as such.
 - **Fleet view:** cross-cluster inventory and CIDR-overlap detection in a global Rancher product page.
-- **Identity adapter boundary:** isolate Kube-OVN conventions (`external_ids`, `cr-`, `join`) behind an interface to allow ovn-kubernetes / OpenStack later. No other adapter without a request.
+- ~~**Identity adapter boundary**~~: moved to M4 prep (ADR-0004, 2026-10-27).
+- **ovn-kubernetes adapter (ADR-0004):** identity from `k8s.ovn.org/*` `external_ids`, network/UDN grouping, local gateway mode as an opaque hop. Blocked on Q13 and Q14.
 - **SB Logical_Flow browser:** per datapath, on demand, expert mode.
 - **Extension diagnostics component:** would need its own ADR (see ADR-0001 Consequences).
 
@@ -617,3 +634,6 @@ Record answers here with evidence (date, link to test run or doc).
 | Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | **Resolved (2026-10-23, ADR-0003)**: kvtop uses **no SDK**. `internal/mcp` is hand-written JSON-RPC pinned to protocol `2024-11-05`, which predates tool annotations. We use the official `github.com/modelcontextprotocol/go-sdk` v1.8.0 for annotations, `structuredContent`/`outputSchema`, version negotiation and the in-memory test transport. kvtop should adopt it when it next touches MCP. |
 | Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |
 | Q11 | Is `ovn-detrace` (and its python `ovs` bindings) shipped in the Kube-OVN images on Harvester, and in which pod can it reach NB, SB and the node's OVS db? Candidates: `ovs-ovn` (local OVS db; NB/SB over the `ovn-nb`/`ovn-sb` services, TLS?) or `ovn-central` (NB/SB sockets; `--ovsdb` only names ports?). | M6 detrace follow-up | open; check `which ovn-detrace` and a dry run in both pods on `hv-01` |
+| Q12 | Which Pod labels, annotations and owner identify a Kube-OVN VPC NAT gateway pod, and do its two LSPs carry `external_ids:pod`? Expected but unverified: label `ovn.kubernetes.io/vpc-nat-gw=true`, annotation `ovn.kubernetes.io/vpc_nat_gw=<name>`, owner `StatefulSet/vpc-nat-gw-<name>`. | M4 item 7 (ADR-0004) | open; `kubectl -n kube-system get pod vpc-nat-gw-one-water-nat-0 -o yaml` and `kubectl ko nbctl find logical_switch_port 'external_ids:pod="kube-system/vpc-nat-gw-one-water-nat-0"'` on `hv-01` |
+| Q13 | Is ovn-kubernetes in scope? The targets (Rancher RKE2, Harvester) do not ship it, so supporting it means OpenShift or vanilla clusters. | ovn-kubernetes adapter | open (requested 2026-10-27) |
+| Q14 | ovn-kubernetes interconnect mode runs one NB/SB per node on a unix socket in `ovnkube-node`, with no central database. Which model: (a) DaemonSet zone collectors and a merger, (b) per-zone view, (c) central-DB deployments only? | ovn-kubernetes adapter, ADR-0002 | open; needs a spike on a kind cluster, which also verifies the `k8s.ovn.org/*` `external_ids` and `k8s.ovn.org/node-chassis-id` |
