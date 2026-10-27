@@ -142,7 +142,7 @@ func (m model) header() []string {
 		{"Revision:", rev + "  " + m.liveLabel()},
 		{"Topology:", topo},
 		{"Diag:", m.diagLabel()},
-		{"Theme:", m.theme.Name},
+		{"CNI:", m.cniLabel()}, // t flashes the theme name
 	}
 	const infoW = 46
 	keys := m.hotkeys()

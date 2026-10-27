@@ -322,7 +322,7 @@ The fix:
    - duplicate MAC/IP
    - tunnel-key collisions
    - **asymmetric return around an opaque hop** (ADR-0004 decision 5): an LR with an opaque hop on one of its switches, a different egress, and no `src-ip` route or reroute policy sending that switch to the hop's LAN IP. A warning, labelled heuristic. Origin: the 2026-10 `vpc-onewater` / `one-water-nat` incident on `hv-01`.
-7. **Opaque hops (ADR-0004).** The `OpaqueHop` node type, for points where OVN hands traffic to something it cannot see. First case: the Kube-OVN VPC NAT gateway pod, joined to its LAN/WAN LSPs, with `inspect: iptables-nat`. It replaces the "not OVN NAT" footnote in the TUI (`cmd/ovn-topo/views.go`) with an object.
+7. **Opaque hops (ADR-0004).** The `OpaqueHop` node type, for points where OVN hands traffic to something it cannot see. First case: the Kube-OVN VPC NAT gateway pod, joined to its LAN/WAN LSPs, with `inspect: iptables-nat`. It replaces the "not OVN NAT" footnote in the TUI (`cmd/ovn-topo/views.go`) with an object. *Interim (2026-10-27):* the TUI details pane already shows the NAT gateway as an "Outside OVN" section. It is detected client-side by pod name in `cmd/ovn-topo/flavor.go`, together with the Kube-OVN vocabulary, `← via` provenance and Inspect commands. This moves behind the M4-prep adapter; Q12 (the gateway pod's labels) is still open.
 
 **M4 prep (2026-10-27, ADR-0004): CNI adapter boundary.** Before item 1, move the Kube-OVN conventions in `pkg/graph` behind a flavor adapter interface, with Kube-OVN as the only implementation:
 - identity from `external_ids`;

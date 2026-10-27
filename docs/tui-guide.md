@@ -40,7 +40,7 @@ The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.
  Revision: 1842  ● live                        </>     filter          <i>     details pane    <L>  live on/off
  Topology: 2 VPC · 4 LS · 412 LSP · 3 chassis  <1-4>   vpc/ch/wl/ports <d>     describe        <t>  theme
  Diag:     DIAG ready                          <h/l>   fold/unfold     <y>     raw             <?>  help
- Theme:    SUSE                                <enter> toggle/goto     <b>     back            <q>  quit
+ CNI:      Kube-OVN · central NB/SB            <enter> toggle/goto     <b>     back            <q>  quit
 ┌──────────────────────── Xray(vpc)[18] ─────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
 │ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
 │ ├─ ▾ ● VPC  default  1 router · 1 switch [default]             ││   ports 3 · routes 1 · nat 0 · pol 1 · lb 1  │
@@ -274,6 +274,31 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 ### Details pane — `i`
 
 On terminals at least 100 columns wide, the right pane describes the selection. On a `⇢` row it describes the target, i.e. where `Enter` goes. With the pane shown, port rows drop their inline summary, because the pane carries it.
+
+The header's **CNI** row says which conventions the TUI recognised:
+- `Kube-OVN`, when routers or switches carry `external_ids:vendor=kube-ovn`;
+- `ovn-kubernetes · zone <node>` under `--zone` or a `zone-<node>` capture;
+- otherwise plain `OVN`.
+
+The theme name, previously in that row, is flashed when `t` changes it.
+
+The pane speaks the platform engineer's language first, then OVN's (ADR-0004):
+- **Header.** On a Kube-OVN object, the first line is what you call it, with its parent: `Subnet subnet-onewater  VPC vpc-onewater`, `VPC router`, `Join subnet`, `Underlay subnet`, `VPC external gateway`, `VM NIC`, `Node join port`, `NAT gateway LAN interface`. The OVN kind and name follow underneath. An object no CNI claims keeps the plain OVN header.
+- **Role, with a `← via …` line.** A row the TUI *interpreted* (rather than read from OVN) says what it was derived from, in muted text:
+  - `← external_ids:vendor=kube-ovn`;
+  - `← switch name join (Kube-OVN convention)`;
+  - `← pod name vpc-nat-gw-<name> (Kube-OVN convention)`;
+  - `← pod from the port's external_ids:pod`;
+  - and, as before, the chassis → node rule.
+
+  Plain OVN rows carry no such line.
+- **Outside OVN.** Where traffic leaves OVN's view. Today this means a Kube-OVN VPC NAT gateway pod, found by its pod name, with its LAN/WAN IPs and the reminder that its NAT is iptables in the pod. It appears on:
+  - the routers whose subnet holds its LAN side (not every router on a shared underlay);
+  - its switches;
+  - its own ports.
+
+  It replaces the generic "NAT 0 does not rule out…" note on those routers.
+- **Inspect.** The next command for the object, in the CNI's tooling: `kubectl ko nbctl|sbctl …` on Kube-OVN, `ovn-nbctl|ovn-sbctl …` otherwise. Near a NAT gateway, it adds `kubectl exec … iptables-save -t nat` for its rules.
 
 | Selection | Pane |
 |---|---|

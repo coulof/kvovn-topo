@@ -78,6 +78,7 @@ type model struct {
 	psort      int
 	pdesc      bool
 	pinspect   bool
+	zone       string // ovn-kubernetes zone (node) on screen, from --zone or a zone-<node> capture
 
 	// Cached node details for the details pane (lazy fetch, dropped when the
 	// graph revision moves past detailsRev). Not baseRevision: that one marks
@@ -607,6 +608,7 @@ func main() {
 
 	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
+	m.zone = firstNonEmpty(zone, zoneOf(fixtureDir))
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)

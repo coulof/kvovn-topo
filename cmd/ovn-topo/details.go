@@ -71,17 +71,37 @@ func (m model) detailLines(n *xnode, w int) []string {
 	}
 	nameOf := func(x *xnode) string { return m.kind(x) + " " + st.Kind[x.kind].Render(x.name) }
 
+	via := func(s string) string { return " " + pad("", kw) + st.MutedText.Render("← "+s) }
+
 	head := m.glyph(n.health) + " " + nameOf(n)
 	if n.kind == kGroup {
 		head = st.Value.Render(n.name)
 	}
-	out := []string{" " + head + "  " + m.badge(n)}
+	id, claimed := m.cniIdentity(n)
+	var out []string
+	if claimed {
+		// A platform engineer's name first; the OVN object underneath.
+		line := m.glyph(n.health) + " " + st.Value.Render(id.term) + " " + st.Kind[n.kind].Render(n.name)
+		if id.parent != "" {
+			line += st.MutedText.Render("  " + id.parent)
+		}
+		out = append(out, " "+line, "   "+m.kind(n)+" "+st.MutedText.Render(n.name)+"  "+m.badge(n))
+	} else {
+		out = append(out, " "+head+"  "+m.badge(n))
+	}
 	if n.summary != "" {
 		for _, l := range wrapText(n.summary, w-3) {
 			out = append(out, "   "+st.MutedText.Render(l))
 		}
 	}
 	out = append(out, "")
+	if claimed && id.role != "" {
+		out = append(out, kv("Role", id.role))
+		if id.via != "" {
+			out = append(out, via(id.via))
+		}
+		out = append(out, "")
+	}
 	p := props(n.gn)
 
 	switch n.kind {
@@ -179,7 +199,7 @@ func (m model) detailLines(n *xnode, w int) []string {
 			}
 		}
 
-		if pint(p, "natCount") == 0 {
+		if pint(p, "natCount") == 0 && len(m.natGatewaysNear(n)) == 0 {
 			out = append(out, note("NAT 0 does not rule out VPC NAT Gateway (iptables in a pod) or centralized natOutgoing (policy reroute + node iptables).")...)
 		}
 
@@ -427,7 +447,30 @@ func (m model) detailLines(n *xnode, w int) []string {
 		if len(rows) > 0 {
 			out = append(out, "", section("Kubernetes"))
 			out = append(out, rows...)
+			if k.Pod != nil && n.kind == kLSP {
+				out = append(out, via("pod from the port's external_ids:pod"))
+			}
 		}
+	}
+
+	// Outside OVN: where traffic leaves OVN's view (ADR-0004 opaque hops).
+	if gws := m.natGatewaysNear(n); len(gws) > 0 {
+		out = append(out, "", section("Outside OVN"))
+		for _, gw := range gws {
+			out = append(out, " ▸ "+st.ActiveGateway.Render("NAT gateway "+gw.name)+st.MutedText.Render("  pod "+gw.namespace+"/"+gw.pod))
+			var ifs []string
+			for _, p := range gw.ports {
+				ip, _ := lspAddress(p.gn)
+				if ls := m.switchOf(p); ls != nil {
+					ifs = append(ifs, firstNonEmpty(ip, "?")+" on "+ls.name)
+				}
+			}
+			for _, l := range wrapText(strings.Join(ifs, " · "), w-5) {
+				out = append(out, "   "+st.CIDR.Render(l))
+			}
+			out = append(out, note("NAT rules and EIPs are iptables inside the pod: OVN does not see them, and the router shows no NAT for them.")...)
+		}
+		out = append(out, via("pod name "+natGWPrefix+"<name> (Kube-OVN convention)"))
 	}
 
 	var rels []string
@@ -439,6 +482,17 @@ func (m model) detailLines(n *xnode, w int) []string {
 	if len(rels) > 0 {
 		out = append(out, "", section("Relations"))
 		out = append(out, rels...)
+	}
+	if cmds := m.inspectCommands(n); len(cmds) > 0 {
+		out = append(out, "", section("Inspect"))
+		for _, c := range cmds {
+			for i, l := range wrapText(c, w-5) {
+				if i > 0 {
+					l = "  " + l
+				}
+				out = append(out, "   "+st.MutedText.Render(l))
+			}
+		}
 	}
 	hint := "d describe · y raw"
 	if len(rels) > 0 {
