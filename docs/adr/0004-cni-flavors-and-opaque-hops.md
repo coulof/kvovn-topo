@@ -106,6 +106,8 @@ Opaque hops make the tool's blind spots explicit instead of hiding them in footn
     - (c) support only central-DB deployments.
 
     This needs a spike.
+
+    Spike done on OpenShift 4.19 (2026-10-27): Q13 is resolved (OpenShift is in scope), and option (a) is proposed in ADR-0005.
   - **ovn-kubernetes NB conventions.** The `k8s.ovn.org/owner-type`/`owner-controller`/`name`/`id` `external_ids`, LSP naming and the node chassis annotation (`k8s.ovn.org/node-chassis-id`) must be verified on a real cluster, per version.
 
 ## Action items
