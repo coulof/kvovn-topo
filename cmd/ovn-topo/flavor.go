@@ -56,6 +56,20 @@ func (m model) cniLabel() string {
 	return "OVN (no CNI conventions found)"
 }
 
+// cniShort is the flavor alone, for the header.
+func (m model) cniShort() string {
+	switch m.clusterFlavor() {
+	case flavorKubeOVN:
+		return "Kube-OVN"
+	case flavorOVNK:
+		return "ovn-kubernetes zone " + m.zone
+	}
+	if m.graphResp == nil {
+		return "—"
+	}
+	return "OVN"
+}
+
 // zoneOf names the ovn-kubernetes zone of a --fixture-dir capture (…/zone-<node>).
 func zoneOf(fixtureDir string) string {
 	if b := filepath.Base(filepath.Clean(fixtureDir)); strings.HasPrefix(b, "zone-") {

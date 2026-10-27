@@ -14,7 +14,7 @@ func TestProblemsListsAndJumps(t *testing.T) {
 		t.Fatalf("4 must open the Problems view, got %s", m.mode)
 	}
 	view := ansi.Strip(m.View())
-	for _, want := range []string{"Xray(problems)", "pending-pod.default", "unbound: no chassis has claimed this port", "problem (4)"} {
+	for _, want := range []string{"Problems [", "pending-pod.default", "unbound: no chassis has claimed this port", "problem (4)"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("expected %q in:\n%s", want, view)
 		}

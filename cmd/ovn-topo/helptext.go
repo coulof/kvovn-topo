@@ -145,9 +145,9 @@ var concepts = map[string]concept{
 
 // viewHelp is what each view is for.
 var viewHelp = map[mode]string{
-	modeVPC:      "VPC xray: VPCs → routers → router ports → switches → switch ports. Read it to see how a VPC is wired. ⇢ rows are cross-links (peer switch, gateway chassis, routes, NAT gateway); Enter follows them and b comes back.",
-	modeChassis:  "Chassis xray: each ovn-controller (usually one per node) and the ports bound on it. Read it to see where things run and which chassis holds a gateway.",
-	modeWorkload: "Workload xray: namespaces → pods and VMs → NICs. Start here from a Kubernetes name.",
+	modeVPC:      "VPCs: VPCs → routers → router ports → switches → switch ports. Read it to see how a VPC is wired. ⇢ rows are cross-links (peer switch, gateway chassis, routes, NAT gateway); Enter follows them and b comes back.",
+	modeChassis:  "Chassis: each ovn-controller (usually one per node) and the ports bound on it. Read it to see where things run and which chassis holds a gateway.",
+	modeWorkload: "Workloads: namespaces → pods and VMs → NICs. Start here from a Kubernetes name.",
 	modeProblems: "Problems: what the tree already knows is wrong, most severe first. Enter jumps to the object.",
 	modeChanges:  "Changes: what moved between revisions since ovn-topo started, newest first. Enter jumps to the object.",
 }

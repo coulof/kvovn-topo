@@ -1,6 +1,6 @@
 # OVN Topology TUI Guide (`ovn-topo`)
 
-`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **xray trees** (objects and what they contain), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
+`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **tree views** (VPCs, Chassis, Workloads: objects and what they contain), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
 
 ```bash
 ovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
@@ -36,9 +36,9 @@ The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.
 ## 1. Screen layout
 
 ```text
- ovn-topo · rev 1842 ● live · Kube-OVN · central NB/SB · 2 VPC 4 LS 412 LSP 3 ch · diag DIAG ready · service…
+ ovn-topo │ rev 1842 ● live │ Kube-OVN │ 2 VPC 4 LS 412 LSP 3 ch │ DIAG ready     service proxy kube-system/ovn-topologyd
  1-3 views  / filter  i pane  d describe  x diag  ! run  b back  ? help  q quit
-┌──────────────────────── Xray(vpc)[18] ─────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
+┌────────────────────────── VPCs [18] ───────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
 │ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
 │ ├─ ▾ ● VPC  default  1 router · 1 switch [default]             ││   ports 3 · routes 1 · nat 0 · pol 1 · lb 1  │
 │ │  ├─ ▸ ● LR   ovn_cluster  ports 3 · routes 1 · nat 0 · pol 1 ││                                              │
@@ -51,13 +51,13 @@ The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.
 │    ├╌ router ⇢ LR   custom-vpc                                 ││     → LS   join  (shared interconnect)       │
 │    └╌ router ⇢ LR   ovn_cluster                                ││ L3  Routes 1 · Policies 1 · NAT 0 · LBs 1    │
 └────────────────────────────────────────────────────────────────┘└──────────────────────────────────────────────┘
- xray  vpc  lr:lr-default-uuid
+ VPCs  lr:lr-default-uuid
 ```
 
-- **Header (2 rows).** The first is the state, most useful first so a narrow terminal cuts the end: revision and live state (`● live` over SSE, `◌ polling`, `‖ paused`, `○ offline fixture`), the CNI, topology totals, diagnostics state, and how the daemon is reached (`service proxy <ns>/<svc>:<port>`, `direct <url>`, `fixture: …`). The second hints the main keys; `?` has them all. Terminals shorter than 18 rows get one line.
-- **Main box:** the title shows the screen (`Xray(vpc)`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
+- **Header (2 rows).** The status line has the state on the left: revision and live state (`● live` over SSE, `◌ polling`, `‖ paused`, `○ offline fixture`), the CNI, topology totals, the problem count when there are problems, and the diagnostics badge (`DIAG ready`, or `T0` without `--diag`). How the daemon is reached sits on the right (`service proxy <ns>/<svc>:<port>`, `direct <host:port>`, `fixture: …`) and is cut first on a narrow terminal. The second row hints the main keys; `?` has them all. Terminals shorter than 18 rows get one line.
+- **Main box:** the title names what it shows (`VPCs`, `Chassis`, `Workloads`, `Problems`, `Changes`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
 - **Details pane** (right side, on terminals at least 100 columns wide): explains the selected object and how it interconnects. `i` hides or shows it.
-- **Crumbs (bottom row):** `xray` › current root › selected object ID, and on the right any message (jump targets, errors, refresh failures).
+- **Crumbs (bottom row):** the view › selected object ID, and on the right any message (jump targets, errors, refresh failures).
 
 Every frame is laid out to exactly the terminal size: nothing scrolls off the top, and lists scroll to keep the cursor visible.
 - Tree rows that do not fit are cut with `…`; the details pane carries the full information.
@@ -77,14 +77,14 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC1 — VPC xray with router details](images/tui/uc01-vpc-router.png) | ![UC1 — VPC in Harvester](images/harvester/uc01-vpc.png) |
+| ![UC1 — VPCs view with router details](images/tui/uc01-vpc-router.png) | ![UC1 — VPC in Harvester](images/harvester/uc01-vpc.png) |
 | `1`, VPC unfolded, cursor on its LR | *Suggested:* Networks › Virtual Private Cloud › *vpc* |
 
 ## UC2. Where does my VM run and how does its traffic leave?
 
 **Keys:** `3` → namespace → VM → its NIC (`LSP`).
 
-- **Workload xray:** namespace → VM / Pod / Node → NICs. A KubeVirt VM is shown as the VM, not its `virt-launcher` pod.
+- **Workloads view:** namespace → VM / Pod / Node → NICs. A KubeVirt VM is shown as the VM, not its `virt-launcher` pod.
 - The NIC's pane shows its IP and MAC, the **chassis it is bound on** (OVN's `Port_Binding`), and the **Path out**: `LSP → LS (cidr) → LRP gw <ip> → LR (VPC)`.
 - `✗ [unbound]` means OVN has not placed the port on any host (see UC4).
 
@@ -150,7 +150,7 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 **Keys:** `2` → a chassis.
 
-- **Chassis xray:** each chassis with the ports bound on it and `active gateway for ⇢ LRP`.
+- **Chassis view:** each chassis with the ports bound on it and `active gateway for ⇢ LRP`.
 - The pane shows the **System-id** (the chassis identity), hostname, encap (tunnel) IP, and `Node hv-01 ← <rule>`. The rule says how the node was matched: the `ovn.kubernetes.io/chassis` node annotation, the hostname, or a fallback.
 - **Warnings:**
   - hostname-only match;
@@ -166,7 +166,7 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 **Keys:** unfold a port (`l`), `Enter` on `bound on ⇢ CH …`, then `b`.
 
-- `Enter` jumps to the object in the xray where it lives: a chassis opens the chassis xray, a workload the workload xray. The path to it is expanded, and the crumbs say where you jumped.
+- `Enter` jumps to the object in the view where it lives: a chassis opens Chassis, a workload Workloads. The path to it is expanded, and the crumbs say where you jumped.
 - `b` returns to the exact row you left. On a `⇢` row the details pane already describes the target.
 
 | TUI | Harvester |
@@ -244,14 +244,14 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 **Keys:** `4` (Problems). The header shows the count, e.g. `! 3 problems (4)`.
 
 - One list, most severe first: unbound or disabled ports, gateway ports with no active chassis, chassis that match no node or share a hostname, and routers whose NAT gateway may be bypassed by replies.
-- `Enter` jumps to the object in its xray, `b` comes back.
+- `Enter` jumps to the object in its view, `b` comes back.
 - The NAT-gateway line is a heuristic: it reads `checking…` while the router's routes load, then warns when `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway. That is the one-water incident.
 
 ---
 
 # Part 2 — Reference
 
-## 2. Xray trees — `1` `2` `3`
+## 2. Tree views — `1` `2` `3`
 
 | Key | Root | Tree |
 |---|---|---|
@@ -263,9 +263,9 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 - **Relations (`├╌ label ⇢ …`)** appear when you unfold an object.
   - They are graph edges, not ownership: `bound on` (chassis), `workload`, `router port`, `peer switch`, `peer port`, `gateway (active)`, `localnet`, and `router` (for shared switches).
   - A relation already visible as the parent or a sibling is not repeated.
-- **`Enter` on a relation jumps** to that object in the xray where it lives, expanding the path to it. **`b`** returns to the exact row you left.
+- **`Enter` on a relation jumps** to that object in the view where it lives, expanding the path to it. **`b`** returns to the exact row you left.
 - **Two levels start open:**
-  - In the VPC xray you see each VPC's routers and switches with their summaries, folded. Router ports, switch ports and relations appear when you unfold.
+  - In VPCs you see each VPC's routers and switches with their summaries, folded. Router ports, switch ports and relations appear when you unfold.
   - Large switches, chassis and namespaces (more than 16 children) start folded even at the top.
   - `e`/`E` unfolds/folds everything visible; repeat it to go deeper.
 - A multi-NIC KubeVirt VM is one workload row whose children are its NICs on different switches.
@@ -346,7 +346,7 @@ In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes 
 - **`/text`:** substring filter on name, summary and badge.
   - Matching rows are shown with all their ancestors, so you keep the context: `/pod-2` shows `VPCs › default › default-subnet › app-pod-2.default`.
   - `Esc` clears it.
-- **`:`:** command prompt with `Tab` completion: `xray vpc|chassis|workload`, `ports` (`lrp`, `matrix`), `theme <name>`, `quit`.
+- **`:`:** command prompt with `Tab` completion: `vpc`, `chassis`, `workload` (`xray …` works too, k9s-style), `problems`, `changes`, `theme <name>`, `quit`.
 - **Live updates:** the TUI subscribes to `/events` (SSE).
   - Each event refetches the L3 graph and only the switches whose ports changed. Unknown IDs fall back to all switches.
   - If the stream breaks, it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE. Through Rancher's proxy the stream may be buffered: the header then shows `◌ polling`, and updates arrive every 10 s instead of instantly.
@@ -420,9 +420,9 @@ The target is captured when you press `x` and shown at the top of the modal: the
 | Where | Keys |
 |---|---|
 | Help (`?`) | `1`–`3` or `←`/`→` tab (This, Glossary, Keys) · `j`/`k` scroll · `Esc`/`q`/`?` close |
-| Everywhere | `1`–`3` xray trees · `4` problems · `5` changes · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
+| Everywhere | `1`–`3` tree views · `4` problems · `5` changes · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
 | Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
-| Xray trees | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
+| Tree views | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
 | Describe / raw | `y` toggle raw · `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc` back |
 | Diagnostics menu | `1`–`6` actions · `c` choose chassis (distributed port) · `Esc`/`x` close |
 | Trace picker | type to search or enter an IP · `Tab`/`Shift+Tab` category · `Ctrl+P`, `F1`–`F5` protocol · `↑`/`↓` · `Enter` trace · `Esc` back |

@@ -120,7 +120,7 @@ func assertFits(t *testing.T, label string, view string, w, h int) {
 func TestXrayVPCTree(t *testing.T) {
 	m := press(loaded(t, 140, 80, false), "i") // full-width tree with every summary
 	view := m.View()
-	for _, want := range []string{"Xray(vpc)", "VPCS", "ovn_cluster", "lrp-default", "10.244.0.1/24 → default-subnet",
+	for _, want := range []string{"VPCs [", "VPCS", "ovn_cluster", "lrp-default", "10.244.0.1/24 → default-subnet",
 		"default-subnet", "app-pod-1.default", "@node-1", "[unbound]", "[shared by 2 routers]", "EXTERNAL NETWORKS"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("expected %q in the vpc xray:\n%s", want, view)
@@ -854,5 +854,28 @@ func TestServiceProxyClientIsUsed(t *testing.T) {
 	}
 	if h := strings.Join(m.header(), "\n"); !strings.Contains(h, "service proxy") {
 		t.Errorf("header does not show the access path:\n%s", h)
+	}
+}
+
+// TestHeaderStatusLine: state on the left, source right-aligned and cut first.
+func TestHeaderStatusLine(t *testing.T) {
+	for _, w := range []int{160, 100} {
+		m := send(loaded(t, w, 40, false), tea.WindowSizeMsg{Width: w, Height: 40})
+		m.fixturePath, m.via = "", "service proxy kube-system/ovn-topologyd:http (https://rancher.example.com/k8s/clusters/c-m-abcdefgh)"
+		line := ansi.Strip(m.header()[0])
+		if ansi.StringWidth(line) > w {
+			t.Errorf("%d cols: status line is %d wide", w, ansi.StringWidth(line))
+		}
+		for _, want := range []string{"ovn-topo", "rev ", "VPC", "LSP", "T0"} {
+			if !strings.Contains(line, want) {
+				t.Errorf("%d cols: %q missing from %q", w, want, line)
+			}
+		}
+		if strings.Contains(line, "https://") || w == 160 && !strings.Contains(line, "service proxy") {
+			t.Errorf("%d cols: the source shows at 160 (cut first when narrower), without its scheme: %q", w, line)
+		}
+		if strings.Contains(line, " · ") || strings.Contains(line, "Xray") {
+			t.Errorf("%d cols: old separators or titles in %q", w, line)
+		}
 	}
 }

@@ -84,7 +84,7 @@ func (m model) diagLabel() string {
 	st := m.styles
 	switch {
 	case !m.diagMode:
-		return st.MutedText.Render("off (--diag)")
+		return st.MutedText.Render("T0")
 	case m.diagAvailable:
 		return st.DiagBadgeActive.Render("DIAG") + " " + st.Ok.Render("ready")
 	case m.diagExecutor == nil:
@@ -123,9 +123,8 @@ func (m model) header() []string {
 	if m.height < 18 {
 		return []string{clip(" " + st.Label.Render("ovn-topo") + " " + st.MutedText.Render(daemon) + "  " + rev + " " + m.liveLabel() + "  " + st.MutedText.Render("? help"))}
 	}
-	sep := st.Faint.Render(" · ")
-	// Most useful first: a narrow terminal cuts the source path, not the state.
-	parts := []string{st.Label.Render("ovn-topo"), rev + " " + m.liveLabel(), st.Value.Render(m.cniLabel())}
+	sep := st.Faint.Render(" │ ")
+	parts := []string{st.Pill.Render(" ovn-topo "), rev + " " + m.liveLabel(), st.Value.Render(m.cniShort())}
 	if m.tree != nil {
 		s := m.tree.stats
 		parts = append(parts, st.MutedText.Render(fmt.Sprintf("%d VPC %d LS %d LSP %d ch", s.vpcs, s.switches, s.ports, s.chassis)))
@@ -133,18 +132,37 @@ func (m model) header() []string {
 	if c := m.problemCount(); c > 0 {
 		parts = append(parts, st.Warn.Render(fmt.Sprintf("! %s (4)", plural(c, "problem"))))
 	}
-	parts = append(parts, "diag "+m.diagLabel(), st.MutedText.Render(daemon))
+	parts = append(parts, m.diagLabel())
 	var hints []string
 	for _, k := range m.hotkeys() {
 		hints = append(hints, st.Key.Render(k[0])+" "+st.MutedText.Render(k[1]))
 	}
-	return []string{clip(" " + strings.Join(parts, sep)), clip(" " + strings.Join(hints, "  "))}
+	// The state on the left; the source right-aligned, cut first when space runs out.
+	status := " " + strings.Join(parts, sep)
+	if room := m.w() - lipgloss.Width(status) - 3; m.w() > 0 && room >= 8 {
+		src := shortSource(daemon)
+		src = fit(src, min(lipgloss.Width(src), room))
+		status = pad(status, m.w()-lipgloss.Width(src)-1) + st.MutedText.Render(src)
+	}
+	return []string{clip(status), clip(" " + strings.Join(hints, "  "))}
 }
+
+// shortSource drops the scheme and the API path from the daemon address shown.
+func shortSource(s string) string {
+	for _, p := range []string{"http://", "https://"} {
+		s = strings.Replace(s, p, "", 1)
+	}
+	return strings.TrimSuffix(s, "/api/v1")
+}
+
+// viewTitle names what a view contains.
+var viewTitle = map[mode]string{modeVPC: "VPCs", modeChassis: "Chassis", modeWorkload: "Workloads",
+	modeProblems: "Problems", modeChanges: "Changes"}
 
 func (m model) crumbs() string {
 	st := m.styles
 	pill := func(s string, style lipgloss.Style) string { return style.Render(" " + s + " ") }
-	c := pill("xray", st.Pill) + " " + pill(string(m.mode), st.PillAlt)
+	c := pill(firstNonEmpty(viewTitle[m.mode], string(m.mode)), st.Pill)
 	switch {
 	case m.diagModal:
 		c += " " + pill("diagnostics", st.DiagBadgeActive)
@@ -300,7 +318,7 @@ func (m model) treeView() []string {
 		}
 		body = append(body, "", st.MutedText.Render(msg))
 	}
-	title := st.Label.Render("Xray") + st.CIDR.Render("("+string(m.mode)+")") + st.MutedText.Render(fmt.Sprintf("[%d]", len(m.rows))) + m.filterTitle()
+	title := st.Label.Render(firstNonEmpty(viewTitle[m.mode], string(m.mode))) + st.MutedText.Render(fmt.Sprintf(" [%d]", len(m.rows))) + m.filterTitle()
 	tree := box(body, tw, m.areaH(), title, st.Border)
 	if !m.showPane() {
 		return tree
