@@ -79,6 +79,7 @@ How it works:
 - It runs libovsdb monitors over that stream, so changes appear live, as with the daemon.
 - It serves the graph to itself on `127.0.0.1`.
 - Nothing is deployed in the cluster.
+- The `x` diagnostics run in the `ovnkube-node` pod of the selected object's node: `ovn-trace` in `sbdb`; OVS, conntrack and tcpdump in `ovn-controller`; logs from `ovn-controller`'s container log. `ovn-topo` detects the namespace. A trace stays inside that node's zone.
 
 **These sockets accept writes.** `ovn-topo` stays read-only only because of its own code: no write calls on the OVSDB client, enforced by `forbidigo` in CI. OVN itself does not stop a write. This mode is exec-based, so ADR-0001 keeps it in the TUI, behind `--diag`. MCP does not offer it.
 

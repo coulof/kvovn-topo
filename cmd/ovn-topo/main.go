@@ -195,9 +195,6 @@ type diagExecResultMsg struct {
 // graph and diagnostics always target the same cluster (nil: default rules).
 func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kube clientcmd.ClientConfig, k8sNamespace string) model {
 	theme, idx := GetThemeByName(themeName)
-	if k8sNamespace == "" {
-		k8sNamespace = "kube-system"
-	}
 
 	m := model{
 		daemonURL:        daemonURL,
@@ -535,7 +532,7 @@ func main() {
 	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
 	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
 	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
-	flag.StringVar(&k8sNamespace, "k8s-namespace", "kube-system", "Kubernetes namespace containing Kube-OVN/OVS daemon pods")
+	flag.StringVar(&k8sNamespace, "k8s-namespace", "", "Kubernetes namespace of the OVN pods diagnostics exec into (default: detect kube-system for Kube-OVN, else openshift-ovn-kubernetes or ovn-kubernetes)")
 	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
 	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
 	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
@@ -577,14 +574,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: live ovn-kubernetes zones are Tier 1 (pods/exec relay, ADR-0001); add --diag")
 			os.Exit(2)
 		}
-		zoneNS := ""
-		flag.Visit(func(f *flag.Flag) {
-			if f.Name == "k8s-namespace" {
-				zoneNS = k8sNamespace
-			}
-		})
 		if zone == "list" {
-			if err := listZones(loader, zoneNS, os.Stdout); err != nil {
+			if err := listZones(loader, k8sNamespace, os.Stdout); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -592,7 +583,7 @@ func main() {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		url, err := startZone(ctx, loader, zoneNS, zone, os.Stderr)
+		url, err := startZone(ctx, loader, k8sNamespace, zone, os.Stderr)
 		if err != nil {
 			cancel()
 			fmt.Fprintf(os.Stderr, "Error: %v\nRun with --zone list to see the zones.\n", err)
@@ -629,6 +620,9 @@ func main() {
 	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext}
 	if raw, err := loader.RawConfig(); err == nil {
 		m.kube.currentContext = raw.CurrentContext
+	}
+	if zone != "" && m.diagLocator != nil {
+		m.diagLocator.SetHomeZone(zone)
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

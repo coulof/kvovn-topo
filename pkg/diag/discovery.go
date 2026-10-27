@@ -6,41 +6,171 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-// PodLocator discovers diagnostic target pods (ovn-central, kube-ovn-cni, ovs-ovn) in the cluster.
+// Flavor is the OVN deployment the diagnostic pods belong to.
+type Flavor int
+
+const (
+	// FlavorKubeOVN: central ovn-central, kube-ovn-cni and ovs-ovn pods.
+	FlavorKubeOVN Flavor = iota
+	// FlavorOVNK: ovn-kubernetes interconnect, one ovnkube-node pod (and zone) per node.
+	FlavorOVNK
+)
+
+func (f Flavor) String() string {
+	if f == FlavorOVNK {
+		return "ovn-kubernetes"
+	}
+	return "Kube-OVN"
+}
+
+// PodLocator discovers diagnostic target pods in the cluster: ovn-central,
+// kube-ovn-cni and ovs-ovn for Kube-OVN, ovnkube-node for ovn-kubernetes. The
+// flavor (and, unless given, the namespace) is detected on first use.
 type PodLocator struct {
 	client    kubernetes.Interface
 	namespace string
+	auto      bool   // namespace not given: search kube-system, then OVNKNamespaces
+	home      string // ovn-kubernetes zone (node) the graph comes from, if known
+
+	mu       sync.Mutex
+	detected bool
+	flavor   Flavor
 }
 
-// NewPodLocator creates a locator targeting the specified namespace (typically "kube-system").
+// NewPodLocator creates a locator for the namespace of the OVN pods. An empty
+// namespace means detect: kube-system for Kube-OVN, else the ovn-kubernetes one.
 func NewPodLocator(client kubernetes.Interface, namespace string) *PodLocator {
+	l := &PodLocator{client: client, namespace: namespace}
 	if namespace == "" {
-		namespace = "kube-system"
+		l.namespace, l.auto = "kube-system", true
 	}
-	return &PodLocator{
-		client:    client,
-		namespace: namespace,
+	return l
+}
+
+// ns is the namespace of the OVN pods, as detected so far.
+func (l *PodLocator) ns() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.namespace
+}
+
+// SetHomeZone sets the ovn-kubernetes zone the graph was read from (--zone). It
+// is the trace zone for targets that have no node, such as distributed router ports.
+func (l *PodLocator) SetHomeZone(node string) { l.home = node }
+
+// Detect returns the flavor and namespace of the OVN pods. A namespace with
+// ovn-central pods is Kube-OVN, one with ovnkube-node pods is ovn-kubernetes.
+// The answer is cached once found; with nothing found it stays Kube-OVN in the
+// given (or default) namespace and is retried on the next call.
+func (l *PodLocator) Detect(ctx context.Context) (Flavor, string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.detected {
+		return l.flavor, l.namespace
 	}
+	candidates := []string{l.namespace}
+	if l.auto {
+		candidates = append(candidates, OVNKNamespaces...)
+	}
+	for _, ns := range candidates {
+		for _, c := range []struct {
+			selector string
+			flavor   Flavor
+		}{{"app=ovn-central", FlavorKubeOVN}, {"app=ovnkube-node", FlavorOVNK}} {
+			pods, err := l.client.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: c.selector, Limit: 1})
+			if err == nil && len(pods.Items) > 0 {
+				l.detected, l.flavor, l.namespace = true, c.flavor, ns
+				return l.flavor, l.namespace
+			}
+		}
+	}
+	return FlavorKubeOVN, l.namespace
+}
+
+// FindProbePod returns a pod to check pods/exec on: ovn-central for Kube-OVN, any
+// running ovnkube-node (sbdb) for ovn-kubernetes.
+func (l *PodLocator) FindProbePod(ctx context.Context) (PodRef, Flavor, error) {
+	flavor, ns := l.Detect(ctx)
+	if flavor != FlavorOVNK {
+		pod, err := l.FindOvnCentralPod(ctx)
+		return pod, flavor, err
+	}
+	pods, err := l.client.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: "app=ovnkube-node"})
+	if err != nil {
+		return PodRef{}, flavor, fmt.Errorf("failed to list ovnkube-node pods in %s: %w", ns, err)
+	}
+	for _, p := range pods.Items {
+		if p.Status.Phase == corev1.PodRunning {
+			return PodRef{Namespace: ns, Name: p.Name, Container: SB.container()}, flavor, nil
+		}
+	}
+	return PodRef{}, flavor, fmt.Errorf("no running ovnkube-node pod in %s", ns)
+}
+
+// FindTracePod returns the pod ovn-trace runs in. Kube-OVN: ovn-central (the SB
+// is central, node is ignored). ovn-kubernetes: the sbdb of node's zone, where
+// the port's logical flows are; with no node, the home zone. Never another zone.
+func (l *PodLocator) FindTracePod(ctx context.Context, node string) (PodRef, error) {
+	if flavor, _ := l.Detect(ctx); flavor != FlavorOVNK {
+		return l.FindOvnCentralPod(ctx)
+	}
+	if node == "" {
+		node = l.home
+	}
+	if node == "" {
+		return PodRef{}, errors.New("source port is not bound to a node: its ovn-kubernetes zone is unknown (use --zone)")
+	}
+	return l.FindOVNKZonePod(ctx, node, SB)
+}
+
+// FindCapturePod returns the host-network pod tcpdump runs in on node:
+// kube-ovn-cni for Kube-OVN, ovnkube-node (ovn-controller) for ovn-kubernetes.
+func (l *PodLocator) FindCapturePod(ctx context.Context, node string) (PodRef, error) {
+	if flavor, _ := l.Detect(ctx); flavor == FlavorOVNK {
+		return l.findOVNKNodePod(ctx, node, ovnkControllerContainer)
+	}
+	return l.FindNodeCNIPod(ctx, node)
+}
+
+// ControllerLog returns the last lines of ovn-controller's log on pod (from
+// FindNodeOVSPod). Kube-OVN writes it to a file, read with tail over exec;
+// ovn-kubernetes logs to stdout, read from the Pod's log subresource.
+func (l *PodLocator) ControllerLog(ctx context.Context, exec Executor, pod PodRef, lines int) ([]byte, error) {
+	if flavor, _ := l.Detect(ctx); flavor == FlavorOVNK {
+		n := int64(lines)
+		out, err := l.client.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name,
+			&corev1.PodLogOptions{Container: pod.Container, TailLines: &n}).DoRaw(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("logs of %s: %w", pod, err)
+		}
+		return out, nil
+	}
+	stdout, stderr, err := exec.Exec(ctx, pod, BuildOvnControllerLogTail(lines))
+	if err != nil {
+		return nil, fmt.Errorf("%s", firstNonEmpty(strings.TrimSpace(string(stderr)), err.Error()))
+	}
+	return stdout, nil
 }
 
 // FindOvnCentralPod finds an active/running ovn-central pod, prioritizing the active Southbound
 // Raft leader (labeled ovn-sb-leader=true by Kube-OVN) to prevent clustered Raft follower connection rejections.
 func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 	// 1. Try to find the active Southbound Raft leader pod
-	leaderPods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+	leaderPods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=ovn-central,ovn-sb-leader=true",
 	})
 	if err == nil && len(leaderPods.Items) > 0 {
 		for _, p := range leaderPods.Items {
 			if p.Status.Phase == corev1.PodRunning {
 				return PodRef{
-					Namespace: l.namespace,
+					Namespace: l.ns(),
 					Name:      p.Name,
 					Container: "ovn-central",
 				}, nil
@@ -49,7 +179,7 @@ func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 	}
 
 	// 2. Fall back to any running ovn-central pod (for single-node or non-HA setups)
-	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+	pods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=ovn-central",
 	})
 	if err != nil {
@@ -58,22 +188,22 @@ func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 
 	if len(pods.Items) == 0 {
 		// Fallback: search by prefix
-		allPods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{})
+		allPods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return PodRef{}, fmt.Errorf("failed to list pods in namespace %s: %w", l.namespace, err)
+			return PodRef{}, fmt.Errorf("failed to list pods in namespace %s: %w", l.ns(), err)
 		}
 		for _, p := range allPods.Items {
 			if strings.HasPrefix(p.Name, "ovn-central") && p.Status.Phase == corev1.PodRunning {
-				return PodRef{Namespace: l.namespace, Name: p.Name, Container: "ovn-central"}, nil
+				return PodRef{Namespace: l.ns(), Name: p.Name, Container: "ovn-central"}, nil
 			}
 		}
-		return PodRef{}, fmt.Errorf("no running ovn-central pod found in namespace %s", l.namespace)
+		return PodRef{}, fmt.Errorf("no running ovn-central pod found in namespace %s", l.ns())
 	}
 
 	for _, p := range pods.Items {
 		if p.Status.Phase == corev1.PodRunning {
 			return PodRef{
-				Namespace: l.namespace,
+				Namespace: l.ns(),
 				Name:      p.Name,
 				Container: "ovn-central",
 			}, nil
@@ -85,7 +215,7 @@ func (l *PodLocator) FindOvnCentralPod(ctx context.Context) (PodRef, error) {
 
 // FindNodeCNIPod finds the kube-ovn-cni pod running on the specified node.
 func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRef, error) {
-	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+	pods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=kube-ovn-cni",
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 	})
@@ -95,13 +225,13 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 
 	if len(pods.Items) == 0 {
 		// Try listing by label without field selector (in case fieldSelector isn't supported)
-		allCNIs, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+		allCNIs, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 			LabelSelector: "app=kube-ovn-cni",
 		})
 		if err == nil {
 			for _, p := range allCNIs.Items {
 				if p.Spec.NodeName == nodeName && p.Status.Phase == corev1.PodRunning {
-					return PodRef{Namespace: l.namespace, Name: p.Name, Container: "cni-server"}, nil
+					return PodRef{Namespace: l.ns(), Name: p.Name, Container: "cni-server"}, nil
 				}
 			}
 		}
@@ -113,7 +243,7 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 		// field selector was not honoured.
 		if p.Spec.NodeName == nodeName && p.Status.Phase == corev1.PodRunning {
 			return PodRef{
-				Namespace: l.namespace,
+				Namespace: l.ns(),
 				Name:      p.Name,
 				Container: "cni-server",
 			}, nil
@@ -125,9 +255,13 @@ func (l *PodLocator) FindNodeCNIPod(ctx context.Context, nodeName string) (PodRe
 
 // FindNodeOVSPod finds the ovs-ovn or ovs pod running on the specified node (or falls back to kube-ovn-cni).
 func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRef, error) {
+	if flavor, _ := l.Detect(ctx); flavor == FlavorOVNK {
+		// ovn-controller runs as root with the host's OVS db.sock and all OVS tools.
+		return l.findOVNKNodePod(ctx, nodeName, ovnkControllerContainer)
+	}
 	selectors := []string{"app=ovs", "app=ovs-ovn"}
 	for _, sel := range selectors {
-		pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+		pods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 			FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 		})
@@ -142,7 +276,7 @@ func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRe
 						}
 					}
 					return PodRef{
-						Namespace: l.namespace,
+						Namespace: l.ns(),
 						Name:      p.Name,
 						Container: container,
 					}, nil
@@ -151,7 +285,7 @@ func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRe
 		}
 
 		// Also check by label without field selector
-		allPods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+		allPods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 			LabelSelector: sel,
 		})
 		if err == nil {
@@ -165,7 +299,7 @@ func (l *PodLocator) FindNodeOVSPod(ctx context.Context, nodeName string) (PodRe
 						}
 					}
 					return PodRef{
-						Namespace: l.namespace,
+						Namespace: l.ns(),
 						Name:      p.Name,
 						Container: container,
 					}, nil

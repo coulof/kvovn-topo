@@ -56,7 +56,19 @@ func BuildOVSDBRelayCommand(db OVSDB) []string {
 // FindOVNKZonePod finds the running ovnkube-node pod of a node and targets the
 // container serving db.
 func (l *PodLocator) FindOVNKZonePod(ctx context.Context, nodeName string, db OVSDB) (PodRef, error) {
-	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{
+	return l.findOVNKNodePod(ctx, nodeName, db.container())
+}
+
+// ovnkControllerContainer is the ovnkube-node container running ovn-controller,
+// with the host's OVS socket: OVS commands and tcpdump (host network) run there.
+const ovnkControllerContainer = "ovn-controller"
+
+// findOVNKNodePod finds the running ovnkube-node pod of a node and targets container.
+func (l *PodLocator) findOVNKNodePod(ctx context.Context, nodeName, container string) (PodRef, error) {
+	if nodeName == "" {
+		return PodRef{}, errors.New("no node given for the ovnkube-node pod")
+	}
+	pods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=ovnkube-node",
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 	})
@@ -67,17 +79,17 @@ func (l *PodLocator) FindOVNKZonePod(ctx context.Context, nodeName string, db OV
 		// Re-check the node: never exec on a pod of another node, even if the
 		// field selector was not honoured.
 		if p.Spec.NodeName == nodeName && p.Status.Phase == corev1.PodRunning {
-			return PodRef{Namespace: l.namespace, Name: p.Name, Container: db.container()}, nil
+			return PodRef{Namespace: l.ns(), Name: p.Name, Container: container}, nil
 		}
 	}
-	return PodRef{}, fmt.Errorf("no running ovnkube-node pod on node %s in %s", nodeName, l.namespace)
+	return PodRef{}, fmt.Errorf("no running ovnkube-node pod on node %s in %s", nodeName, l.ns())
 }
 
 // ListOVNKZones returns the nodes that run an ovnkube-node pod, one zone each.
 func (l *PodLocator) ListOVNKZones(ctx context.Context) ([]string, error) {
-	pods, err := l.client.CoreV1().Pods(l.namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=ovnkube-node"})
+	pods, err := l.client.CoreV1().Pods(l.ns()).List(ctx, metav1.ListOptions{LabelSelector: "app=ovnkube-node"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list ovnkube-node pods in %s: %w", l.namespace, err)
+		return nil, fmt.Errorf("failed to list ovnkube-node pods in %s: %w", l.ns(), err)
 	}
 	var zones []string
 	for _, p := range pods.Items {

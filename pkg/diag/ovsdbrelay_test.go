@@ -12,6 +12,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -123,5 +124,69 @@ func TestFindOVNKZonePod(t *testing.T) {
 	zones, err := l.ListOVNKZones(ctx)
 	if err != nil || strings.Join(zones, ",") != "node-a,node-b" {
 		t.Errorf("zones = %v, %v", zones, err)
+	}
+}
+
+func TestDetectFlavor(t *testing.T) {
+	ctx := context.Background()
+	pod := func(ns, name, app, node string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: map[string]string{"app": app}},
+			Spec:       corev1.PodSpec{NodeName: node},
+			Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+		}
+	}
+	ovnk := []runtime.Object{
+		pod("openshift-ovn-kubernetes", "ovnkube-node-a", "ovnkube-node", "node-a"),
+		pod("openshift-ovn-kubernetes", "ovnkube-node-b", "ovnkube-node", "node-b"),
+	}
+
+	// Kube-OVN in kube-system wins the auto-detection.
+	l := NewPodLocator(fake.NewSimpleClientset(append(ovnk, pod("kube-system", "ovn-central-0", "ovn-central", "node-a"))...), "")
+	if f, ns := l.Detect(ctx); f != FlavorKubeOVN || ns != "kube-system" {
+		t.Errorf("Kube-OVN cluster detected as %v in %s", f, ns)
+	}
+	if p, _ := l.FindTracePod(ctx, "node-b"); p.Container != "ovn-central" {
+		t.Errorf("Kube-OVN trace pod = %v", p)
+	}
+
+	// Only ovnkube-node: ovn-kubernetes, every action on the target's own node.
+	l = NewPodLocator(fake.NewSimpleClientset(ovnk...), "")
+	if f, ns := l.Detect(ctx); f != FlavorOVNK || ns != "openshift-ovn-kubernetes" {
+		t.Fatalf("ovn-kubernetes cluster detected as %v in %s", f, ns)
+	}
+	want := func(name string, got PodRef, err error, pod, container string) {
+		t.Helper()
+		if err != nil || got.Name != pod || got.Container != container || got.Namespace != "openshift-ovn-kubernetes" {
+			t.Errorf("%s = %v, %v; want %s/%s", name, got, err, pod, container)
+		}
+	}
+	p, err := l.FindTracePod(ctx, "node-b")
+	want("trace", p, err, "ovnkube-node-b", "sbdb")
+	p, err = l.FindNodeOVSPod(ctx, "node-a")
+	want("ovs", p, err, "ovnkube-node-a", "ovn-controller")
+	p, err = l.FindCapturePod(ctx, "node-b")
+	want("capture", p, err, "ovnkube-node-b", "ovn-controller")
+	p, _, err = l.FindProbePod(ctx)
+	if err != nil || p.Container != "sbdb" {
+		t.Errorf("probe = %v, %v", p, err)
+	}
+	if _, err := l.FindTracePod(ctx, ""); err == nil {
+		t.Errorf("a trace with no node and no home zone must fail")
+	}
+	l.SetHomeZone("node-a")
+	p, err = l.FindTracePod(ctx, "")
+	want("trace (home zone)", p, err, "ovnkube-node-a", "sbdb")
+	if _, err := l.FindNodeOVSPod(ctx, "node-x"); err == nil {
+		t.Errorf("an unknown node must fail, never fall back to another node")
+	}
+	if out, err := l.ControllerLog(ctx, nil, PodRef{Namespace: "openshift-ovn-kubernetes", Name: "ovnkube-node-a", Container: "ovn-controller"}, 5); err != nil || len(out) == 0 {
+		t.Errorf("ovn-k controller log = %q, %v", out, err)
+	}
+
+	// An explicit namespace is kept; its pods set the flavor.
+	l = NewPodLocator(fake.NewSimpleClientset(ovnk...), "openshift-ovn-kubernetes")
+	if f, _ := l.Detect(ctx); f != FlavorOVNK {
+		t.Errorf("explicit ovn-k namespace detected as %v", f)
 	}
 }

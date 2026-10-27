@@ -99,7 +99,7 @@ ovn-topo
 - **`q`**: Quit.
 
 ### Tier 1 Diagnostics (`x` key)
-Launch the TUI with `--diag` to enable interactive diagnostic executions directly on cluster pods (`ovn-central`, `kube-ovn-cni`, `ovs-ovn`):
+Launch the TUI with `--diag` to enable interactive diagnostic executions directly on cluster pods. `ovn-topo` detects the CNI from the pods it finds: `ovn-central`, `kube-ovn-cni` and `ovs-ovn` in `kube-system` for Kube-OVN, else `ovnkube-node` for ovn-kubernetes. `--k8s-namespace` pins the namespace.
 
 ```bash
 ovn-topo --diag
@@ -120,6 +120,13 @@ On ovn-kubernetes in interconnect mode (OpenShift 4.14+), `--zone <node>` shows 
 ovn-topo --diag --zone list
 ovn-topo --diag --zone <node>
 ```
+
+The `x` diagnostics work there too. Each action runs in the `ovnkube-node` pod of the selected object's own node, whatever `--zone` shows:
+- `ovn-trace` runs in `sbdb`;
+- OVS, conntrack and tcpdump run in `ovn-controller`;
+- the logs come from `ovn-controller`'s container log.
+
+A trace covers only its node's zone: hops past `transit_switch` are not traced.
 
 ---
 

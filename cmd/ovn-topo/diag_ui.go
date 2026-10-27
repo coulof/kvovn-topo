@@ -76,15 +76,15 @@ func (m model) probeDiagCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		probePod, flavor, err := m.diagLocator.FindProbePod(ctx)
 		if err != nil {
 			return diagProbeMsg{
 				available: false,
-				reason:    fmt.Sprintf("ovn-central pod not found: %v", err),
+				reason:    fmt.Sprintf("no %s pod found: %v", flavor, err),
 			}
 		}
 
-		allowed, reason, err := diag.CheckExecAccess(ctx, m.diagExecutor, centralPod)
+		allowed, reason, err := diag.CheckExecAccess(ctx, m.diagExecutor, probePod)
 		if err != nil {
 			return diagProbeMsg{
 				available: false,
@@ -92,10 +92,13 @@ func (m model) probeDiagCmd() tea.Cmd {
 			}
 		}
 
+		if flavor == diag.FlavorOVNK {
+			reason = "ovn-kubernetes, per-node zones: " + reason
+		}
 		return diagProbeMsg{
 			available:  allowed,
 			reason:     reason,
-			centralPod: centralPod,
+			centralPod: probePod,
 		}
 	}
 }
@@ -759,9 +762,9 @@ func (m model) executeTrace(targetDstIP string, expect diag.TraceExpect, proto s
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		centralPod, err := m.diagLocator.FindOvnCentralPod(ctx)
+		centralPod, err := m.diagLocator.FindTracePod(ctx, t.Node)
 		if err != nil {
-			return diagExecResultMsg{err: fmt.Errorf("failed to locate ovn-central leader pod: %w", err)}
+			return diagExecResultMsg{err: fmt.Errorf("failed to locate the ovn-trace pod: %w", err)}
 		}
 
 		cmd, err := diag.BuildTraceCommand(req)
@@ -781,6 +784,10 @@ func (m model) executeTrace(targetDstIP string, expect diag.TraceExpect, proto s
 		traceRes := diag.ParseTraceOutput(string(stdout), expect)
 		traceParams := fmt.Sprintf("Source (From):      [Datapath %s] inport '%s' (IP: %s, MAC: %s)\nDestination (To):   IP: %s (MAC: %s)\nProtocol Match:     %s (ip.ttl=255, 4x --ct=new)\nExecuted in:        pod %s",
 			req.Datapath, req.Inport, req.SrcIP, req.SrcMAC, req.DstIP, req.DstMAC, strings.ToUpper(req.Protocol), centralPod)
+		if centralPod.Container == "sbdb" {
+			// ovn-kubernetes interconnect: the zone's SB only has its own node's flows.
+			traceParams += "\nZone:               " + firstNonEmpty(t.Node, "home zone") + " only: hops past transit_switch, on other nodes, are not traced"
+		}
 
 		return diagExecResultMsg{
 			action:      "trace",
@@ -833,8 +840,15 @@ func (m model) executeNodeDiag(action diagAction, t diagTarget) tea.Cmd {
 			cmd = diag.BuildOvsVsctlShowCommand()
 			title = fmt.Sprintf("OVS Bridges & Interfaces (ovs-vsctl show) on node %s", t.Node)
 		case actLogs:
-			cmd = diag.BuildOvnControllerLogTail(50)
-			title = fmt.Sprintf("ovn-controller logs on node %s", t.Node)
+			out, err := m.diagLocator.ControllerLog(ctx, m.diagExecutor, pod, 50)
+			if err != nil {
+				return diagExecResultMsg{err: fmt.Errorf("%s failed: %w", action, err)}
+			}
+			return diagExecResultMsg{
+				action:    string(action),
+				title:     fmt.Sprintf("ovn-controller logs on node %s  [pod %s]", t.Node, pod),
+				rawOutput: string(out),
+			}
 		case actFlows:
 			bridge := "br-int"
 			filter := t.FlowFilter
@@ -940,7 +954,7 @@ func (m *model) executeTcpdumpStream(filter string, t diagTarget) tea.Cmd {
 		} else if t.CapturePort != "" && t.SrcIP != "" && !strings.Contains(filter, "host") {
 			effectiveFilter = fmt.Sprintf("(%s) and host %s", filter, t.SrcIP) // shared bridge/port: keep it to this port
 		}
-		pod, err := loc.FindNodeCNIPod(ctx, t.Node)
+		pod, err := loc.FindCapturePod(ctx, t.Node)
 		if err != nil {
 			return tcpdumpStartedMsg{err: err}
 		}
