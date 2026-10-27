@@ -155,9 +155,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      # Only our artifacts: build-push-action also uploads a *.dockerbuild record, which fails to download.
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: '{binaries,helm-chart}'
           path: release-assets/
           merge-multiple: true
 
