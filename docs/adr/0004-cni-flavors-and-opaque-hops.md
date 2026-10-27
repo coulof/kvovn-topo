@@ -112,11 +112,11 @@ Opaque hops make the tool's blind spots explicit instead of hiding them in footn
 
 ## Action items
 
-1. [ ] Verify the NAT-gw pod labels and annotations on `hv-01` (ROADMAP Q12).
+1. [ ] Verify the NAT-gw pod labels and annotations on `hv-01` (ROADMAP Q12). *Partly: its ports carry `external_ids:pod` (2026-10-27).*
 2. [ ] M4 prep: the adapter interface in `pkg/graph`, with Kube-OVN as its only implementation; goldens unchanged.
 3. [ ] M4: the `OpaqueHop` node type (API + TUI + MCP); the asymmetric-return check in `/checks`.
 4. [ ] B1: capture a `vpc-nat-gw` scenario with the one-water layout, before and after the `src-ip` route.
 5. [ ] M5: path fixture "DNAT return bypasses opaque hop".
-6. [ ] M6: `iptables-save`/`ip addr` allowlist entries for `inspect: iptables-nat`.
-7. [ ] Answer Q13 (ovn-kubernetes target fit) and Q14 (interconnect mode) before any ovn-kubernetes adapter work.
+6. [ ] M6: `iptables-save`/`ip addr` allowlist entries for `inspect: iptables-nat`. *Partly: the details pane's `!` runs `iptables-save -t nat` locally (ADR-0001 amendment).*
+7. [x] Answer Q13 (ovn-kubernetes target fit) and Q14 (interconnect mode): ADR-0005.
 8. [ ] On acceptance: amend AGENTS.md hard rule 2 and the §2 layout.
