@@ -85,7 +85,7 @@ type cniIdentity struct {
 }
 
 func (m model) cniIdentity(n *xnode) (cniIdentity, bool) {
-	if !m.claimedByKubeOVN(n) && !(n.kind == kLSP && m.natGatewayOf(n) != nil) {
+	if !m.claimedByKubeOVN(n) && (n.kind != kLSP || m.natGatewayOf(n) == nil) {
 		return cniIdentity{}, false
 	}
 	vpc := ""

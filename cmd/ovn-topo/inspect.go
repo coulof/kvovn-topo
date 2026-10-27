@@ -158,7 +158,7 @@ func (p *pausedCmd) SetStdout(w io.Writer) { p.out = w }
 func (p *pausedCmd) SetStderr(w io.Writer) { p.err = w }
 
 func (p *pausedCmd) Run() error {
-	fmt.Fprintf(p.out, "$ %s\n\n", strings.Join(p.argv, " "))
+	_, _ = fmt.Fprintf(p.out, "$ %s\n\n", strings.Join(p.argv, " "))
 	cmd := exec.Command(p.argv[0], p.argv[1:]...)
 	cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = p.env, p.stdin, p.out, p.err
 	err := cmd.Run()
@@ -169,7 +169,7 @@ func (p *pausedCmd) Run() error {
 	case err != nil:
 		p.code = -1
 	}
-	fmt.Fprintf(p.out, "\n[exit %d] press Enter to return to ovn-topo", p.code)
+	_, _ = fmt.Fprintf(p.out, "\n[exit %d] press Enter to return to ovn-topo", p.code)
 	if p.stdin != nil {
 		_, _ = bufio.NewReader(p.stdin).ReadString('\n')
 	}

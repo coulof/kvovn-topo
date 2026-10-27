@@ -64,7 +64,7 @@ func listZones(loader clientcmd.ClientConfig, namespace string, out io.Writer) e
 		return err
 	}
 	for _, z := range zones {
-		fmt.Fprintln(out, z)
+		_, _ = fmt.Fprintln(out, z)
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func startZone(ctx context.Context, loader clientcmd.ClientConfig, namespace, zo
 			return "", err
 		}
 		addrs[db] = addr
-		fmt.Fprintf(progress, "relaying %s of zone %s through %s\n", db, zone, pod)
+		_, _ = fmt.Fprintf(progress, "relaying %s of zone %s through %s\n", db, zone, pod)
 	}
 
 	store, err := startEmbedded(ctx, loader, "tcp:"+addrs[diag.NB], "tcp:"+addrs[diag.SB], "", "", "", logger)
@@ -118,7 +118,7 @@ func startZone(ctx context.Context, loader clientcmd.ClientConfig, namespace, zo
 		_ = srv.Close()
 	}()
 
-	fmt.Fprintf(progress, "waiting for the first NB/SB snapshot of zone %s…\n", zone)
+	_, _ = fmt.Fprintf(progress, "waiting for the first NB/SB snapshot of zone %s…\n", zone)
 	for !store.IsReady() {
 		select {
 		case <-setup.Done():
