@@ -47,6 +47,7 @@ type xnode struct {
 	conn           *RouterPortConnection
 	children       []*xnode
 	refs           []xref
+	detailRefs     []xref // from the router's /node detail: routes, policies, NAT (relations.go)
 }
 
 // childrenOrNil is n.children, safe on a nil node.
@@ -64,6 +65,7 @@ func (n *xnode) sig() string {
 
 type xtree struct {
 	byID      map[string]*xnode
+	byIP      map[string]*xnode // IP → owning LSP or LRP (relations.go)
 	lspByName map[string]*xnode
 	roots     map[mode][]*xnode
 	stats     struct{ vpcs, switches, ports, chassis int }
@@ -295,6 +297,8 @@ func (m *model) rebuildTree() {
 		}
 	}
 
+	linkNATGateways(t)
+
 	// --- VPCs and the vpc-xray groups
 	var vpcs []*xnode
 	for _, name := range m.vpcNames {
@@ -423,9 +427,11 @@ func (m *model) rebuildTree() {
 	t.stats.vpcs, t.stats.switches, t.stats.chassis = len(vpcs), len(switches), len(chassis)
 	t.stats.ports = len(lspByName)
 	t.lspByName = lspByName
+	indexIPs(t)
 
 	m.markChanged(t)
 	m.tree = t
+	m.applyDetailRefs()
 	m.rebuildRows()
 	m.revalidateDiagTarget()
 }

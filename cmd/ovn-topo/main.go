@@ -375,6 +375,10 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.nodeErrs[msg.id] = msg.err
 			} else {
 				m.nodeDetails[msg.id] = msg.detail
+				if m.tree != nil && m.tree.byID[msg.id] != nil {
+					m.tree.byID[msg.id].detailRefs = m.detailRefsFor(msg.detail)
+					m.rebuildRows()
+				}
 			}
 		}
 		if m.desc != nil && m.desc.node != nil && m.desc.node.gn != nil && m.desc.node.gn.Id == msg.id {

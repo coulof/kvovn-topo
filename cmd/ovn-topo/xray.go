@@ -65,7 +65,7 @@ func visibleRefs(t *xtree, n *xnode, parent *xnode) []xref {
 		}
 	}
 	var out []xref
-	for _, r := range n.refs {
+	for _, r := range n.relations() {
 		if !skip[r.to] && t.byID[r.to] != nil {
 			out = append(out, r)
 		}

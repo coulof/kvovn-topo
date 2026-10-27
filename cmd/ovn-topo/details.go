@@ -470,7 +470,7 @@ func (m model) detailLines(n *xnode, w int) []string {
 	}
 
 	var rels []string
-	for _, r := range n.refs {
+	for _, r := range n.relations() {
 		if x := node(r.to); x != nil {
 			rels = append(rels, "   "+st.MutedText.Render(pad(r.label, 19)+"⇢ ")+nameOf(x))
 		}
@@ -608,57 +608,6 @@ func routesVia(d *api.NodeDetail, c *RouterPortConnection) []api.StaticRoute {
 		}
 	}
 	return out
-}
-
-// formatNexthop annotates an IP with its owner (node, LSP, LRP network) if known.
-func (m model) formatNexthop(ip string) string {
-	clean := extractCleanIP(ip)
-	if clean == "" {
-		return ip
-	}
-
-	// 1. Check LRPs (e.g. gateway networks or router peers)
-	for _, c := range m.portList {
-		for _, netCIDR := range c.Networks {
-			if strings.HasPrefix(netCIDR, clean+"/") || netCIDR == clean {
-				return fmt.Sprintf("%s (%s %s)", ip, c.PortName, c.RouterName)
-			}
-		}
-	}
-	for _, c := range m.gatewayPorts {
-		for _, netCIDR := range c.Networks {
-			if strings.HasPrefix(netCIDR, clean+"/") || netCIDR == clean {
-				return fmt.Sprintf("%s (%s %s)", ip, c.PortName, c.RouterName)
-			}
-		}
-	}
-
-	// 2. Check LSPs / workloads
-	for _, workloads := range m.switchWorkloads {
-		for _, w := range workloads {
-			wIP, _ := lspAddress(&w)
-			if wIP == clean {
-				if w.K8s != nil {
-					if w.K8s.Pod != nil && *w.K8s.Pod != "" {
-						return fmt.Sprintf("%s (pod %s)", ip, *w.K8s.Pod)
-					}
-					if w.K8s.Vmi != nil && *w.K8s.Vmi != "" {
-						return fmt.Sprintf("%s (vm %s)", ip, *w.K8s.Vmi)
-					}
-					if w.K8s.Node != nil && *w.K8s.Node != "" {
-						return fmt.Sprintf("%s (node %s)", ip, *w.K8s.Node)
-					}
-				}
-				if strings.HasPrefix(w.Name, "node-") {
-					nodeName := strings.TrimPrefix(w.Name, "node-")
-					return fmt.Sprintf("%s (node %s)", ip, nodeName)
-				}
-				return fmt.Sprintf("%s (%s)", ip, w.Name)
-			}
-		}
-	}
-
-	return ip
 }
 
 func gwRouter(lrp *xnode) string {
