@@ -1,6 +1,6 @@
 # ovn-topology
 
-A read-only network topology visualizer for OVN as deployed by Kube-OVN on Rancher-managed RKE2 and Harvester clusters.
+A read-only network topology visualizer for OVN as deployed by Kube-OVN on Rancher-managed RKE2 and Harvester clusters. On OpenShift (ovn-kubernetes, interconnect mode), the TUI shows one node at a time, live (`--diag --zone`) or from a capture. An in-cluster daemon there is proposed in [ADR-0005](docs/adr/0005-ovnk-interconnect.md).
 
 ## Components
 
@@ -49,6 +49,12 @@ A read-only network topology visualizer for OVN as deployed by Kube-OVN on Ranch
 All clients use the same path (`pkg/kubeproxy`): they find the daemon Service (`kube-system/ovn-topologyd`, else by the chart label) and call it through the API server's service proxy with the kubeconfig's credentials. No port-forward is needed.
 
 ## Quick Start
+
+Install the chart per cluster as described in the [chart README](charts/ovn-topology/README.md#installation):
+- **RKE2 and Harvester (Kube-OVN):** `helm install ovn-topology coulof/ovn-topology --namespace kube-system`.
+- **OpenShift:** no daemon yet; there are two per-node modes:
+  - live: `ovn-topo --diag --zone <node>` (Tier 1, `pods/exec`);
+  - offline: capture with `KUBECTL=oc hack/capture-fixtures.sh <name> --flavor ovnk`, then `ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>`.
 
 With the chart installed on the cluster, the TUI needs only a kubeconfig. It reaches the daemon through the Kubernetes service proxy (Rancher's `/k8s/clusters/<id>` or the API server directly), which enforces authentication and `services/proxy` RBAC. Nothing is exposed, and no port-forward is needed:
 
@@ -126,6 +132,13 @@ Launch `ovn-topo` with `--diag` to enable read-only execution diagnostics in clu
 
 # Or using mise
 mise run tui-diag
+```
+
+On ovn-kubernetes in interconnect mode (OpenShift 4.14+), `--zone <node>` shows one node's OVN live without a daemon. `ovn-topo` reads that node's NB/SB unix sockets through a `pods/exec` stream to `socat` in its `ovnkube-node` pod. It runs libovsdb monitors over that stream and serves the graph to itself on loopback. `--zone list` prints the nodes:
+
+```bash
+./bin/ovn-topo --diag --zone list
+./bin/ovn-topo --diag --zone <node>
 ```
 
 Available diagnostic actions from the TUI (`x` key):

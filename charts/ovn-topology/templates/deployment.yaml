@@ -1,3 +1,13 @@
+{{- /*
+OpenShift runs ovn-kubernetes in interconnect mode: one NB/SB per node on a unix
+socket, no ovn-nb/ovn-sb Service (ADR-0005). The Kube-OVN default endpoints can
+never connect there, so refuse instead of deploying a daemon that is never ready.
+Explicit endpoints (a central-DB ovn-kubernetes) are allowed.
+*/}}
+{{- $openshift := .Capabilities.APIVersions.Has "config.openshift.io/v1" }}
+{{- if and $openshift (eq .Values.ovn.nbEndpoints "tcp:ovn-nb.kube-system.svc.cluster.local:6641") }}
+{{- fail "OpenShift detected: ovn-kubernetes in interconnect mode has no central OVN database for the daemon to reach (ADR-0005). Use `ovn-topo --diag --zone <node>` (live) or hack/capture-fixtures.sh --flavor ovnk with `ovn-topo --fixture-dir` (offline); see the chart README, section OpenShift. Set ovn.nbEndpoints/ovn.sbEndpoints only for a central-DB deployment." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,7 +34,12 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "ovn-topology.serviceAccountName" . }}
       securityContext:
+        {{- if $openshift }}
+        {{- /* restricted-v2 assigns the UID/GID from the namespace range. */}}
+        {{- toYaml (omit .Values.podSecurityContext "runAsUser" "runAsGroup" "fsGroup") | nindent 8 }}
+        {{- else }}
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:

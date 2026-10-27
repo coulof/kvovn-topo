@@ -87,7 +87,12 @@ Both belong to the ADR-0004 adapter.
 - users must know which node a pod is on before they can see it;
 - cross-node paths are invisible.
 
-Rejected as the product model. Kept as a dev path through captured fixtures.
+Rejected as the product model, for the daemon and MCP.
+
+It exists as a TUI mode in two forms:
+- **Live (T1):** `ovn-topo --diag --zone <node>`. A `pods/exec` stream runs the allowlisted `socat STDIO UNIX-CONNECT:/var/run/ovn/ovn{nb,sb}_db.sock` in `nbdb`/`sbdb` (`pkg/diag/ovsdbrelay.go`), and libovsdb monitors run over it.
+  - Verified on `hol-powerflex-lab` on 2026-10-27: creating a pod produced one SSE event with its LSP, the node LS and the GR NAT.
+- **Offline:** captured fixtures (`hack/capture-fixtures.sh --flavor ovnk`, `--fixture-dir`), for MCP and for users without exec rights.
 
 ### (c) Central-DB deployments only
 
