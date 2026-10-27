@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      prerelease: ${{ steps.get_version.outputs.prerelease }}
     steps:
       - name: Determine version
         id: get_version
@@ -30,6 +31,8 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          # A SemVer pre-release (e.g. 0.1.0-dev) does not move :latest and is marked as a pre-release.
+          case "${VERSION}" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
 
   build-binaries:
     needs: prepare-version
@@ -106,7 +109,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/ovn-topologyd:${{ needs.prepare-version.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/ovn-topologyd:latest
+            ${{ needs.prepare-version.outputs.prerelease == 'false' && format('ghcr.io/{0}/ovn-topologyd:latest', github.repository_owner) || '' }}
           build-args: |
             VERSION=${{ needs.prepare-version.outputs.version }}
             GIT_COMMIT=${{ github.sha }}
@@ -170,7 +173,7 @@ jobs:
             name: ovn-topology-airgap-bundle
           spec:
             images:
-              - name: ghcr.io/${OWNER}/ovn-topologyd:v${VERSION}
+              - name: ghcr.io/${OWNER}/ovn-topologyd:${VERSION}
             charts:
               - name: ovn-topology
                 repo: oci://ghcr.io/${OWNER}/charts
@@ -187,4 +190,5 @@ jobs:
             release-assets/*.zip
             release-assets/*.tgz
             release-assets/hauler.yaml
+          prerelease: ${{ needs.prepare-version.outputs.prerelease == 'true' }}
           generate_release_notes: true
