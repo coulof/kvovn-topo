@@ -228,9 +228,9 @@ Every version tag (`vX.Y.Z`) publishes:
 
 | Artifact | Registry Path | Description |
 |---|---|---|
-| **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:vX.Y.Z` | Multi-arch (`linux/amd64`, `linux/arm64`) distroless daemon |
+| **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:X.Y.Z` | `linux/amd64` distroless daemon |
 | **Daemon Chart** | `oci://ghcr.io/coulof/charts/ovn-topology:X.Y.Z` | OCI Helm chart for downstream clusters |
-| **Binaries** | GitHub Releases | Static `ovn-topologyd` + `ovn-topo` archives for Linux/macOS (amd64, arm64); `ovn-topo` zip for Windows (amd64, arm64) |
+| **Binaries** | GitHub Releases | Static `ovn-topologyd` + `ovn-topo` archives for Linux (amd64) and macOS (arm64); `ovn-topo` zip for Windows (amd64) |
 
 ### Air-Gapped Environments (Hauler)
 

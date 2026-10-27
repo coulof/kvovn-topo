@@ -56,22 +56,20 @@ jobs:
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           LDFLAGS="-w -s -X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildDate=${DATE}"
 
-          for OS in linux darwin; do
-            for ARCH in amd64 arm64; do
-              echo "Building for ${OS}/${ARCH}..."
-              CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topologyd_${OS}_${ARCH} ./cmd/ovn-topologyd
-              CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo_${OS}_${ARCH} ./cmd/ovn-topo
+          # Supported targets: linux/amd64, darwin/arm64, windows/amd64.
+          for TARGET in linux/amd64 darwin/arm64; do
+            OS=${TARGET%/*} ARCH=${TARGET#*/}
+            echo "Building for ${OS}/${ARCH}..."
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topologyd_${OS}_${ARCH} ./cmd/ovn-topologyd
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo_${OS}_${ARCH} ./cmd/ovn-topo
 
-              tar -czf dist/ovn-topology_${VERSION}_${OS}_${ARCH}.tar.gz -C dist ovn-topologyd_${OS}_${ARCH} ovn-topo_${OS}_${ARCH}
-            done
+            tar -czf dist/ovn-topology_${VERSION}_${OS}_${ARCH}.tar.gz -C dist ovn-topologyd_${OS}_${ARCH} ovn-topo_${OS}_${ARCH}
           done
 
           # Windows: the TUI only (the daemon targets in-cluster Linux).
-          for ARCH in amd64 arm64; do
-            echo "Building ovn-topo for windows/${ARCH}..."
-            CGO_ENABLED=0 GOOS=windows GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo.exe ./cmd/ovn-topo
-            (cd dist && zip -q ovn-topo_${VERSION}_windows_${ARCH}.zip ovn-topo.exe && rm ovn-topo.exe)
-          done
+          echo "Building ovn-topo for windows/amd64..."
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/ovn-topo.exe ./cmd/ovn-topo
+          (cd dist && zip -q ovn-topo_${VERSION}_windows_amd64.zip ovn-topo.exe && rm ovn-topo.exe)
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
@@ -105,7 +103,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/ovn-topologyd:${{ needs.prepare-version.outputs.version }}
