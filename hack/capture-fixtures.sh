@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Capture an OVN NB/SB snapshot plus the Kubernetes identity data of a live
-# Kube-OVN cluster into testdata/scenarios/<scenario>/, in the format read by
+# cluster into testdata/scenarios/<scenario>/, in the format read by
 # pkg/ovsdb.LoadFixture.
 #
-#   hack/capture-fixtures.sh <scenario> [--context <kubectx>] [-n <namespace>] [--out <dir>]
+#   hack/capture-fixtures.sh <scenario> [--flavor kube-ovn|ovnk] [--context <kubectx>]
+#                            [-n <namespace>] [--out <dir>]
 #
-# Read-only: OVSDB is read with `ovsdb-client query` select operations inside the
-# ovn-central pod; Kubernetes with `kubectl get`. Nothing is written to the cluster.
+# kube-ovn (default): one NB/SB, read in the ovn-central pod of kube-system.
+# ovnk: ovn-kubernetes interconnect mode (OpenShift 4.14+) runs one NB/SB per node
+# in its ovnkube-node pod; each zone goes to <scenario>/zone-<node>/ (ADR-0004, Q14).
+#
+# Read-only: OVSDB is read with `ovsdb-client query` select operations; Kubernetes
+# with `kubectl get`. Nothing is written to the cluster. KUBECTL=oc and
+# PYTHON=python override the binaries.
 #
 # The output contains real names, IPs, MACs and hostnames of the cluster. Review it
 # before committing.
@@ -16,17 +22,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
 SCENARIO=""
-NAMESPACE="kube-system"
+FLAVOR="kube-ovn"
+NAMESPACE=""
 OUT_BASE="${ROOT_DIR}/testdata/scenarios"
-KUBECTL=(kubectl)
+KUBECTL=("${KUBECTL:-kubectl}")
+PYTHON="${PYTHON:-python3}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage 0 ;;
+    --flavor) FLAVOR="$2"; shift 2 ;;
     --context) KUBECTL+=(--context "$2"); shift 2 ;;
     -n|--namespace) NAMESPACE="$2"; shift 2 ;;
     --out) OUT_BASE="$2"; shift 2 ;;
@@ -45,11 +54,18 @@ SB_TABLES=(Chassis Encap Port_Binding Datapath_Binding BFD SB_Global)
 NB_SERVER="${OVN_NB_SERVER:-unix:/var/run/ovn/ovnnb_db.sock}"
 SB_SERVER="${OVN_SB_SERVER:-unix:/var/run/ovn/ovnsb_db.sock}"
 
-POD=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pods -l app=ovn-central \
-  --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
-[[ -n "${POD}" ]] || { echo "no running ovn-central pod in ${NAMESPACE}" >&2; exit 1; }
-EXEC=("${KUBECTL[@]}" -n "${NAMESPACE}" exec "${POD}" -c ovn-central --)
-echo "==> reading OVSDB through ${NAMESPACE}/${POD}"
+case "${FLAVOR}" in
+  kube-ovn)
+    NAMESPACE="${NAMESPACE:-kube-system}"
+    SELECTOR="app=ovn-central"; NB_CONTAINER="ovn-central"; SB_CONTAINER="ovn-central" ;;
+  ovnk)
+    if [[ -z "${NAMESPACE}" ]]; then
+      NAMESPACE="ovn-kubernetes"
+      "${KUBECTL[@]}" get namespace openshift-ovn-kubernetes > /dev/null 2>&1 && NAMESPACE="openshift-ovn-kubernetes"
+    fi
+    SELECTOR="app=ovnkube-node"; NB_CONTAINER="nbdb"; SB_CONTAINER="sbdb" ;;
+  *) echo "unknown flavor: ${FLAVOR}" >&2; usage 1 ;;
+esac
 
 OUT="${OUT_BASE}/${SCENARIO}"
 mkdir -p "${OUT}"
@@ -62,7 +78,7 @@ trap 'rm -rf "${TMP}"' EXIT
 query_db() {
   local server="$1" db="$2" out="$3"; shift 3
   local present
-  present=$("${EXEC[@]}" ovsdb-client list-tables "${server}" "${db}" | tail -n +3 | awk '{print $1}')
+  present=$("${EXEC[@]}" ovsdb-client list-tables "${server}" "${db}" | tr -d '\r' | tail -n +3 | awk '{print $1}')
   local tables=()
   for t in "$@"; do
     grep -qx "${t}" <<<"${present}" && tables+=("${t}")
@@ -74,7 +90,7 @@ query_db() {
   txn+="]"
   "${EXEC[@]}" ovsdb-client query "${server}" "${txn}" > "${TMP}/${db}.result"
   printf '%s\n' "${tables[@]}" > "${TMP}/${db}.tables"
-  python3 - "${db}" "${TMP}/${db}.tables" "${TMP}/${db}.result" "${out}" <<'PY'
+  "${PYTHON}" - "${db}" "${TMP}/${db}.tables" "${TMP}/${db}.result" "${out}" <<'PY'
 import json, sys, time
 db, tables_file, result_file, out = sys.argv[1:]
 tables = [t for t in open(tables_file).read().split("\n") if t]
@@ -94,8 +110,35 @@ print(f"    {db}: " + ", ".join(f"{t} {len(r)}" for t, r in dump.items()))
 PY
 }
 
-query_db "${NB_SERVER}" OVN_Northbound "${OUT}/ovn-nb.json" "${NB_TABLES[@]}"
-query_db "${SB_SERVER}" OVN_Southbound "${OUT}/ovn-sb.json" "${SB_TABLES[@]}"
+# capture_zone <pod> <dir>: the NB and SB served by one pod.
+capture_zone() {
+  local pod="$1" dir="$2"
+  echo "==> reading OVSDB through ${NAMESPACE}/${pod}"
+  mkdir -p "${dir}"
+  EXEC=("${KUBECTL[@]}" -n "${NAMESPACE}" exec "${pod}" -c "${NB_CONTAINER}" --)
+  query_db "${NB_SERVER}" OVN_Northbound "${dir}/ovn-nb.json" "${NB_TABLES[@]}"
+  EXEC=("${KUBECTL[@]}" -n "${NAMESPACE}" exec "${pod}" -c "${SB_CONTAINER}" --)
+  query_db "${SB_SERVER}" OVN_Southbound "${dir}/ovn-sb.json" "${SB_TABLES[@]}"
+}
+
+ZONES=""
+if [[ "${FLAVOR}" == "kube-ovn" ]]; then
+  POD=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pods -l "${SELECTOR}" \
+    --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+  [[ -n "${POD}" ]] || { echo "no running ovn-central pod in ${NAMESPACE}" >&2; exit 1; }
+  capture_zone "${POD}" "${OUT}"
+else
+  # Interconnect mode: each ovnkube-node pod serves its own node's zone.
+  mapfile -t ZONE_PODS < <("${KUBECTL[@]}" -n "${NAMESPACE}" get pods -l "${SELECTOR}" \
+    --field-selector=status.phase=Running \
+    -o jsonpath='{range .items[*]}{.metadata.name} {.spec.nodeName}{"\n"}{end}' | tr -d '\r')
+  [[ -n "${ZONE_PODS[0]:-}" ]] || { echo "no running ovnkube-node pod in ${NAMESPACE}" >&2; exit 1; }
+  for entry in "${ZONE_PODS[@]}"; do
+    read -r POD node <<<"${entry}"
+    capture_zone "${POD}" "${OUT}/zone-${node}"
+    ZONES+="${ZONES:+, }\"${node}\""
+  done
+fi
 
 # Kubernetes identity, trimmed to what the daemon's informers keep (pkg/graph).
 echo "==> reading Kubernetes nodes and pods"
@@ -105,10 +148,10 @@ echo "==> reading Kubernetes nodes and pods"
 "${KUBECTL[@]}" get virtualmachineinstances.kubevirt.io -A -o json > "${TMP}/vmis.json" 2>/dev/null || true
 "${KUBECTL[@]}" get net-attach-def -A -o json > "${TMP}/nads.json" 2>/dev/null || true
 
-python3 - "${TMP}/nodes.json" "${TMP}/pods.json" "${TMP}/vms.json" "${TMP}/vmis.json" "${TMP}/nads.json" "${OUT}" <<'PY'
+"${PYTHON}" - "${TMP}/nodes.json" "${TMP}/pods.json" "${TMP}/vms.json" "${TMP}/vmis.json" "${TMP}/nads.json" "${OUT}" <<'PY'
 import json, os, sys
 nodes_in, pods_in, vms_in, vmis_in, nads_in, out = sys.argv[1:]
-KEEP_NODE_ANN = {"ovn.kubernetes.io/chassis"}
+KEEP_NODE_ANN = {"ovn.kubernetes.io/chassis", "k8s.ovn.org/node-chassis-id", "k8s.ovn.org/zone-name"}
 KEEP_POD_ANN = {"k8s.v1.cni.cncf.io/network-status"}
 def meta(m, keep_ann=None):
     r = {"name": m["name"]}
@@ -180,14 +223,16 @@ if os.path.exists(nads_in) and os.path.getsize(nads_in) > 0:
 print(msg)
 PY
 
-IMAGE=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pod "${POD}" -o jsonpath='{.spec.containers[?(@.name=="ovn-central")].image}')
-OVN_VERSION=$("${EXEC[@]}" ovn-nbctl --version 2>/dev/null | head -1 || true)
+IMAGE=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pod "${POD}" -o jsonpath="{.spec.containers[?(@.name==\"${NB_CONTAINER}\")].image}")
+OVN_VERSION=$("${EXEC[@]}" ovn-nbctl --version 2>/dev/null | head -1 | tr -d '\r' || true)
 cat > "${OUT}/meta.json" <<EOF
 {
  "scenario": "${SCENARIO}",
+ "flavor": "${FLAVOR}",
  "captured": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
  "ovnCentralImage": "${IMAGE}",
- "ovnVersion": "${OVN_VERSION}"
+ "ovnVersion": "${OVN_VERSION}",
+ "zones": [${ZONES}]
 }
 EOF
 
