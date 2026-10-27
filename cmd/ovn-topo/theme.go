@@ -160,7 +160,7 @@ var (
 		Header:    lipgloss.Color("#30ba78"), // Jungle
 		Text:      lipgloss.Color("#ffffff"), // White
 		Muted:     lipgloss.Color("#90ebcd"), // Mint
-		Border:    lipgloss.Color("#192072"), // Midnight
+		Border:    lipgloss.Color("#346a5c"), // Mint at 30% over Pine: Midnight was invisible on dark backgrounds
 		BoxBg:     lipgloss.Color("#0c322c"), // Pine
 		Success:   lipgloss.Color("#30ba78"), // Jungle
 		Error:     lipgloss.Color("#fe7c3f"), // Persimmon
