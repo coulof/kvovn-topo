@@ -348,7 +348,7 @@ func (m model) stateView() []string {
 	return box(body, m.w(), m.areaH(), title, st.Border)
 }
 
-func (m model) helpView() []string {
+func (m model) helpKeyLines() []string {
 	st := m.styles
 	b := st.Value.Render
 	left := []string{
@@ -394,10 +394,9 @@ func (m model) helpView() []string {
 	l = append(l, "",
 		" "+b("LEGEND")+"  "+st.Ok.Render("●")+" ok  "+st.Warn.Render("!")+" degraded  "+st.Bad.Render("✗")+" unbound  "+
 			st.Faint.Render("·")+" infra port  ├╌ ⇢ related object (graph edge)",
-		" "+st.Warn.Render("By design not shown: VPC NAT Gateway (Iptables*) NAT runs in a pod, and default-VPC"),
-		" "+st.Warn.Render("natOutgoing (centralized) is an LR policy reroute + node iptables — neither is NB NAT."),
-		st.MutedText.Render(" any key closes help"))
-	return box(l, m.w(), m.areaH(), st.Label.Render("Help"), st.Border)
+		"   !  run an Inspect command (--diag)",
+	)
+	return l
 }
 
 var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "changes", "theme", "quit"}

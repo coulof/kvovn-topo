@@ -65,8 +65,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.scr == scrHelp {
-		m.scr = scrMain
-		return m, nil
+		return m.updateHelp(s)
 	}
 	if m.scr == scrDescribe {
 		switch s {
@@ -99,7 +98,7 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "?":
-		m.scr = scrHelp
+		m.scr, m.helpTab, m.helpOff = scrHelp, 0, 0
 		return m, nil
 	case ":":
 		m.cmdEdit, m.cmd = true, ""

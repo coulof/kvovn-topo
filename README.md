@@ -133,6 +133,7 @@ Backends, result caps and offline use are in the [MCP guide](docs/mcp.md); ready
 ## Documentation
 
 - [TUI guide](docs/tui-guide.md): use cases, screens and keys.
+- [Concepts](docs/concepts.md): OVN, Kube-OVN and ovn-kubernetes objects, and what goes wrong with them.
 - [MCP guide](docs/mcp.md) and [MCP prompts](docs/mcp-prompts.md).
 - [Development](docs/development.md): build, test, local daemon, releases.
 - [API and security](docs/api.md): endpoints, service-proxy access, read-only guarantees.

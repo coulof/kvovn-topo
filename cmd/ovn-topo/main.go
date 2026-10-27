@@ -80,6 +80,8 @@ type model struct {
 	// `!` runs an Inspect command (inspect.go)
 	changes     []change // Changes view log (changes.go)
 	changeSeq   int
+	helpTab     int // help screen tab and scroll (help.go)
+	helpOff     int
 	inspectPick bool
 	inspectSel  int
 	kube        kubeTarget

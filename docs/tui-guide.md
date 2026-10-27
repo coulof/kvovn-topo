@@ -9,7 +9,7 @@ ovn-topo --fixture                                   # bundled dataset, offline 
 ovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourself (mise run tui-local)
 ```
 
-See [§0 Connecting](#0-connecting) for how the TUI reaches the daemon.
+See [§0 Connecting](#0-connecting) for how the TUI reaches the daemon. `?` explains the selected object and the current view; [concepts.md](concepts.md) is the long form, with the Kube-OVN, OVN and ovn-kubernetes names side by side.
 
 Part 1 is organised by **use case**: the question you have, the keys to press, what to look at. Each use case has a **TUI | Harvester** screenshot pair. Part 2 is the **reference** for every screen.
 
@@ -419,6 +419,7 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 | Where | Keys |
 |---|---|
+| Help (`?`) | `1`–`3` or `←`/`→` tab (This, Glossary, Keys) · `j`/`k` scroll · `Esc`/`q`/`?` close |
 | Everywhere | `1`–`3` xray trees · `4` problems · `5` changes · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
 | Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
 | Xray trees | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |

@@ -182,6 +182,8 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
 
 **Follow-up (2026-10-21): navigation redesign.** *Done.* The four fixed views became k9s-style xray trees (`:xray vpc|chassis|workload`) with relation jumps, plus the `:ports` table. Every frame is sized to the terminal (tested at 60×14 to 200×60), L2 fetches follow all pages, and the TUI consumes `/events` with `If-None-Match` polling fallback. Still to do: re-run the three scenarios on a live cluster with the new navigation.
 
+**Follow-up (2026-10-27): views and help.** Feature work during the foundation freeze, on request. `:ports` removed (the VPC xray has the same facts); a two-row header; relations for route and policy next hops, NAT rules and NAT gateways (TUI-side until M4's IP resolver); a Problems view (`4`, interim for M4 `/checks`, including the ADR-0004 return-path heuristic); a Changes view (`5`, in memory until M8); `?` help with This, Glossary and Keys tabs, long form in `docs/concepts.md`.
+
 **Follow-up (2026-10-21): LR routes, policies & NAT.** *Done 2026-10-27* (`ecb89b7` API, `ee985f3` TUI, `90fc635` fixes). `NodeDetail` carries `staticRoutes[]` (longest prefix first, `ecmp` flagged), `policies[]` (priority descending) and `nats[]` (type, then external IP). The details pane shows 8 rows of each, `d` all of them, and a router port lists the routes that leave through it. Next hops are annotated client-side until M4's IP resolver. The ordering contract is checked on every captured scenario, with per-router goldens and MCP `get_node` goldens. **Open:** OVN 25.03's policy `jump` action (`chain`/`jump_chain`) is not in the 24.03-pinned models or in `RouterPolicy.action`; it closes with B1's version alignment.
 
 ---
