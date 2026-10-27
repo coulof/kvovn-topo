@@ -82,7 +82,7 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 - The tree opens two levels: each VPC with its routers and switches, folded. `l` / `Space` unfolds a router into its ports (`LRP`) and a switch into its ports (`LSP`).
 - The details pane on the router lists **Ports & interconnections**: each router port with its networks, the switch it connects to (`shared interconnect` when several routers use it), its MAC, and the active gateway chassis for centralized ports.
-- **L3** shows the route, policy, NAT and load-balancer counts. The rows themselves are not listed yet (see *Known traps*).
+- **L3** shows the route, policy, NAT and load-balancer counts, then the static routes, policies and NAT rows themselves. Next hops name their owner, such as `node hv-01` for a join IP.
 
 | TUI | Harvester |
 |---|---|
@@ -275,45 +275,25 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 On terminals at least 100 columns wide, the right pane describes the selection. On a `⇢` row it describes the target, i.e. where `Enter` goes. With the pane shown, port rows drop their inline summary, because the pane carries it.
 
-The header's **CNI** row says which conventions the TUI recognised:
-- `Kube-OVN`, when routers or switches carry `external_ids:vendor=kube-ovn`;
-- `ovn-kubernetes · zone <node>` under `--zone` or a `zone-<node>` capture;
-- otherwise plain `OVN`.
+The header's `CNI` row names the conventions the TUI recognised: `Kube-OVN` when routers or switches carry `external_ids:vendor=kube-ovn`, `ovn-kubernetes · zone <node>` under `--zone` or a `zone-<node>` capture, otherwise plain `OVN`. (`t` flashes the theme name, which used to sit in that row.)
 
-The theme name, previously in that row, is flashed when `t` changes it.
+On a Kube-OVN object the pane names it the way a platform engineer does, then the OVN way (ADR-0004). The first line reads `Subnet subnet-onewater  VPC vpc-onewater`, `VPC router`, `Join subnet`, `Underlay subnet`, `VPC external gateway`, `VM NIC`, `Node join port` or `NAT gateway LAN interface`, with the OVN kind and name underneath. Objects no CNI claims keep the plain OVN header.
 
-The pane speaks the platform engineer's language first, then OVN's (ADR-0004):
-- **Header.** On a Kube-OVN object, the first line is what you call it, with its parent: `Subnet subnet-onewater  VPC vpc-onewater`, `VPC router`, `Join subnet`, `Underlay subnet`, `VPC external gateway`, `VM NIC`, `Node join port`, `NAT gateway LAN interface`. The OVN kind and name follow underneath. An object no CNI claims keeps the plain OVN header.
-- **Role, with a `← via …` line.** A row the TUI *interpreted* (rather than read from OVN) says what it was derived from, in muted text:
-  - `← external_ids:vendor=kube-ovn`;
-  - `← switch name join (Kube-OVN convention)`;
-  - `← pod name vpc-nat-gw-<name> (Kube-OVN convention)`;
-  - `← pod from the port's external_ids:pod`;
-  - and, as before, the chassis → node rule.
+Anything the TUI *interpreted* rather than read from OVN gets a muted `← via …` line saying what it came from: `← external_ids:vendor=kube-ovn`, `← switch name join (Kube-OVN convention)`, `← pod name vpc-nat-gw-<name> (Kube-OVN convention)`, `← pod from the port's external_ids:pod`, or the chassis → node rule. Rows read from OVN carry none.
 
-  Plain OVN rows carry no such line.
-- **Outside OVN.** Where traffic leaves OVN's view. Today this means a Kube-OVN VPC NAT gateway pod, found by its pod name, with its LAN/WAN IPs and the reminder that its NAT is iptables in the pod. It appears on:
-  - the routers whose subnet holds its LAN side (not every router on a shared underlay);
-  - its switches;
-  - its own ports.
+**Outside OVN** lists where traffic leaves OVN's view. Today that is a Kube-OVN VPC NAT gateway pod, recognised by its pod name, with its interfaces (LAN first: `LAN 192.168.54.46 on subnet-onewater`, `WAN 10.144.124.15 on external`) and a reminder that its NAT is iptables in the pod. It shows on the gateway's ports, its switches, and the router whose subnet holds its LAN side, but not on every router sharing the underlay. That router's row reads `nat 0 (+1 NAT gw)`.
 
-  It replaces the generic "NAT 0 does not rule out…" note on those routers.
-- **Inspect.** The next command for the object, in the CNI's tooling: `kubectl ko nbctl|sbctl …` on Kube-OVN, `ovn-nbctl|ovn-sbctl …` otherwise. Near a NAT gateway, it adds `kubectl exec … iptables-save -t nat` for its rules. Runnable lines are numbered.
-- **`!` runs an Inspect line** (Tier 1, `--diag`), like a k9s plugin:
-  - The TUI is suspended and the command runs in your terminal, with the same `--kubeconfig` and `--context` as the graph. When it exits, `[exit N] press Enter to return` brings the TUI back.
-  - With several lines, `!` opens a picker in the pane (`1`–`9` or `j/k` + `enter`, `esc` cancels).
-  - Only Kube-OVN lines run: `kubectl ko` needs the `kubectl-ko` plugin in `PATH`, and follows the kubeconfig's current context, so it refuses to run under a different `--context`. Plain `ovn-nbctl` lines are for copying.
-- **NAT gateways are counted where the router is shown.** The router row reads `nat 0 (+1 NAT gw)`, and its pane adds `+ 1 NAT gateway pod outside OVN (below)` under the NAT count. The Outside OVN entry lists the LAN side first: `LAN 192.168.54.46 on subnet-onewater`, then `WAN 10.144.124.15 on external`.
+**Inspect** gives the next command for the object: `kubectl ko nbctl|sbctl …` on Kube-OVN, `ovn-nbctl|ovn-sbctl …` otherwise, plus `kubectl exec … iptables-save -t nat` near a NAT gateway. With `--diag`, `!` runs a numbered line the k9s-plugin way: the TUI is suspended, the command runs in your terminal with the graph's `--kubeconfig` and `--context`, and `Enter` brings the TUI back. Several lines open a picker (`1`–`9`, or `j`/`k` and `Enter`). Only Kube-OVN lines run. `kubectl ko` needs the `kubectl-ko` plugin and follows the kubeconfig's current context, so it refuses to run under a different `--context`.
 
 | Selection | Pane |
 |---|---|
-| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) · **Static routes** (longest prefix first, `[ECMP]` marked), **Policies** (by priority, with their match) and **NAT**, 8 rows each then `… N more (d describe)`. Next hops name their owner when the TUI knows the IP (router port, pod, VM, node join port). The rows are fetched from `/node` when the router is selected and kept until the next revision. If that fails, the pane shows the `kubectl ko nbctl` commands instead · the NAT trap note |
-| Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for · **Routes out this port**: the router's static routes whose next hop is in the port's networks or whose output port is this port (e.g. the `0.0.0.0/0` that leaves through a gateway port) |
-| Switch | **Connected routers** (router, VPC, via which LRP and network) · port counts · localnet underlay |
-| Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · **Path out**: `LSP → LS → LRP gw → LR (VPC)` |
-| Chassis | System-id, hostname, node **and the rule that linked it** (annotation / hostname / fallback), `_uuid`, encaps, bound ports, **active gateway for**; warnings for hostname-only matches, shared hostnames and interconnect chassis |
+| Router | Ports & interconnections: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · L3 counts · static routes (longest prefix first, `[ECMP]` marked), policies (by priority, with their match) and NAT, 8 rows each then `… N more (d describe)`. Next hops name their owner when the TUI knows the IP. The rows come from `/node` and are kept until the next revision; on error the pane shows the `kubectl ko nbctl` commands |
+| Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, routing (distributed vs centralized) and what the port is for · routes out this port: the static routes whose next hop is in the port's networks or whose output port it is, such as the `0.0.0.0/0` on a gateway port |
+| Switch | Connected routers (router, VPC, via which LRP and network) · port counts · localnet underlay |
+| Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · path out: `LSP → LS → LRP gw → LR (VPC)` |
+| Chassis | System-id, hostname, node and the rule that linked it (annotation / hostname / fallback), `_uuid`, encaps, bound ports, active gateway for; warnings for hostname-only matches, shared hostnames and interconnect chassis |
 | Workload | Kind, namespace, node, each NIC with IP, switch and chassis |
-| VPC | Contents and **egress** gateways |
+| VPC | Contents and egress gateways |
 
 Every pane ends with the Kubernetes identity and the object's relations (`label ⇢ object`).
 
@@ -418,9 +398,9 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 ## 7. Known traps (by design, also shown in `?` help)
 
-- **VPC NAT Gateway (`Iptables*`) NAT is iptables inside a pod**, not OVN NAT. It never appears in the NB `NAT` table or in the router's `nat` count.
+- **VPC NAT Gateway (`Iptables*`) NAT is iptables inside a pod**, not OVN NAT. It never appears in the NB `NAT` table. The TUI counts the gateway pod separately (`nat 0 (+1 NAT gw)`) and shows it under Outside OVN.
 - **Default-VPC `natOutgoing` in centralized mode** is an LR policy reroute plus node iptables, not NB `NAT`.
-- **Routes, policies and NAT are configuration, not a path.** The router pane and `d` list the rows, but which one a packet takes depends on policy priority first, then longest prefix, then `src-ip` vs `dst-ip`. A `src-ip` route (Kube-OVN `policySrc`) overrides `0.0.0.0/0` for traffic *from* that prefix, and its absence is how replies can bypass a VPC NAT gateway. On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`, shown as `node <name>`).
+- **Routes, policies and NAT are configuration, not a path.** OVN routes first (longest prefix across `dst-ip` and `src-ip` routes; on a tie `dst-ip` wins), then applies policies by priority, which can allow, drop or reroute. So a `src-ip` route (Kube-OVN `policySrc`) beats `0.0.0.0/0` for traffic *from* its prefix, and a missing one is how replies can bypass a VPC NAT gateway. On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`, shown as `node <name>`).
 - **A chassis is an `ovn-controller`, not a hostname.**
   - Its identity is `Chassis.name`, the host's OVS `system-id`.
   - Kube-OVN publishes it on the Node as `ovn.kubernetes.io/chassis`, and that annotation is how a chassis is mapped to a node.
@@ -438,7 +418,8 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 | Where | Keys |
 |---|---|
-| Everywhere | `1`–`4` switch view · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `q` quit |
+| Everywhere | `1`–`4` switch view · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
+| Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
 | Xray trees | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
 | `:ports` | `j`/`k` · `g`/`G` · `s`/`S` sort / reverse · `i` inspector · `Enter` open in xray · `d`/`y` describe |
 | Describe / raw | `y` toggle raw · `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc` back |

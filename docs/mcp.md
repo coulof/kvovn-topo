@@ -15,7 +15,7 @@
 |---|---|
 | `find` | Search LR, LS, LRP, LSP and chassis by name, IP, MAC, namespace, pod, VM or chassis hostname / encap IP. Returns IDs. |
 | `get_graph` | `view` = `l3` (default), `l2` (needs `focus=ls:<id>`, paginated) or `chassis`; optional `focus` and `depth` (1–5). |
-| `get_node` | Full detail of one object: OVSDB columns, `external_ids`, Kubernetes identity, related objects. |
+| `get_node` | Full detail of one object: OVSDB columns, `external_ids`, Kubernetes identity, related objects; on a router, its static routes, policies and NAT rules. |
 | `list_chassis` | Chassis with encaps, node name, binding counts, gateway roles and HA priorities. |
 
 The roadmap's other tools are added with the milestone that provides their data:

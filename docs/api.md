@@ -1,23 +1,17 @@
 # API & Security Reference
 
-This reference details the daemon's HTTP/SSE API endpoints, access patterns via the Kubernetes service proxy, and security design.
+The contract is `api/openapi.yaml`. How to reach the API (service-proxy URLs for Rancher and Harvester, viewer RBAC) is in the [chart README](../charts/ovn-topology/README.md#accessing-the-api-harvester-and-rke2).
 
-The daemon OpenAPI contract is located in the root repository under `api/openapi.yaml`.
+## Security rules
 
----
+- **Read-only.** OVSDB has no read-only role, so read-only is enforced in code: `golangci-lint` (`forbidigo`) rejects any OVSDB `Create`, `Update`, `Mutate`, `Delete` or write `Transact`, and any write call on the Kubernetes client.
+- **OVSDB is the source of truth.** No Kube-OVN CRDs are read. Kubernetes identity comes from NB `external_ids`; the daemon only gets, lists and watches `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachine`/`VirtualMachineInstance` and `NetworkAttachmentDefinition`, to enrich graph nodes, never to create them.
+- **No exposure.** The daemon has no authentication of its own and is never published (no NodePort, LoadBalancer or Ingress). Clients go through the API server's service proxy, which authenticates them and checks `services/proxy` RBAC.
+- **Air-gap.** No runtime internet calls; distroless, non-root image.
 
-## Design and Security Rules
+## Endpoints
 
-- **Strictly read-only**: OVSDB does not support a native read-only user role. Read-only access is guaranteed in code and enforced at build time by `golangci-lint` using `forbidigo`. The codebase contains no write operations (`Create`, `Update`, `Mutate`, `Delete`, `Transact`) against OVSDB or the Kubernetes API.
-- **OVSDB is the source of truth**: The daemon does not read Kube-OVN CRDs (such as `Vpc`, `Subnet`, or `IP`). Kubernetes identity metadata comes from OVN NB `external_ids`. Supported Kubernetes reads are get/list/watch on `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachine`/`VirtualMachineInstance`, and `NetworkAttachmentDefinition` to enrich graph nodes (node names, workload identity), never to create them.
-- **Access control**: The daemon has no authentication mechanism of its own and is never exposed directly (no NodePort, LoadBalancer, or Ingress). API access goes through the Kubernetes service proxy (`/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:http/proxy/api/v1/...`), which authenticates the caller and checks RBAC. The TUI and `ovn-topo mcp` use this path by default.
-- **Air-gap friendly**: No runtime calls to the internet, no CDN dependencies, and non-root distroless container images.
-
----
-
-## API Summary
-
-The base path for the API is `/api/v1`.
+Base path `/api/v1`.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -32,24 +26,4 @@ The base path for the API is `/api/v1`.
 | `/healthz` | GET | Liveness probe |
 | `/version` | GET | Daemon version and OVN schema versions |
 
-- **Server-side aggregation**: To avoid unbounded LSP lists in `/graph`, LS nodes carry port counts. Individual LSPs only appear in `view=l2&focus=ls:<id>`, paginated.
-- **SSE degradation**: If the SSE stream breaks (due to intermediate proxy buffering), the TUI and other clients automatically fall back to polling `/graph` with `If-None-Match: <revision>`.
-
----
-
-## Accessing the API (Harvester and RKE2)
-
-Clients find the daemon Service (`kube-system/ovn-topologyd` or via the chart label) and request through the API server's service proxy.
-
-| Cluster type | API Base URL |
-|---|---|
-| **Rancher-managed** (Harvester or RKE2) | `https://<rancher>/k8s/clusters/<cluster-id>/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1` |
-| **Harvester direct** | `https://<harvester-vip>:6443/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1` |
-
-Use the kubeconfig issued by Rancher or Harvester for that cluster to query:
-
-```bash
-# Query the version endpoint through the service proxy
-curl -sH "Authorization: Bearer $TOKEN" \
-  "https://<rancher>/k8s/clusters/<cluster-id>/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1/version"
-```
+`/graph` never lists every port: switches carry port counts, and ports appear only in `view=l2&focus=ls:<id>`, paginated. `/node/{id}` on a router adds `staticRoutes`, `policies` and `nats`. If the SSE stream breaks (a proxy may buffer it), clients poll `/graph` with `If-None-Match: <revision>`.

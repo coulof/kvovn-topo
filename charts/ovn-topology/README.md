@@ -2,24 +2,12 @@
 
 `ovn-topology` is a read-only network topology daemon for OVN as deployed by Kube-OVN on Rancher-managed RKE2 and Harvester clusters. On OpenShift (ovn-kubernetes), `ovn-topo` reads one node at a time, live or from a capture; see [OpenShift](#openshift-ovn-kubernetes).
 
-## Security Architecture & Read-Only Guarantee
+## Security
 
-1. **Strictly Read-Only**: OVSDB (OVN Northbound and Southbound) does not natively offer a role-based read-only user mode. In `ovn-topology`, read-only access is guaranteed at the code and compilation level:
-   - No write methods (`Create`, `Update`, `Mutate`, `Delete`, `Transact` with mutations) are called on any OVSDB client.
-   - Enforced by continuous `golangci-lint` with the `forbidigo` rule on all builds.
-2. **Access Control**:
-   - The daemon has no authentication of its own. The API is reached only through the Kubernetes service proxy, which authenticates the caller and enforces RBAC:
-     `/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:http/proxy/api/v1/...`
-   - Viewer authorization requires standard Kubernetes `services/proxy` RBAC permissions (see [Viewer access](#viewer-access)).
-   - The Service stays `ClusterIP`. Do not expose it with a NodePort, a LoadBalancer or an Ingress without an authenticating proxy: that would publish the whole topology unauthenticated.
-3. **Daemon RBAC**:
-   - The daemon ServiceAccount is granted strictly `get`, `list`, and `watch` on the kinds it enriches the graph with: `nodes`, `pods`, `services`, `endpointslices`, KubeVirt `virtualmachines`/`virtualmachineinstances` and `network-attachment-definitions`.
-   - If TLS is enabled, read-only (`get`) access is granted to the designated OVN client secret.
-   - No permissions exist to read or mutate Kube-OVN CRDs or any other cluster resources.
-4. **Runtime Security**:
-   - Runs as non-root user `65534` (nobody). On OpenShift the SCC assigns the UID instead.
-   - Read-only root filesystem (`readOnlyRootFilesystem: true`).
-   - Drops all Linux capabilities (`capabilities.drop: [ALL]`).
+- **Read-only.** OVSDB has no read-only role, so read-only is enforced in code: `golangci-lint` (`forbidigo`) rejects every OVSDB write call ([docs/api.md](../../docs/api.md#security-rules)).
+- **Access.** The daemon has no authentication of its own. It is reached only through the Kubernetes service proxy (`/api/v1/namespaces/<namespace>/services/http:ovn-topologyd:http/proxy/api/v1/...`), which authenticates the caller; viewers need `services/proxy` RBAC ([Viewer access](#viewer-access)). Keep the Service `ClusterIP`: a NodePort, LoadBalancer or Ingress without an authenticating proxy would publish the whole topology unauthenticated.
+- **Daemon RBAC.** `get`, `list` and `watch` on `nodes`, `pods`, `services`, `endpointslices`, KubeVirt `virtualmachines`/`virtualmachineinstances` and `network-attachment-definitions`, plus `get` on the OVN client secret when TLS is on. Nothing on Kube-OVN CRDs.
+- **Runtime.** Non-root UID `65534` (assigned by the SCC on OpenShift), read-only root filesystem, all capabilities dropped.
 
 ## Installation
 

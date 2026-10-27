@@ -1,22 +1,13 @@
 # Development Guide
 
-This guide covers building, testing, and running `ovn-topology` for local development.
-
 ## Prerequisites
 
-To build and run the project, you need:
-- Go 1.27+
-- `golangci-lint`
-- `make`
-
-Alternatively, you can use [mise](https://mise.jdx.dev/) to auto-install and pin the correct Go version and linter:
+Go 1.27+, `golangci-lint` 2.15 and `make`. [mise](https://mise.jdx.dev/) installs the pinned Go and linter:
 ```bash
 mise install
 ```
 
 ## Build Commands
-
-These common `make` tasks cover the development lifecycle:
 
 ```bash
 make generate    # Regenerate OVSDB models and OpenAPI Go types
@@ -26,73 +17,61 @@ make build       # Build bin/ovn-topologyd and bin/ovn-topo
 make image       # Build the container image
 ```
 
-Run `make generate lint test` before submitting changes. If you modify `api/openapi.yaml`, regenerate and update Go consumers in the same change.
+Run `make generate lint test` before submitting. A change to `api/openapi.yaml` regenerates and updates its Go consumers in the same commit.
 
 ## Local Daemon Development
 
-To develop the daemon locally on your laptop, you need access to the target cluster's OVN databases (Northbound port `6641` and Southbound port `6642`). 
-
-Because Kube-OVN `ovn-central` pods use `hostNetwork`, database instances listen on node IPs. A standard `kubectl port-forward svc/ovn-nb` fails because port forwarding only connects to `localhost` inside the pod.
+A local daemon needs the cluster's NB (`6641`) and SB (`6642`). Kube-OVN's `ovn-central` pods use `hostNetwork` and listen on node IPs, so `kubectl port-forward svc/ovn-nb` fails: a port-forward always connects to `localhost` inside the pod.
 
 ### 1. Set Up the Proxy Relay
-The `pf` tasks in `mise` set up a temporary Python TCP relay pod (`ovn-topology-proxy`) in the `kube-system` namespace. This relay forwards localhost requests to the `ovn-nb` and `ovn-sb` Services, and then tunnels them to your laptop.
+`mise run pf` creates a small relay pod, `kube-system/ovn-topology-proxy`, that forwards 6641/6642 to the `ovn-nb`/`ovn-sb` Services, and port-forwards to it. It is the only thing any task creates in the cluster.
 
 ```bash
 # Deploy the proxy relay and forward OVN database ports to localhost
 mise run pf
 ```
 
-*Note: Set `PROXY_IMAGE` in your environment to match your cluster's Kube-OVN version or mirror.*
+`PROXY_IMAGE` sets the relay image (any image with `python3`; match your Kube-OVN version or mirror).
 
 ### 2. Run the Daemon Locally
-In your first terminal, run the local daemon against the forwarded ports:
+Terminal 1:
 ```bash
 mise run daemon
 ```
 
 ### 3. Test and Run Clients
-In a second terminal, you can interact with your local daemon or run the TUI against it:
+Terminal 2:
 ```bash
 mise run test-local  # Query local daemon endpoints
 mise run tui-local   # Run the TUI against your local daemon
 ```
 
 ### 4. Cleanup
-When finished, tear down the port-forwards and remove the proxy relay pod:
+Stop the port-forwards and delete the relay pod:
 ```bash
 mise run pf-proxy-remove
 ```
 
-## Testing & Fixtures
+## Tests and fixtures
 
-The codebase relies on OVSDB snapshots and in-memory databases to run unit tests without requiring a live OVN cluster.
+Tests need no cluster. A fixture is an NB/SB snapshot plus the Kubernetes identity data (`nodes.json`, `pods.json`, KubeVirt objects). `pkg/ovsdb.LoadFixture` decodes its rows through libovsdb's table cache, the same path monitor updates take, and builds the snapshot with the syncer's code.
 
-### Fixtures
-OVSDB snapshots reside in `testdata/` and are captured from live dev clusters using `ovsdb-client backup`. 
-During test runs, `pkg/graph` unit tests load these snapshots into an in-process libovsdb test server (`github.com/ovn-kubernetes/libovsdb/server`). This ensures tests run through the actual monitor update path.
+- `testdata/ovn-nb.json` and `ovn-sb.json`: the hand-written base fixture used by most unit tests.
+- `testdata/scenarios/<name>/`: lab captures made with `hack/capture-fixtures.sh <name>` (read-only: `ovsdb-client query` selects and `kubectl get`; `--flavor ovnk` captures one directory per ovn-kubernetes zone). Today: `hv-01-lab` (the whole lab) and `kubevirt-multinic`. Captures hold real names and IPs; review them before committing. The named scenarios the roadmap needs are still to capture (ROADMAP, B1).
 
-### Golden-File Tests
-The REST API endpoints (`/graph`) use golden-file comparisons to catch regressions in response structure.
-To update golden files after a legitimate API change:
+Golden files cover `/graph` views, each router's routes, policies and NAT, and the MCP tools. After an intended output change:
+
 ```bash
 go test ./... -update
 ```
 
-### Scenario Scopes
-Test scenarios inside `testdata/` cover complex configurations:
-- Centralized gateway with HA chassis groups
-- Custom VPCs with distributed Floating IPs (FIP)
-- Underlay and localnet attachments
-- Logical Switches attached to multiple Logical Routers
-- Unbound ports and disconnected/offline chassis
+## Layout and conventions
 
-## Repository Layout & Style
-
-See `AGENTS.md` and `ROADMAP.md` for our coding conventions, strict read-only design checks, dependency limits (`pkg/diag` constraints), and milestone scopes.
+`AGENTS.md` has the rules (read-only, privilege tiers, layout, conventions) and `ROADMAP.md` the milestones.
 
 ## Release Artifacts & Air-Gap Packaging
 
-Every version tag (`vX.Y.Z`) publishes:
+A tag `vX.Y.Z` (or a `-dev` pre-release, which does not move `:latest`) runs `release.yml` and publishes:
 
 | Artifact | Registry Path | Description |
 |---|---|---|
@@ -102,7 +81,7 @@ Every version tag (`vX.Y.Z`) publishes:
 
 ### Air-Gapped Environments (Hauler)
 
-Each release includes a `hauler.yaml` manifest bundling the daemon image and Helm chart:
+Each release has a `hauler.yaml` listing the daemon image and chart:
 
 ```bash
 # Sync release artifacts into a local Hauler store
