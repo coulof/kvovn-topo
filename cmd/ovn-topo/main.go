@@ -443,6 +443,7 @@ func main() {
 	var outputFormat string
 	var viewName string
 	var focusID string
+	var zone string
 
 	var kubeContext, namespace, service, port string
 	flag.StringVar(&daemonURL, "daemon-url", "", "ovn-topologyd API URL, e.g. http://127.0.0.1:8080/api/v1 (default: the in-cluster daemon through the Kubernetes service proxy)")
@@ -459,6 +460,7 @@ func main() {
 	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
 	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
 	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
+	flag.StringVar(&zone, "zone", "", "With --diag: live view of one ovn-kubernetes interconnect zone (node) through an exec relay, e.g. OpenShift; \"list\" prints the zones")
 
 	// "ovn-topo mcp": the MCP server has its own flags and never starts the TUI.
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
@@ -489,6 +491,37 @@ func main() {
 	loader := kubeproxy.Loader(kubeconfig, kubeContext)
 	var client *http.Client
 	via := "direct " + daemonURL
+
+	// --zone: the zone's NB/SB through exec relays, an embedded graph on loopback.
+	if zone != "" {
+		if !diagMode {
+			fmt.Fprintln(os.Stderr, "Error: live ovn-kubernetes zones are Tier 1 (pods/exec relay, ADR-0001); add --diag")
+			os.Exit(2)
+		}
+		zoneNS := ""
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "k8s-namespace" {
+				zoneNS = k8sNamespace
+			}
+		})
+		if zone == "list" {
+			if err := listZones(loader, zoneNS, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		url, err := startZone(ctx, loader, zoneNS, zone, os.Stderr)
+		if err != nil {
+			cancel()
+			fmt.Fprintf(os.Stderr, "Error: %v\nRun with --zone list to see the zones.\n", err)
+			os.Exit(1)
+		}
+		daemonURL, via = url, "zone "+zone+" (exec relay)"
+	}
+
 	if fixturePath == "" && daemonURL == "" {
 		pinned := false
 		flag.Visit(func(f *flag.Flag) { pinned = pinned || f.Name == "namespace" || f.Name == "service" })
