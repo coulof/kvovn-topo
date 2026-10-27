@@ -1,0 +1,88 @@
+{
+  "backend": "embedded",
+  "data": {
+    "node": {
+      "externalIds": {
+        "vendor": "kube-ovn",
+        "vpc": "custom-vpc"
+      },
+      "id": "lr:lr-custom-uuid",
+      "k8s": {
+        "vendor": "kube-ovn",
+        "vpc": "custom-vpc"
+      },
+      "name": "custom-vpc",
+      "nats": [
+        {
+          "externalIp": "172.16.1.100",
+          "id": "nat-fip-uuid",
+          "logicalIp": "10.100.0.10",
+          "logicalPort": "custom-worker.tenant-a",
+          "type": "dnat_and_snat"
+        }
+      ],
+      "raw": {
+        "_uuid": "lr-custom-uuid",
+        "copp": null,
+        "enabled": true,
+        "external_ids": {
+          "vendor": "kube-ovn",
+          "vpc": "custom-vpc"
+        },
+        "load_balancer": null,
+        "load_balancer_group": null,
+        "name": "custom-vpc",
+        "nat": [
+          "nat-fip-uuid"
+        ],
+        "options": null,
+        "policies": null,
+        "ports": [
+          "lrp-custom-uuid",
+          "lrp-join-cust-uuid"
+        ],
+        "static_routes": null
+      },
+      "related": [
+        {
+          "id": "ls:ls-custom-uuid",
+          "name": "custom-subnet",
+          "relationship": "attached-switch",
+          "type": "LS"
+        },
+        {
+          "id": "ls:ls-join-uuid",
+          "name": "join",
+          "relationship": "attached-switch",
+          "type": "LS"
+        },
+        {
+          "id": "lrp:lrp-custom-uuid",
+          "name": "lrp-custom",
+          "relationship": "port",
+          "type": "LRP"
+        },
+        {
+          "id": "lrp:lrp-join-cust-uuid",
+          "name": "lrp-join-cust",
+          "relationship": "port",
+          "type": "LRP"
+        },
+        {
+          "id": "nat:nat-fip-uuid",
+          "name": "dnat_and_snat 172.16.1.100 -\u003e 10.100.0.10",
+          "relationship": "nat",
+          "type": "NAT"
+        }
+      ],
+      "revision": 1,
+      "type": "LR"
+    },
+    "relatedTotal": 5
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "LR detail: 5 related objects (5 shown), 12 raw columns, 0 cut to 50 entries",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

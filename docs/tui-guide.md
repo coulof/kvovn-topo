@@ -277,8 +277,8 @@ On terminals at least 100 columns wide, the right pane describes the selection. 
 
 | Selection | Pane |
 |---|---|
-| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) + the NAT trap note. The route, policy and NAT rows themselves are planned (ROADMAP M2, follow-up "LR routes, policies & NAT") |
-| Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for |
+| Router | **Ports & interconnections**: each LRP with networks, peer switch (`shared interconnect`), MAC, active gateway · **L3** counts (routes, policies, NAT, LBs) · **Static routes** (longest prefix first, `[ECMP]` marked), **Policies** (by priority, with their match) and **NAT**, 8 rows each then `… N more (d describe)`. Next hops name their owner when the TUI knows the IP (router port, pod, VM, node join port). The rows are fetched from `/node` when the router is selected and kept until the next revision. If that fails, the pane shows the `kubectl ko nbctl` commands instead · the NAT trap note |
+| Router port | Router/VPC, networks, MAC, peer switch + summary, peer LSP, routers on that switch, gateway, role, **routing** (distributed vs centralized) and what the port is for · **Routes out this port**: the router's static routes whose next hop is in the port's networks or whose output port is this port (e.g. the `0.0.0.0/0` that leaves through a gateway port) |
 | Switch | **Connected routers** (router, VPC, via which LRP and network) · port counts · localnet underlay |
 | Switch port | Type, IP, MAC, workload, bound chassis (or **unbound**) · **Path out**: `LSP → LS → LRP gw → LR (VPC)` |
 | Chassis | System-id, hostname, node **and the rule that linked it** (annotation / hostname / fallback), `_uuid`, encaps, bound ports, **active gateway for**; warnings for hostname-only matches, shared hostnames and interconnect chassis |
@@ -390,13 +390,7 @@ The target is captured when you press `x` and shown at the top of the modal: the
 
 - **VPC NAT Gateway (`Iptables*`) NAT is iptables inside a pod**, not OVN NAT. It never appears in the NB `NAT` table or in the router's `nat` count.
 - **Default-VPC `natOutgoing` in centralized mode** is an LR policy reroute plus node iptables, not NB `NAT`.
-- **Routes, policies and NAT rows are not listed yet.** The pane and `d` show counts only, and `y` on a router shows just the row UUIDs. To see the rows:
-  ```bash
-  kubectl ko nbctl lr-route-list <router>     # static routes (prefix, nexthop, output port, policy)
-  kubectl ko nbctl lr-policy-list <router>    # policies by priority
-  kubectl ko nbctl lr-nat-list <router>       # SNAT / DNAT / FIP
-  ```
-  On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`).
+- **Routes, policies and NAT are configuration, not a path.** The router pane and `d` list the rows, but which one a packet takes depends on policy priority first, then longest prefix, then `src-ip` vs `dst-ip`. A `src-ip` route (Kube-OVN `policySrc`) overrides `0.0.0.0/0` for traffic *from* that prefix, and its absence is how replies can bypass a VPC NAT gateway. On the default VPC, most policies are Kube-OVN's subnet `allow` rules plus per-node `reroute` rules to node join IPs (`100.64.x.x`, shown as `node <name>`).
 - **A chassis is an `ovn-controller`, not a hostname.**
   - Its identity is `Chassis.name`, the host's OVS `system-id`.
   - Kube-OVN publishes it on the Node as `ovn.kubernetes.io/chassis`, and that annotation is how a chassis is mapped to a node.

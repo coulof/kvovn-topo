@@ -1,0 +1,64 @@
+nats: null
+policies:
+- action: allow
+  id: 863303f4-0a1f-4f5d-be6d-b6492492cbcc
+  match: ip4.dst == 10.54.0.0/16
+  priority: 31000
+- action: allow
+  id: 7ab35843-6cb9-450a-86d3-9db098bc6901
+  match: ip4.dst == 100.64.0.0/16
+  priority: 31000
+- action: reroute
+  id: f7af3174-fdf2-4728-9c85-55dab215c3f9
+  match: ip4.dst == 10.144.98.201
+  nexthops:
+  - 100.64.0.5
+  priority: 30000
+- action: reroute
+  id: b06c832f-52f2-4ca5-9d26-6943be3e18c2
+  match: ip4.dst == 10.144.98.244
+  nexthops:
+  - 100.64.0.4
+  priority: 30000
+- action: reroute
+  id: c9c2e121-c60f-49a8-b408-40a02ad1489f
+  match: ip4.dst == 10.144.98.249
+  nexthops:
+  - 100.64.0.2
+  priority: 30000
+- action: reroute
+  id: 30f641ca-4a59-4097-b5e0-5beed35c5f84
+  match: ip4.dst == 10.144.98.7
+  nexthops:
+  - 100.64.0.3
+  priority: 30000
+- action: reroute
+  id: 42a3e5d7-e8ae-4598-8e01-b98f0081ec60
+  match: ip4.src == $ovn.default.hv.01_ip4
+  nexthops:
+  - 100.64.0.2
+  priority: 29000
+- action: reroute
+  id: a3efdf7e-86dc-4a6a-9a93-02ba03fc2146
+  match: ip4.src == $ovn.default.hv.02_ip4
+  nexthops:
+  - 100.64.0.3
+  priority: 29000
+- action: reroute
+  id: 2cf21c7d-6c2e-4b0f-9e9a-620350fa3b1a
+  match: ip4.src == $ovn.default.hv.03_ip4
+  nexthops:
+  - 100.64.0.4
+  priority: 29000
+- action: reroute
+  id: 83631d4b-e8d1-459f-b2ee-e1f75abad98f
+  match: ip4.src == $ovn.default.hv.04_ip4
+  nexthops:
+  - 100.64.0.5
+  priority: 29000
+staticRoutes:
+- ecmp: false
+  id: 0bd45df4-abb4-4292-b781-4d93738faacf
+  ipPrefix: 0.0.0.0/0
+  nexthop: 100.64.0.1
+  policy: dst-ip

@@ -3,10 +3,12 @@ package ovsdb
 import (
 	"encoding/json"
 	"flag"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/coulof/ovn-topology/pkg/api"
 	"github.com/coulof/ovn-topology/pkg/graph"
 	"sigs.k8s.io/yaml"
 )
@@ -54,6 +56,45 @@ func TestLoadFixtureMatchesHandParser(t *testing.T) {
 	}
 }
 
+// checkRouterDetailOrder asserts the /node ordering contract on real data:
+// routes by longest prefix, policies by descending priority, NAT by type then external IP.
+func checkRouterDetailOrder(t *testing.T, lr string, d *api.NodeDetail) {
+	t.Helper()
+	if d.StaticRoutes != nil {
+		rs := *d.StaticRoutes
+		for i := 1; i < len(rs); i++ {
+			if prefixBits(rs[i-1].IpPrefix) < prefixBits(rs[i].IpPrefix) {
+				t.Errorf("%s: route %s listed before longer prefix %s", lr, rs[i-1].IpPrefix, rs[i].IpPrefix)
+			}
+		}
+	}
+	if d.Policies != nil {
+		ps := *d.Policies
+		for i := 1; i < len(ps); i++ {
+			if ps[i-1].Priority < ps[i].Priority {
+				t.Errorf("%s: policy priority %d listed before %d", lr, ps[i-1].Priority, ps[i].Priority)
+			}
+		}
+	}
+	if d.Nats != nil {
+		ns := *d.Nats
+		for i := 1; i < len(ns); i++ {
+			a, b := ns[i-1], ns[i]
+			if a.Type > b.Type || a.Type == b.Type && a.ExternalIp > b.ExternalIp {
+				t.Errorf("%s: NAT %s %s listed before %s %s", lr, a.Type, a.ExternalIp, b.Type, b.ExternalIp)
+			}
+		}
+	}
+}
+
+func prefixBits(cidr string) int {
+	p, err := netip.ParsePrefix(cidr)
+	if err != nil {
+		return -1
+	}
+	return p.Bits()
+}
+
 // TestScenarioGoldens renders every captured scenario (testdata/scenarios/<name>/,
 // see hack/capture-fixtures.sh) in each view and compares with its golden files.
 // Run with -update after capturing a new scenario, and review the diff.
@@ -80,6 +121,15 @@ func TestScenarioGoldens(t *testing.T) {
 					t.Fatal(err)
 				}
 				views["l2-"+sw.Name] = l2
+			}
+			// Routes, policies and NAT of every router, as /node returns them.
+			for id, lr := range snap.LogicalRouters {
+				d, err := snap.GetNodeDetail(graph.PrefixLR + id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				checkRouterDetailOrder(t, lr.Name, d)
+				views["lr-"+lr.Name] = map[string]any{"staticRoutes": d.StaticRoutes, "policies": d.Policies, "nats": d.Nats}
 			}
 			for name, v := range views {
 				compareGolden(t, filepath.Join(dir, "golden", name+".yaml"), v)

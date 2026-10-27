@@ -128,6 +128,8 @@ func TestToolGoldens(t *testing.T) {
 		{"get_graph_l2.json", "get_graph", map[string]any{"view": "l2", "focus": "ls:ls-default-uuid"}},
 		{"get_graph_chassis.json", "get_graph", map[string]any{"view": "chassis"}},
 		{"get_node_lsp.json", "get_node", map[string]any{"id": "lsp:lsp-pod1-uuid"}},
+		{"get_node_lr.json", "get_node", map[string]any{"id": "lr:lr-default-uuid"}},
+		{"get_node_lr_nat.json", "get_node", map[string]any{"id": "lr:lr-custom-uuid"}},
 		{"list_chassis.json", "list_chassis", map[string]any{}},
 	}
 	dir := filepath.Join("..", "..", "testdata", "golden", "mcp")

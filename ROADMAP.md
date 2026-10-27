@@ -253,7 +253,20 @@ The fix:
 - **Tests:**
   - `pkg/graph`: `GetNodeDetail` ordering and fields, on the fixture's routes and policies.
   - TUI: the pane sections and loading state; the existing fit test covers wrapped matches.
-- **Until then:** `kubectl ko nbctl lr-route-list <lr>`, `lr-policy-list <lr>` and `lr-nat-list <lr>`; see `docs/tui-guide.md` §7.
+- **Delivered (2026-10-27):**
+  - API and daemon: `a319a51`.
+  - TUI: the next commit.
+  - Review fixes:
+    - the detail cache no longer moves `baseRevision`, which had stopped changed rows from flashing;
+    - a reply still in flight across a revision is not cached;
+    - a router port lists **Routes out this port**, by next hop in its networks or by output port;
+    - the error fallback names all three `kubectl ko nbctl` commands.
+  - Tests:
+    - the ordering contract is checked on every captured scenario;
+    - per-router goldens (`testdata/scenarios/*/golden/lr-*.yaml`);
+    - MCP `get_node` goldens for a router with routes and policies and one with NAT.
+  - TS types were not regenerated (extension paused).
+  - **Open:** OVN 25.03 adds the `Logical_Router_Policy` `jump` action (`chain`/`jump_chain`). The models and `RouterPolicy.action` are pinned to 24.03 (`allow/drop/reroute`); this closes with B1's version alignment (Q4).
 
 ---
 

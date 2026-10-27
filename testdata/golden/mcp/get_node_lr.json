@@ -1,0 +1,104 @@
+{
+  "backend": "embedded",
+  "data": {
+    "node": {
+      "externalIds": {
+        "vendor": "kube-ovn",
+        "vpc": "default"
+      },
+      "id": "lr:lr-default-uuid",
+      "k8s": {
+        "vendor": "kube-ovn",
+        "vpc": "default"
+      },
+      "name": "ovn_cluster",
+      "policies": [
+        {
+          "action": "reroute",
+          "id": "policy-default-uuid",
+          "match": "ip4.dst == 0.0.0.0/0",
+          "nexthops": [
+            "10.244.0.254"
+          ],
+          "priority": 100
+        }
+      ],
+      "raw": {
+        "_uuid": "lr-default-uuid",
+        "copp": null,
+        "enabled": true,
+        "external_ids": {
+          "vendor": "kube-ovn",
+          "vpc": "default"
+        },
+        "load_balancer": [
+          "lb-default-uuid"
+        ],
+        "load_balancer_group": null,
+        "name": "ovn_cluster",
+        "nat": null,
+        "options": null,
+        "policies": [
+          "policy-default-uuid"
+        ],
+        "ports": [
+          "lrp-default-uuid",
+          "lrp-join-def-uuid",
+          "lrp-gw-uuid"
+        ],
+        "static_routes": [
+          "route-default-uuid"
+        ]
+      },
+      "related": [
+        {
+          "id": "ls:ls-default-uuid",
+          "name": "default-subnet",
+          "relationship": "attached-switch",
+          "type": "LS"
+        },
+        {
+          "id": "ls:ls-join-uuid",
+          "name": "join",
+          "relationship": "attached-switch",
+          "type": "LS"
+        },
+        {
+          "id": "lrp:lrp-default-uuid",
+          "name": "lrp-default",
+          "relationship": "port",
+          "type": "LRP"
+        },
+        {
+          "id": "lrp:lrp-join-def-uuid",
+          "name": "lrp-join-def",
+          "relationship": "port",
+          "type": "LRP"
+        },
+        {
+          "id": "lrp:lrp-gw-uuid",
+          "name": "lrp-gw",
+          "relationship": "port",
+          "type": "LRP"
+        }
+      ],
+      "revision": 1,
+      "staticRoutes": [
+        {
+          "ecmp": false,
+          "id": "route-default-uuid",
+          "ipPrefix": "0.0.0.0/0",
+          "nexthop": "10.244.0.254",
+          "policy": "dst-ip"
+        }
+      ],
+      "type": "LR"
+    },
+    "relatedTotal": 5
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "LR detail: 5 related objects (5 shown), 12 raw columns, 0 cut to 50 entries",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

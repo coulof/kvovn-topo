@@ -79,10 +79,13 @@ type model struct {
 	pdesc      bool
 	pinspect   bool
 
-	// Cached node details for the details pane (lazy fetch, invalidated on revision bump)
+	// Cached node details for the details pane (lazy fetch, dropped when the
+	// graph revision moves past detailsRev). Not baseRevision: that one marks
+	// the first load, and moving it would stop changed rows from flashing.
 	nodeDetails map[string]*api.NodeDetail
 	nodeErrs    map[string]error
 	nodeLoading map[string]bool
+	detailsRev  int
 
 	// Feedback and live updates
 	flash         string
@@ -267,16 +270,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return mm, cmd
 }
 
-// lazyFetchSelectedDetailCmd triggers a lazy fetch of /node/{id} if an LR is selected and inspector is visible.
+// detailRouterID is the router whose /node detail the pane needs: the selected
+// LR, or the router of a selected LRP (for the routes that leave through it).
+func detailRouterID(n *xnode) string {
+	switch {
+	case n == nil:
+		return ""
+	case n.kind == kLR && n.gn != nil:
+		return n.gn.Id
+	case n.kind == kLRP && n.conn != nil:
+		return n.conn.RouterID
+	}
+	return ""
+}
+
+// lazyFetchSelectedDetailCmd triggers a lazy fetch of /node/{id} when the details pane shows a router or router port.
 func (m *model) lazyFetchSelectedDetailCmd() tea.Cmd {
 	if !m.showPane() || m.scr != scrMain {
 		return nil
 	}
-	n := m.selectedXNode()
-	if n == nil || n.kind != kLR || n.gn == nil {
+	id := detailRouterID(m.selectedXNode())
+	if id == "" {
 		return nil
 	}
-	id := n.gn.Id
 	if m.nodeDetails[id] != nil || m.nodeLoading[id] || m.nodeErrs[id] != nil {
 		return nil
 	}
@@ -303,8 +319,9 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.tree == nil {
 			m.baseRevision = msg.resp.Revision
-		} else if msg.resp.Revision != m.baseRevision {
-			m.baseRevision = msg.resp.Revision
+		}
+		if msg.resp.Revision != m.detailsRev {
+			m.detailsRev = msg.resp.Revision
 			m.nodeDetails = make(map[string]*api.NodeDetail)
 			m.nodeErrs = make(map[string]error)
 			m.nodeLoading = make(map[string]bool)
@@ -341,11 +358,15 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case nodeDetailMsg:
-		m.nodeLoading[msg.id] = false
-		if msg.err != nil {
-			m.nodeErrs[msg.id] = msg.err
-		} else {
-			m.nodeDetails[msg.id] = msg.detail
+		// Cache only answers to a fetch made in this revision; one still in
+		// flight when the revision moved would otherwise be kept as current.
+		if m.nodeLoading[msg.id] {
+			m.nodeLoading[msg.id] = false
+			if msg.err != nil {
+				m.nodeErrs[msg.id] = msg.err
+			} else {
+				m.nodeDetails[msg.id] = msg.detail
+			}
 		}
 		if m.desc != nil && m.desc.node != nil && m.desc.node.gn != nil && m.desc.node.gn.Id == msg.id {
 			m.desc.loading = false

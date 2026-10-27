@@ -160,8 +160,7 @@ func TestDefaultExpansionTwoLevels(t *testing.T) {
 
 func TestDetailPane(t *testing.T) {
 	m := selectRow(t, loaded(t, 140, 40, false), kLR, "ovn_cluster")
-	// Process the lazy detail fetch cmd triggered by selecting the LR
-	m = send(m, m.fetchNodeDetailCmd("lr:lr-default-uuid")())
+	m = fetchSelectedDetail(t, m)
 	view := ansi.Strip(m.View())
 	for _, want := range []string{
 		"Details lr:lr-default-uuid",
@@ -567,6 +566,66 @@ func TestForeignServiceOn404(t *testing.T) {
 	msg, _ = m.fetchGraphCmd()().(graphLoadedMsg)
 	if msg.err == nil || !strings.Contains(msg.err.Error(), "ovn-topologyd 0.1.0") {
 		t.Fatalf("expected daemon version in the error, got %v", msg.err)
+	}
+}
+
+// TestRouterPortShowsRoutesThroughIt: the fixture's 0.0.0.0/0 via 10.244.0.254
+// leaves through lrp-default (10.244.0.1/24), not through the gateway port.
+func TestRouterPortShowsRoutesThroughIt(t *testing.T) {
+	for _, c := range []struct{ port, want string }{
+		{"lrp-default", "0.0.0.0/0 via 10.244.0.254"},
+		{"lrp-gw", "(no static route uses this port)"},
+	} {
+		m := selectRow(t, loaded(t, 140, 60, false), kLRP, c.port)
+		m = fetchSelectedDetail(t, m)
+		view := ansi.Strip(m.View())
+		for _, want := range []string{"Routes out this port", c.want} {
+			if !strings.Contains(view, want) {
+				t.Errorf("%s: expected %q in the detail pane:\n%s", c.port, want, view)
+			}
+		}
+	}
+}
+
+// fetchSelectedDetail runs the lazy /node fetch that Update triggers for the selected router.
+func fetchSelectedDetail(t *testing.T, m model) model {
+	t.Helper()
+	cmd := m.lazyFetchSelectedDetailCmd()
+	if cmd == nil {
+		t.Fatalf("expected a lazy detail fetch for the selected row")
+	}
+	return send(m, cmd())
+}
+
+// TestNewRevisionFlashesAndDropsDetailCache sends a new revision through the
+// real message path: changed rows must still flash, and cached /node details go stale.
+func TestNewRevisionFlashesAndDropsDetailCache(t *testing.T) {
+	m := loaded(t, 140, 40, false)
+	m = selectRow(t, m, kLR, "ovn_cluster")
+	m = fetchSelectedDetail(t, m)
+	if m.nodeDetails["lr:lr-default-uuid"] == nil {
+		t.Fatalf("expected the LR detail to be cached")
+	}
+	m.fixturePath = "" // from here on, behave like a live daemon
+
+	var raw []byte
+	raw, _ = json.Marshal(m.graphResp)
+	next := &api.GraphResponse{}
+	if err := json.Unmarshal(raw, next); err != nil {
+		t.Fatal(err)
+	}
+	next.Revision++
+	for i := range next.Nodes {
+		if next.Nodes[i].Id == "lr:lr-default-uuid" {
+			(*next.Nodes[i].Properties)["routeCount"] = 2
+		}
+	}
+	m = send(m, graphLoadedMsg{resp: next})
+	if _, ok := m.changed["lr:lr-default-uuid"]; !ok {
+		t.Errorf("expected the router row to flash on a new revision, changed=%v", m.changed)
+	}
+	if m.nodeDetails["lr:lr-default-uuid"] != nil {
+		t.Errorf("a new revision must drop the cached LR detail")
 	}
 }
 

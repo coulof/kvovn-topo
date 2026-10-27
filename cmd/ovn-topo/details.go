@@ -6,7 +6,10 @@ package main
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
+
+	"github.com/coulof/ovn-topology/pkg/api"
 )
 
 // paneMinW is the terminal width from which the detail pane docks on the right.
@@ -116,25 +119,17 @@ func (m model) detailLines(n *xnode, w int) []string {
 			out = append(out, "", "   "+st.MutedText.Render("loading routes & policies…"))
 		} else if err := m.nodeErrs[id]; err != nil {
 			out = append(out, "", "   "+st.Bad.Render("routes unavailable: "+err.Error()))
-			lrName := n.name
-			out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("kubectl ko nbctl lr-route-list %s", lrName)))
+			for _, c := range []string{"lr-route-list", "lr-policy-list", "lr-nat-list"} {
+				out = append(out, "   "+st.MutedText.Render("kubectl ko nbctl "+c+" "+n.name))
+			}
 		} else if detail := m.nodeDetails[id]; detail != nil {
 			// Static routes
 			if detail.StaticRoutes != nil && len(*detail.StaticRoutes) > 0 {
 				srs := *detail.StaticRoutes
 				out = append(out, "", section(fmt.Sprintf("Static routes (%d)", len(srs))))
 				limit := min(len(srs), 8)
-				for i := 0; i < limit; i++ {
-					r := srs[i]
-					pol := "dst-ip"
-					if r.Policy != nil && *r.Policy != "" {
-						pol = string(*r.Policy)
-					}
-					ecmp := ""
-					if r.Ecmp != nil && *r.Ecmp {
-						ecmp = " " + st.Label.Render("[ECMP]")
-					}
-					out = append(out, " • "+st.CIDR.Render(r.IpPrefix)+" via "+st.Value.Render(m.formatNexthop(r.Nexthop))+" ("+pol+")"+ecmp)
+				for _, r := range srs[:limit] {
+					out = append(out, m.routeLine(r))
 				}
 				if len(srs) > limit {
 					out = append(out, "   "+st.MutedText.Render(fmt.Sprintf("… %d more (d describe)", len(srs)-limit)))
@@ -216,6 +211,24 @@ func (m model) detailLines(n *xnode, w int) []string {
 			}
 		}
 		out = append(out, note(explain)...)
+
+		// Static routes of the router that leave through this port.
+		out = append(out, "", section("Routes out this port"))
+		switch detail := m.nodeDetails[c.RouterID]; {
+		case m.nodeLoading[c.RouterID]:
+			out = append(out, "   "+st.MutedText.Render("loading routes…"))
+		case m.nodeErrs[c.RouterID] != nil:
+			out = append(out, "   "+st.Bad.Render("routes unavailable: "+m.nodeErrs[c.RouterID].Error()),
+				"   "+st.MutedText.Render("kubectl ko nbctl lr-route-list "+c.RouterName))
+		case detail != nil:
+			routes := routesVia(detail, c)
+			if len(routes) == 0 {
+				out = append(out, "   "+st.MutedText.Render("(no static route uses this port)"))
+			}
+			for _, r := range routes {
+				out = append(out, m.routeLine(r))
+			}
+		}
 
 	case kLS:
 		conns := m.switchPorts[n.id]
@@ -485,6 +498,52 @@ func (m model) switchNetworks(lsID string) []string {
 		nets = append(nets, c.Networks...)
 	}
 	return nets
+}
+
+// routeLine renders one static route: prefix, annotated next hop, policy, ECMP.
+func (m model) routeLine(r api.StaticRoute) string {
+	st := m.styles
+	pol := "dst-ip"
+	if r.Policy != nil && *r.Policy != "" {
+		pol = string(*r.Policy)
+	}
+	ecmp := ""
+	if r.Ecmp != nil && *r.Ecmp {
+		ecmp = " " + st.Label.Render("[ECMP]")
+	}
+	return " • " + st.CIDR.Render(r.IpPrefix) + " via " + st.Value.Render(m.formatNexthop(r.Nexthop)) + " (" + pol + ")" + ecmp
+}
+
+// routesVia lists the router's static routes that leave through port c: its
+// output_port, or a next hop inside one of the port's networks.
+func routesVia(d *api.NodeDetail, c *RouterPortConnection) []api.StaticRoute {
+	if d == nil || d.StaticRoutes == nil {
+		return nil
+	}
+	var nets []netip.Prefix
+	for _, n := range c.Networks {
+		if p, err := netip.ParsePrefix(n); err == nil {
+			nets = append(nets, p.Masked())
+		}
+	}
+	var out []api.StaticRoute
+	for _, r := range *d.StaticRoutes {
+		if r.OutputPort != nil && *r.OutputPort == c.PortName {
+			out = append(out, r)
+			continue
+		}
+		hop, err := netip.ParseAddr(extractCleanIP(r.Nexthop))
+		if err != nil {
+			continue
+		}
+		for _, p := range nets {
+			if p.Contains(hop) {
+				out = append(out, r)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // formatNexthop annotates an IP with its owner (node, LSP, LRP network) if known.

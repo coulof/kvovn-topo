@@ -1,0 +1,21 @@
+nats: null
+policies:
+- action: allow
+  id: 3be2afa8-3017-4f8e-b2b5-e17b35459c5d
+  match: ip4.dst == 192.168.54.48/28
+  priority: 31000
+- action: allow
+  id: 36f0ecd6-6c67-4cd6-9331-519e4ad0d137
+  match: ip4.dst == 192.168.55.48/28
+  priority: 31000
+staticRoutes:
+- ecmp: false
+  id: a5f91914-fec1-497b-9abd-ba3973ca1787
+  ipPrefix: 192.168.55.48/28
+  nexthop: 192.168.55.49
+  policy: src-ip
+- ecmp: false
+  id: eda5af40-d806-4806-ba49-6bb0212014a3
+  ipPrefix: 0.0.0.0/0
+  nexthop: 10.144.124.30
+  policy: dst-ip
