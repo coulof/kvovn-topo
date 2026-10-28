@@ -24,6 +24,14 @@ provision:
       #!/bin/bash
       set -eux -o pipefail
       systemctl disable --now firewalld 2>/dev/null || true
+      # The Minimal image ships kernel-default-base, without macvlan (vpc-nat-gw's
+      # external NIC). The full kernel-default of the running version adds the
+      # modules without a reboot.
+      if ! modinfo macvlan >/dev/null 2>&1; then
+        KVER=$(uname -r | sed 's/-default$//')
+        PKG=$(zypper -q -n se -s --match-exact kernel-default | awk -F'|' -v v="$KVER" '$4 ~ " "v"\\." {gsub(/ /, "", $4); print $4; exit}')
+        zypper -q -n in --force-resolution "kernel-default-${PKG}"
+      fi
       modprobe openvswitch; modprobe geneve
       printf 'openvswitch\ngeneve\n' > /etc/modules-load.d/ovn.conf
       echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/90-ovn-lab.conf; sysctl -w net.ipv4.ip_forward=1
