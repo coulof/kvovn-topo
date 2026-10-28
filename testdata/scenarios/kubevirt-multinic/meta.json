@@ -2,5 +2,6 @@
  "scenario": "kubevirt-multinic",
  "captured": "2026-10-26T09:40:35Z",
  "ovnCentralImage": "docker.io/kubeovn/kube-ovn:v1.16.2",
- "ovnVersion": "ovn-nbctl 25.03.4"
+ "ovnVersion": "ovn-nbctl 25.03.4",
+ "setup": "The hv-01 Harvester lab (Kube-OVN v1.16.2) with KubeVirt: custom VPCs vpc-onewater and vpc-twowater, each with one subnet attached through a kube-ovn NetworkAttachmentDefinition (onewater, twowater), plus the external underlay. VM test-2-nics-2-vpc has one NIC in each VPC; vm-onewater, vm-2 and vm-twowater have one NIC in theirs; the other VMs use the default bridge network. No NB NAT rows."
 }

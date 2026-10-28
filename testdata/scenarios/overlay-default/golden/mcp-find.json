@@ -1,0 +1,41 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "exact": true,
+        "id": "lsp:3d036838-943a-4579-96ea-6ca084f99769",
+        "k8s": {
+          "namespace": "demo",
+          "pod": "web-77dcbbf589-mf2j6",
+          "subnet": "ovn-default",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "namespace",
+        "name": "web-77dcbbf589-mf2j6.demo",
+        "parent": "ls:8b2b53f8-3127-4dd2-a19e-33791800351b",
+        "type": "LSP"
+      },
+      {
+        "exact": true,
+        "id": "lsp:b3cd0131-6dd3-44e9-aae5-33a12193db41",
+        "k8s": {
+          "namespace": "demo",
+          "pod": "web-77dcbbf589-x572f",
+          "subnet": "ovn-default",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "namespace",
+        "name": "web-77dcbbf589-x572f.demo",
+        "parent": "ls:8b2b53f8-3127-4dd2-a19e-33791800351b",
+        "type": "LSP"
+      }
+    ],
+    "total": 2
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "2 of 2 matches (2 exact): 2 LSP",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

@@ -1,0 +1,41 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "exact": false,
+        "id": "lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed",
+        "k8s": {
+          "namespace": "kube-system",
+          "pod": "vpc-nat-gw-gw-in-0",
+          "subnet": "vpc-c-net",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "name",
+        "name": "vpc-nat-gw-gw-in-0.kube-system",
+        "parent": "ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68",
+        "type": "LSP"
+      },
+      {
+        "exact": false,
+        "id": "lsp:cdfee5f5-41ad-492d-9843-a11a72b44651",
+        "k8s": {
+          "namespace": "kube-system",
+          "pod": "vpc-nat-gw-gw-out-0",
+          "subnet": "vpc-c-net",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "name",
+        "name": "vpc-nat-gw-gw-out-0.kube-system",
+        "parent": "ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68",
+        "type": "LSP"
+      }
+    ],
+    "total": 2
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "2 of 2 matches (0 exact): 2 LSP",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

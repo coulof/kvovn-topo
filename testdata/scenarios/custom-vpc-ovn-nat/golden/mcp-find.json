@@ -1,0 +1,27 @@
+{
+  "backend": "embedded",
+  "data": {
+    "items": [
+      {
+        "exact": true,
+        "id": "lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d",
+        "k8s": {
+          "namespace": "vpc-a",
+          "pod": "web-1",
+          "subnet": "vpc-a-net",
+          "vendor": "kube-ovn"
+        },
+        "matchedField": "pod",
+        "name": "web-1.vpc-a",
+        "parent": "ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524",
+        "type": "LSP"
+      }
+    ],
+    "total": 1
+  },
+  "historical": false,
+  "revision": 1,
+  "summary": "1 of 1 matches (1 exact): 1 LSP",
+  "timestamp": "2026-10-23T12:00:00Z",
+  "truncated": false
+}

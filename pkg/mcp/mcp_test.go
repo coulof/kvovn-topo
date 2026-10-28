@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/ovn-topology/pkg/ovsdb"
 	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
 	"github.com/coulof/ovn-topology/pkg/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -135,29 +136,58 @@ func TestToolGoldens(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "golden", "mcp")
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
-			got, err := json.MarshalIndent(mustCall(t, cs, tc.tool, tc.args), "", "  ")
+			checkGolden(t, filepath.Join(dir, tc.file), mustCall(t, cs, tc.tool, tc.args))
+		})
+	}
+}
+
+// TestScenarioToolGoldens runs the MCP tools on the B1 lab captures, through
+// the same snapshot backend as `ovn-topo mcp --fixture-dir`.
+func TestScenarioToolGoldens(t *testing.T) {
+	finds := map[string]string{
+		"overlay-default":    "demo",
+		"custom-vpc-ovn-nat": "web-1",
+		"vpc-nat-gw":         "vpc-nat-gw",
+		"vpc-nat-gw-asym":    "vpc-nat-gw",
+	}
+	for name, query := range finds {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join("..", "..", "testdata", "scenarios", name)
+			snap, err := ovsdb.LoadFixture(dir)
 			if err != nil {
 				t.Fatal(err)
 			}
-			got = append(got, '\n')
-			path := filepath.Join(dir, tc.file)
-			if *updateGolden {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, got, 0o644); err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-			want, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("%v (run with -update to create)", err)
-			}
-			if !bytes.Equal(got, want) {
-				t.Errorf("%s differs from golden; run go test ./pkg/mcp -update and review the diff\n%s", tc.file, got)
-			}
+			cs := connect(t, NewSnapshotBackend(StaticSource{snap}))
+			golden := filepath.Join(dir, "golden")
+			checkGolden(t, filepath.Join(golden, "mcp-get_graph_l3.json"), mustCall(t, cs, "get_graph", map[string]any{}))
+			checkGolden(t, filepath.Join(golden, "mcp-find.json"), mustCall(t, cs, "find", map[string]any{"query": query}))
 		})
+	}
+}
+
+// checkGolden compares v, as indented JSON, with the file at path (-update rewrites it).
+func checkGolden(t *testing.T, path string, v any) {
+	t.Helper()
+	got, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	if *updateGolden {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v (run with -update to create)", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("%s differs from golden; run go test ./pkg/mcp -update and review the diff\n%s", filepath.Base(path), got)
 	}
 }
 
