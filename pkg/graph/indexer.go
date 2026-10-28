@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
@@ -74,6 +75,13 @@ func (s *Snapshot) Reindex() {
 			s.AttachedSwitchesByLR[lrUUID] = appendIfNotPresent(s.AttachedSwitchesByLR[lrUUID], lsUUID)
 			s.AttachedRoutersByLS[lsUUID] = appendIfNotPresent(s.AttachedRoutersByLS[lsUUID], lrUUID)
 		}
+	}
+	// Built from map iteration: sort so /node and its goldens are stable.
+	for _, ids := range s.AttachedSwitchesByLR {
+		sort.Strings(ids)
+	}
+	for _, ids := range s.AttachedRoutersByLS {
+		sort.Strings(ids)
 	}
 }
 
