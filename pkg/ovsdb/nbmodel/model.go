@@ -33,7 +33,7 @@ func FullDatabaseModel() (model.ClientDBModel, error) {
 
 var schema = `{
   "name": "OVN_Northbound",
-  "version": "7.3.0",
+  "version": "7.11.0",
   "tables": {
     "ACL": {
       "columns": {
@@ -135,6 +135,28 @@ var schema = `{
               "minInteger": 0,
               "maxInteger": 32767
             }
+          }
+        },
+        "sample_est": {
+          "type": {
+            "key": {
+              "type": "uuid",
+              "refTable": "Sample",
+              "refType": "strong"
+            },
+            "min": 0,
+            "max": 1
+          }
+        },
+        "sample_new": {
+          "type": {
+            "key": {
+              "type": "uuid",
+              "refTable": "Sample",
+              "refType": "strong"
+            },
+            "min": 0,
+            "max": 1
           }
         },
         "severity": {
@@ -393,6 +415,8 @@ var schema = `{
                   "eth_dst",
                   "ip_src",
                   "ip_dst",
+                  "ipv6_src",
+                  "ipv6_dst",
                   "tp_src",
                   "tp_dst"
                 ]
@@ -545,7 +569,8 @@ var schema = `{
                 [
                   "allow",
                   "drop",
-                  "reroute"
+                  "reroute",
+                  "jump"
                 ]
               ]
             }
@@ -562,6 +587,15 @@ var schema = `{
             "max": "unlimited"
           }
         },
+        "chain": {
+          "type": {
+            "key": {
+              "type": "string"
+            },
+            "min": 0,
+            "max": 1
+          }
+        },
         "external_ids": {
           "type": {
             "key": {
@@ -572,6 +606,15 @@ var schema = `{
             },
             "min": 0,
             "max": "unlimited"
+          }
+        },
+        "jump_chain": {
+          "type": {
+            "key": {
+              "type": "string"
+            },
+            "min": 0,
+            "max": 1
           }
         },
         "match": {
@@ -620,6 +663,17 @@ var schema = `{
     },
     "Logical_Router_Port": {
       "columns": {
+        "dhcp_relay": {
+          "type": {
+            "key": {
+              "type": "uuid",
+              "refTable": "DHCP_Relay",
+              "refType": "strong"
+            },
+            "min": 0,
+            "max": 1
+          }
+        },
         "enabled": {
           "type": {
             "key": {
@@ -695,7 +749,7 @@ var schema = `{
             "key": {
               "type": "string"
             },
-            "min": 1,
+            "min": 0,
             "max": "unlimited"
           }
         },
@@ -809,6 +863,29 @@ var schema = `{
         },
         "route_table": {
           "type": "string"
+        },
+        "selection_fields": {
+          "type": {
+            "key": {
+              "type": "string",
+              "enum": [
+                "set",
+                [
+                  "eth_src",
+                  "eth_dst",
+                  "ip_proto",
+                  "ip_src",
+                  "ip_dst",
+                  "ipv6_src",
+                  "ipv6_dst",
+                  "tp_src",
+                  "tp_dst"
+                ]
+              ]
+            },
+            "min": 0,
+            "max": "unlimited"
+          }
         }
       }
     },
@@ -1040,6 +1117,15 @@ var schema = `{
             "max": 1
           }
         },
+        "peer": {
+          "type": {
+            "key": {
+              "type": "string"
+            },
+            "min": 0,
+            "max": 1
+          }
+        },
         "port_security": {
           "type": {
             "key": {
@@ -1164,6 +1250,9 @@ var schema = `{
             "max": 1
           }
         },
+        "match": {
+          "type": "string"
+        },
         "options": {
           "type": {
             "key": {
@@ -1174,6 +1263,15 @@ var schema = `{
             },
             "min": 0,
             "max": "unlimited"
+          }
+        },
+        "priority": {
+          "type": {
+            "key": {
+              "type": "integer",
+              "minInteger": 0,
+              "maxInteger": 32767
+            }
           }
         },
         "type": {

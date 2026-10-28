@@ -34,6 +34,7 @@
         "name": "app-pod-1.default",
         "options": {},
         "parent_name": null,
+        "peer": null,
         "port_security": null,
         "tag": null,
         "tag_request": null,
@@ -55,7 +56,7 @@
   },
   "historical": false,
   "revision": 1,
-  "summary": "LSP detail: 1 related objects (1 shown), 17 raw columns, 0 cut to 50 entries",
+  "summary": "LSP detail: 1 related objects (1 shown), 18 raw columns, 0 cut to 50 entries",
   "timestamp": "2026-10-23T12:00:00Z",
   "truncated": false
 }

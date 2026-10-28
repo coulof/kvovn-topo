@@ -24,7 +24,7 @@ func FullDatabaseModel() (model.ClientDBModel, error) {
 
 var schema = `{
   "name": "OVN_Southbound",
-  "version": "20.33.0",
+  "version": "20.41.0",
   "tables": {
     "BFD": {
       "columns": {

@@ -11,15 +11,17 @@ type (
 )
 
 var (
-	LoadBalancerProtocolTCP           LoadBalancerProtocol        = "tcp"
-	LoadBalancerProtocolUDP           LoadBalancerProtocol        = "udp"
-	LoadBalancerProtocolSCTP          LoadBalancerProtocol        = "sctp"
-	LoadBalancerSelectionFieldsEthSrc LoadBalancerSelectionFields = "eth_src"
-	LoadBalancerSelectionFieldsEthDst LoadBalancerSelectionFields = "eth_dst"
-	LoadBalancerSelectionFieldsIPSrc  LoadBalancerSelectionFields = "ip_src"
-	LoadBalancerSelectionFieldsIPDst  LoadBalancerSelectionFields = "ip_dst"
-	LoadBalancerSelectionFieldsTpSrc  LoadBalancerSelectionFields = "tp_src"
-	LoadBalancerSelectionFieldsTpDst  LoadBalancerSelectionFields = "tp_dst"
+	LoadBalancerProtocolTCP            LoadBalancerProtocol        = "tcp"
+	LoadBalancerProtocolUDP            LoadBalancerProtocol        = "udp"
+	LoadBalancerProtocolSCTP           LoadBalancerProtocol        = "sctp"
+	LoadBalancerSelectionFieldsEthSrc  LoadBalancerSelectionFields = "eth_src"
+	LoadBalancerSelectionFieldsEthDst  LoadBalancerSelectionFields = "eth_dst"
+	LoadBalancerSelectionFieldsIPSrc   LoadBalancerSelectionFields = "ip_src"
+	LoadBalancerSelectionFieldsIPDst   LoadBalancerSelectionFields = "ip_dst"
+	LoadBalancerSelectionFieldsIpv6Src LoadBalancerSelectionFields = "ipv6_src"
+	LoadBalancerSelectionFieldsIpv6Dst LoadBalancerSelectionFields = "ipv6_dst"
+	LoadBalancerSelectionFieldsTpSrc   LoadBalancerSelectionFields = "tp_src"
+	LoadBalancerSelectionFieldsTpDst   LoadBalancerSelectionFields = "tp_dst"
 )
 
 // LoadBalancer defines an object in Load_Balancer table
@@ -31,6 +33,6 @@ type LoadBalancer struct {
 	Name            string                        `ovsdb:"name"`
 	Options         map[string]string             `ovsdb:"options"`
 	Protocol        *LoadBalancerProtocol         `ovsdb:"protocol" validate:"omitempty,oneof='tcp' 'udp' 'sctp'"`
-	SelectionFields []LoadBalancerSelectionFields `ovsdb:"selection_fields" validate:"dive,oneof='eth_src' 'eth_dst' 'ip_src' 'ip_dst' 'tp_src' 'tp_dst'"`
+	SelectionFields []LoadBalancerSelectionFields `ovsdb:"selection_fields" validate:"dive,oneof='eth_src' 'eth_dst' 'ip_src' 'ip_dst' 'ipv6_src' 'ipv6_dst' 'tp_src' 'tp_dst'"`
 	Vips            map[string]string             `ovsdb:"vips"`
 }

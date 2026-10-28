@@ -13,14 +13,17 @@ var (
 	LogicalRouterPolicyActionAllow   LogicalRouterPolicyAction = "allow"
 	LogicalRouterPolicyActionDrop    LogicalRouterPolicyAction = "drop"
 	LogicalRouterPolicyActionReroute LogicalRouterPolicyAction = "reroute"
+	LogicalRouterPolicyActionJump    LogicalRouterPolicyAction = "jump"
 )
 
 // LogicalRouterPolicy defines an object in Logical_Router_Policy table
 type LogicalRouterPolicy struct {
 	UUID        string                    `ovsdb:"_uuid"`
-	Action      LogicalRouterPolicyAction `ovsdb:"action" validate:"oneof='allow' 'drop' 'reroute'"`
+	Action      LogicalRouterPolicyAction `ovsdb:"action" validate:"oneof='allow' 'drop' 'reroute' 'jump'"`
 	BFDSessions []string                  `ovsdb:"bfd_sessions"`
+	Chain       *string                   `ovsdb:"chain"`
 	ExternalIDs map[string]string         `ovsdb:"external_ids"`
+	JumpChain   *string                   `ovsdb:"jump_chain"`
 	Match       string                    `ovsdb:"match"`
 	Nexthop     *string                   `ovsdb:"nexthop"`
 	Nexthops    []string                  `ovsdb:"nexthops"`
