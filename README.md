@@ -68,7 +68,7 @@ ovn-topo            # passive (Tier 0)
 ovn-topo --diag     # plus exec-based diagnostics (Tier 1, ADR-0001)
 ```
 
-`1`–`3` switch between the VPCs, Chassis and Workloads tree views; `4` lists problems (unbound ports, gateways without a chassis, NAT-gateway return paths) and `5` the changes since start. `Enter` follows a relation, `i` toggles the details pane, `d` describes the selection, `?` lists every key. The [TUI guide](docs/tui-guide.md) walks through use cases with screenshots, and its [§8](docs/tui-guide.md#8-keys) has the full key table.
+`1`–`3` switch between the VPCs, Chassis and Workloads tree views; `4` lists problems (unbound ports, gateways without a chassis, NAT-gateway return paths) and `5` the changes since start. `Enter` follows a relation, `i` toggles the details pane, `d` describes the selection, `?` lists every key. The [TUI guide](docs/tui-guide.md) walks through use cases with screenshots, and its [§8](docs/tui-guide.md#8-keys) has the full key table. Theme, highlight duration and per-context daemon settings can live in `~/.config/ovn-topo/config.yaml` ([§0](docs/tui-guide.md#config-file)).
 
 With `--diag`, `x` opens diagnostics on the selection: `ovn-trace`, tcpdump, conntrack, OVS ports and bridges, flows and `ovn-controller` logs ([§6](docs/tui-guide.md#6-tier-1-diagnostics--x-requires---diag)). `!` runs a details-pane Inspect command such as `kubectl ko nbctl lr-route-list` with the TUI suspended. `ovn-topo` finds the diagnostic pods itself: `ovn-central`, `kube-ovn-cni` and `ovs-ovn` for Kube-OVN, else `ovnkube-node` for ovn-kubernetes. `--k8s-namespace` pins the namespace.
 

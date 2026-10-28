@@ -533,6 +533,7 @@ func main() {
 	var focusID string
 	var zone string
 	var flashFor time.Duration
+	var configPath string
 
 	var kubeContext, namespace, service, port string
 	flag.StringVar(&daemonURL, "daemon-url", "", "ovn-topologyd API URL, e.g. http://127.0.0.1:8080/api/v1 (default: the in-cluster daemon through the Kubernetes service proxy)")
@@ -554,6 +555,7 @@ func main() {
 		flashDefault = d
 	}
 	flag.DurationVar(&flashFor, "flash", flashDefault, "How long a changed row stays highlighted: solid for 3s, then a ▌ mark; 0 turns it off (env OVN_TOPO_FLASH)")
+	flag.StringVar(&configPath, "config", "", "Config file: UI preferences and per-context daemon settings (default: $XDG_CONFIG_HOME/ovn-topo/config.yaml or ~/.config/ovn-topo/config.yaml)")
 	flag.StringVar(&zone, "zone", "", "With --diag: live view of one ovn-kubernetes interconnect zone (node) through an exec relay, e.g. OpenShift; \"list\" prints the zones")
 
 	// "ovn-topo mcp": the MCP server has its own flags and never starts the TUI.
@@ -583,6 +585,24 @@ func main() {
 	// Without --daemon-url, reach the in-cluster daemon the supported way: the
 	// API server's service proxy with the kubeconfig's credentials and RBAC.
 	loader := kubeproxy.Loader(kubeconfig, kubeContext)
+	currentContext := ""
+	if raw, err := loader.RawConfig(); err == nil {
+		currentContext = raw.CurrentContext
+	}
+
+	// The config file fills what no flag or environment variable set.
+	setFlags := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { setFlags[f.Name] = true })
+	cfg, err := loadConfig(firstNonEmpty(configPath, defaultConfigPath()), setFlags["config"])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	opts := settings{theme: themeName, flash: flashFor, pane: true, namespace: namespace, service: service, port: port,
+		k8sNamespace: k8sNamespace, pinned: setFlags["namespace"] || setFlags["service"]}
+	cfg.apply(&opts, firstNonEmpty(kubeContext, currentContext), func(name string) bool { return setFlags[name] }, os.Getenv)
+	themeName, flashFor, namespace, service, port, k8sNamespace = opts.theme, opts.flash, opts.namespace, opts.service, opts.port, opts.k8sNamespace
+
 	var client *http.Client
 	via := "direct " + daemonURL
 
@@ -611,11 +631,9 @@ func main() {
 	}
 
 	if fixturePath == "" && daemonURL == "" {
-		pinned := false
-		flag.Visit(func(f *flag.Flag) { pinned = pinned || f.Name == "namespace" || f.Name == "service" })
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		conn, err := kubeproxy.Connect(ctx, loader,
-			kubeproxy.ServiceRef{Namespace: namespace, Name: service, Port: port}, pinned)
+			kubeproxy.ServiceRef{Namespace: namespace, Name: service, Port: port}, opts.pinned)
 		cancel()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\nUse --daemon-url for a daemon you can reach directly, or --fixture / --fixture-dir to explore offline.\n", err)
@@ -634,12 +652,9 @@ func main() {
 
 	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
-	m.flashFor = flashFor
+	m.flashFor, m.pinspect = flashFor, opts.pane
 	m.zone = firstNonEmpty(zone, zoneOf(fixtureDir))
-	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext}
-	if raw, err := loader.RawConfig(); err == nil {
-		m.kube.currentContext = raw.CurrentContext
-	}
+	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext, currentContext: currentContext}
 	if zone != "" && m.diagLocator != nil {
 		m.diagLocator.SetHomeZone(zone)
 	}

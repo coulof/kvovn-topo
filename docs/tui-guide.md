@@ -31,6 +31,23 @@ The daemon is never exposed: no NodePort, LoadBalancer, kube-vip IP or Ingress. 
 - **Other sources:** `--daemon-url` talks to a daemon directly (one you run locally with `mise run daemon`). `--fixture` needs no cluster.
 - **If it fails:** with no usable kubeconfig, `ovn-topo` exits with the reason. If the daemon can't be reached, the *Daemon unreachable* screen names the path that was tried and what to check.
 
+### Config file
+
+Settings you'd otherwise retype go in `~/.config/ovn-topo/config.yaml` (`$XDG_CONFIG_HOME` if set; `--config` names another file). The `contexts` keys are kubeconfig context names. A flag beats its environment variable, which beats the file. A missing file is fine; an unknown key is an error.
+
+```yaml
+ui:
+  theme: suse        # as --theme / $THEME
+  flash: 30s         # as --flash / $OVN_TOPO_FLASH
+  pane: false        # start with the details pane closed (i toggles it)
+contexts:
+  harvester:
+    daemon: {namespace: ovn-topology, service: ovn-topologyd, port: http}   # pins the Service, as --namespace/--service
+    k8sNamespace: kube-system                                              # as --k8s-namespace
+```
+
+`--diag`, `--zone` and `--fixture-dir` are per run and have no file setting: Tier 1 stays an explicit opt-in (ADR-0001). The file does not configure `ovn-topo mcp`.
+
 The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.md)) through `pkg/kubeproxy`.
 
 ## 1. Screen layout
