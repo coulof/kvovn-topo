@@ -39,8 +39,8 @@ Only small debt items closed. The foundation pass is still the next work.
 
 | M | DoD | Reality |
 |---|---|---|
-| M0 | 0/4 | Lint and deps guards work; `hack/capture-fixtures.sh` exists. No `test/` tree, no recorded `make dev-cluster` run. |
-| M1 | 0/5 | API and goldens on one hand-written fixture plus two lab captures. Live data path fixed 2026-10-21. Layer 2/3 tests, scale test and API freeze missing. |
+| M0 | 1/4 | Lint and deps guards work. `make dev-cluster` builds the local k3s + Kube-OVN lab (Lima VMs) and four scenarios are captured from it (2026-10-28). |
+| M1 | 0/5 | API and goldens on one hand-written fixture, two lab captures and four scenario captures. Live data path fixed 2026-10-21. Layer 2/3 tests, scale test and API freeze missing. |
 | M2 | 6/6 | Done. Scenario navigation checked on the lab, not on scenario fixtures. |
 | M3 | 2/3 | Paused. No live updates and no API-version banner in the extension. |
 | M4, M5 | 0 | Not started. An interim NAT-gateway "Outside OVN" view lives in the TUI (`cmd/ovn-topo/flavor.go`). |
@@ -52,8 +52,7 @@ Only small debt items closed. The foundation pass is still the next work.
 
 | # | Item | Where it closes |
 |---|---|---|
-| B1 | Scenario fixtures. Two lab captures are committed: `hv-01-lab` (the whole lab, not a scenario) and `kubevirt-multinic` (its `meta.json` does not say what was set up). Still to do: one clean capture per named scenario (`overlay-default`, `custom-vpc-ovn-nat`, `vpc-nat-gw` first), each with a distinct NB and a `meta.json` describing the setup. | M0 / M1 |
-| B2 | No `test/` tree: layers 2–5 absent. | M0 / M1 / M7 |
+| B2 | Layers 2–5 absent: `test/e2e/scenarios/` holds the scenario manifests only, applied by hand on the local lab. | M0 / M1 / M7 |
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
 | B5 | Extension has one unit test (`layout.test.ts`). | M3 (paused) |
 | E1 | `cmd/ovn-topo/diag_ui.go`: one 1.4k-line modal with flag-driven state. | before M5 |
@@ -67,13 +66,13 @@ Closed since 2026-10-21: B4 (deterministic codegen: libovsdb's `MaxLength()` ove
 
 ### Foundation pass
 
-One PR per step, in this order. Steps 1 and 3 are done.
+One PR per step, in this order. Steps 1, 3 and 4 are done.
 
 1. ~~Register refresh.~~
 2. **Lab checks on hv-01 (N1–N3).** Deploy the latest image; run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP. Bind a test user to `ovn-topologyd-viewer` only and record which resourceName form works. Accept or amend ADR-0003.
 3. ~~B4: deterministic codegen.~~
-4. **B1: scenario fixtures.** Align `hack/ovn-version` with OVN 25.03 (re-answer Q4) and regenerate. Capture `overlay-default`, `custom-vpc-ovn-nat` and `vpc-nat-gw`, with scenario and MCP goldens.
-5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2), then the layer 3 `overlay-default` e2e on kind (M1 DoD 4, M0 DoD 3).
+4. ~~B1: scenario fixtures.~~ OVN models pinned to 25.03.3 (Q4). `overlay-default`, `custom-vpc-ovn-nat`, `vpc-nat-gw` and `vpc-nat-gw-asym` captured from the local lab, with scenario and MCP goldens (2026-10-28).
+5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2), then the layer 3 `overlay-default` e2e in CI (M1 DoD 4). The local lab is k3s in Lima VMs; the CI runner (kind, or k3s on a runner with KVM) is still to choose.
 6. **B3: scale.** A 10k-LSP synthetic fixture and a `/graph?view=l3` benchmark (p95 < 200 ms, payload < 1 MB); a per-revision view cache if needed. Closes M1 DoD 3.
 7. **M1 API freeze.** `api/openapi.yaml` v1, including `/find`; breaking changes after this need an ADR.
 8. **E1: split `diag_ui.go`** into per-action models, guarded by `TestDiagTargetIsAlwaysTheSelection` and the executor tests.
@@ -96,8 +95,8 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
   - `depguard` forbidding `pkg/diag` imports from `cmd/ovn-topologyd`, `pkg/graph`, `pkg/server`.
 - CI check script `hack/check-deps.sh`: `go list -deps ./cmd/ovn-topologyd` must not contain `pkg/diag` or `k8s.io/client-go/tools/remotecommand`.
 - `ui/` scaffold per `AGENTS.md` §7 (dev app `ovn-topology-ui`, package `ovn-topology`), building an empty cluster-level product page.
-- `make dev-cluster`: kind + Kube-OVN at a pinned version, reusing Kube-OVN's upstream kind install scripts.
-- `hack/capture-fixtures.sh <scenario>`: dumps NB and SB with `ovsdb-client backup` into `testdata/<scenario>/{nb,sb}.db` plus `nodes.json`, `pods.json`.
+- `make dev-cluster`: k3s + Kube-OVN + Multus at pinned versions in three local Lima VMs (`hack/dev-cluster.sh`, `hack/lab/`). Changed from kind on 2026-10-28: real VM kernels for OVS, closer to RKE2/Harvester.
+- `hack/capture-fixtures.sh <scenario>`: dumps the modelled NB and SB tables with `ovsdb-client query` into `testdata/scenarios/<scenario>/ovn-{nb,sb}.json`, plus the trimmed Kubernetes identity and `meta.json` (`--setup`).
 - CI workflows skeleton: `go.yml`, `ui.yml`, `e2e-pr.yml`, `e2e-nightly.yml`, `release.yml` (dry-run), all path-filtered.
 
 **Out of scope:** any graph logic, any UI beyond the empty page.
@@ -105,7 +104,7 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
 **DoD**
 - [ ] `make generate lint test build ui-build` passes on a clean checkout.
 - [ ] A deliberate libovsdb `Create` call and a deliberate `pkg/diag` import in `pkg/graph` each fail lint (prove it in a throwaway commit or test).
-- [ ] `make dev-cluster` brings up Kube-OVN; `capture-fixtures.sh overlay-default` produces fixtures.
+- [x] `make dev-cluster` brings up Kube-OVN; `capture-fixtures.sh overlay-default` produces fixtures. (Done 2026-10-28, on the k3s VM lab instead of kind.)
 - [ ] Empty extension page loads via `make ui-dev` against a Rancher instance.
 
 ---
@@ -276,7 +275,7 @@ Extension: add the L2 and Chassis views here.
 **Out of scope:** conntrack state, OpenFlow, anything requiring exec.
 
 **DoD**
-- [ ] Path fixtures across scenarios: intra-LS, inter-LS same VPC, VPC → external via SNAT, FIP inbound, default-VPC reroute to gateway node, ACL drop, no route, and DNAT return bypassing an opaque hop (the `vpc-nat-gw` scenario before its `src-ip` route: verdict `external` via the VPC's external LRP, noting that it skips the NAT gateway).
+- [ ] Path fixtures across scenarios: intra-LS, inter-LS same VPC, VPC → external via SNAT, FIP inbound, default-VPC reroute to gateway node, ACL drop, no route, and DNAT return bypassing an opaque hop (the `vpc-nat-gw-asym` scenario: verdict `external` via the VPC's external LRP, noting that it skips the NAT gateway).
 - [ ] Where M6 exists, an e2e comparing `pkg/trace` verdicts with `ovn-trace` verdicts on the same inputs. Discrepancies are logged as known limitations, not hidden.
 
 ---
@@ -492,12 +491,12 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 |---|---|---|---|
 | 1. Unit + golden | libovsdb in-process `server` loaded with `testdata/` snapshots | joins, views, aggregation, API shape | every PR |
 | 2. Raw OVN | 3-member clustered `ovsdb-server` NB/SB containers; `ovn-nbctl`/`ovn-sbctl` topology scripts; optional `ovn-fake-multinode` | schema drift across OVN versions, raft follower reads, reconnect, TLS, scale | every PR |
-| 3. Kube-OVN e2e | kind + Kube-OVN (upstream scripts, pinned) | real Kube-OVN output; daemon chart, RBAC, autodetection; M6 diagnostics | PR: `overlay-default`; nightly: all scenarios |
+| 3. Kube-OVN e2e | k3s + Kube-OVN in local VMs (`make dev-cluster`); CI runner to choose (B2) | real Kube-OVN output; daemon chart, RBAC, autodetection; M6 diagnostics | PR: `overlay-default`; nightly: all scenarios |
 | 4. Rancher + UI e2e | Rancher on the kind cluster + extension (ECI or UIPlugin); Playwright | service proxy, SSE, product registration, rendering | nightly + release |
 | 5. Harvester | self-hosted runner (lab), then ephemeral nested Harvester | Harvester addon layout, VM scenarios | nightly / pre-release |
 
 **Scenarios** (`test/e2e/scenarios/<name>/` = manifests + `expected.yaml` with structural assertions, never UUIDs):
-`overlay-default`, `distributed-gw`, `custom-vpc-ovn-nat`, `vpc-nat-gw` (asserts the "not OVN NAT" explanation), `underlay-vlan`, `dual-stack`, `kubevirt-multinic`, `ha-gateway-failover`; later `ovn-ic`.
+`overlay-default`, `distributed-gw`, `custom-vpc-ovn-nat`, `vpc-nat-gw` (asserts the "not OVN NAT" explanation), `vpc-nat-gw-asym` (two NAT gateways, DNAT replies bypass one: the ADR-0004 warning), `underlay-vlan`, `dual-stack`, `kubevirt-multinic`, `ha-gateway-failover`; later `ovn-ic` and a k3k tenancy scenario (virtual clusters sharing the host's Kube-OVN NB). Captured so far: the four up to `vpc-nat-gw-asym`.
 
 **Fixture loop:** every layer 3 scenario exports NB/SB snapshots as CI artifacts. When Renovate bumps Kube-OVN, a bot PR refreshes `testdata/` so layer 1 always runs against real Kube-OVN output.
 
@@ -508,7 +507,7 @@ test/
 │   └── scenarios/<name>/ # manifests + expected.yaml
 ├── ovn/                  # layer 2: compose + topology scripts
 ├── ui/                   # Playwright (layer 4)
-hack/kind/  hack/harvester/
+hack/lab/  hack/harvester/
 ```
 
 ---
@@ -530,7 +529,7 @@ Record answers here with evidence (date, link to test run or doc).
 | Q9 | Which MCP Go SDK does kvtop use? Align or justify | M9 | **Resolved (2026-10-23, ADR-0003)**: kvtop uses **no SDK**. `internal/mcp` is hand-written JSON-RPC pinned to protocol `2024-11-05`, which predates tool annotations. We use the official `github.com/modelcontextprotocol/go-sdk` v1.8.0 for annotations, `structuredContent`/`outputSchema`, version negotiation and the in-memory test transport. kvtop should adopt it when it next touches MCP. |
 | Q10 | How does OVN handle inter-VPC traffic in Kube-OVN without VPC peering? | M6 trace | **Resolved (2026-10-20, lab hv-01)**: In Kube-OVN, separate VPCs (separate Logical Routers) route non-local traffic to `0.0.0.0/0` via the VPC's external gateway (`cr-vpc-<name>-external`), egressing through `localnet.external` onto the physical underlay. `ovn-trace` verifies packet delivery to `localnet.external`; the physical upstream firewall then enforces inter-subnet access. |
 | Q11 | Is `ovn-detrace` (and its python `ovs` bindings) shipped in the Kube-OVN images on Harvester, and in which pod can it reach NB, SB and the node's OVS db? Candidates: `ovs-ovn` (local OVS db; NB/SB over the `ovn-nb`/`ovn-sb` services, TLS?) or `ovn-central` (NB/SB sockets; `--ovsdb` only names ports?). | M6 detrace follow-up | open; check `which ovn-detrace` and a dry run in both pods on `hv-01` |
-| Q12 | Which Pod labels, annotations and owner identify a Kube-OVN VPC NAT gateway pod, and do its two LSPs carry `external_ids:pod`? | M4 item 7 (ADR-0004) | **Partly answered (2026-10-27, lab hv-01):** both ports carry `external_ids:pod=kube-system/vpc-nat-gw-one-water-nat-0` and are attached through NADs, named `<pod>.<ns>.<nad>.<subnet>.ovn` (LAN on `subnet-onewater`, WAN on `external`). The TUI detects the gateway by pod name. Still unverified: the expected label `ovn.kubernetes.io/vpc-nat-gw=true`, annotation `ovn.kubernetes.io/vpc_nat_gw=<name>` and owner `StatefulSet/vpc-nat-gw-<name>` (`kubectl -n kube-system get pod vpc-nat-gw-one-water-nat-0 -o yaml`). |
+| Q12 | Which Pod labels, annotations and owner identify a Kube-OVN VPC NAT gateway pod, and do its two LSPs carry `external_ids:pod`? | M4 item 7 (ADR-0004) | **Answered (2026-10-28, local lab, Kube-OVN v1.16.2):** label `ovn.kubernetes.io/vpc-nat-gw=true` (also `app=vpc-nat-gw-<name>`), annotation `ovn.kubernetes.io/vpc_nat_gw=<name>`, owner `StatefulSet/vpc-nat-gw-<name>` (pod `vpc-nat-gw-<name>-0` in `kube-system`). Every OVN port of the gateway carries `external_ids:pod=kube-system/<pod>`. How many ports OVN sees depends on the WAN attachment: on hv-01 both legs are kube-ovn NADs (`<pod>.<ns>.<nad>.<subnet>.ovn`), in the lab the WAN leg is a macvlan NAD and only the LAN port `<pod>.kube-system` exists. The label and owner are the stable signals for the M4 adapter; the TUI still detects by pod name. |
 | Q13 | Is ovn-kubernetes in scope? The targets (Rancher RKE2, Harvester) do not ship it, so supporting it means OpenShift or vanilla clusters. | ovn-kubernetes adapter | **Resolved (2026-10-27)**: yes, OpenShift is in scope (user request; lab `hol-powerflex-lab`, OCP 4.19.19). The chart does not work there today: the daemon stays unready with `lookup ovn-nb.kube-system.svc.cluster.local ... no such host`, because there is no central NB/SB. Moving the chart to another namespace does not help. Support is the ADR-0005 work, not a chart setting. |
 | Q14 | ovn-kubernetes interconnect mode runs one NB/SB per node on a unix socket in `ovnkube-node`, with no central database. Which model: (a) DaemonSet zone collectors and a merger, (b) per-zone view, (c) central-DB deployments only? | ovn-kubernetes adapter, ADR-0002 | **Spike done (2026-10-27, `hol-powerflex-lab`, OCP 4.19.19, OVN 25.03.1)**; the model is proposed in ADR-0005, pending acceptance. Evidence: (1) each node is one zone: `nbdb`/`sbdb` containers in `ovnkube-node`, sockets `/var/run/ovn/ovn{nb,sb}_db.sock` (host `/var/run/ovn-ic`), `root:root 0750`, no Service; (2) zone snapshots share **no** row UUIDs; `ovn_cluster_router`, `transit_switch`, all Port_Groups/Address_Sets and most Load_Balancers are replicated by name; (3) every `type=remote` `tstor-<node>` port resolves to exactly one zone's local `tstor-<node>` (same MAC/IP), and every zone routes each other zone's pod subnet to that transit IP (6/6); (4) `Chassis.name` == node annotation `k8s.ovn.org/node-chassis-id`, with `other_config:is-remote` marking copies; (5) the pinned 24.03 models load the live NB 7.11.0 / SB 20.41.0 schemas with no errors. Captured with `hack/capture-fixtures.sh --flavor ovnk`. The fixtures hold lab data and are not committed. |
 | Q15 | Do upstream ovn-kubernetes (kind, `contrib/kind.sh` interconnect) and OpenShift agree on pod labels, container names, socket paths and `external_ids`? Does local gateway mode change the per-zone NB as ADR-0004 decision 4 expects? | ADR-0005 | open; rerun the capture on a kind lab and commit an anonymous `ovnk-ic-kind` scenario |

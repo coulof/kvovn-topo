@@ -48,7 +48,7 @@ ovn-topology/
 ├── charts/ovn-topology/     # daemon Helm chart (installed per downstream cluster)
 ├── testdata/                # OVSDB snapshots used as fixtures
 ├── test/                    # e2e (Go, tag e2e), ovn/ (raw OVSDB) — see ROADMAP testing strategy
-├── hack/                    # codegen, check-deps.sh, capture-fixtures.sh, kind/, harvester/
+├── hack/                    # codegen, check-deps.sh, capture-fixtures.sh, dev-cluster.sh, lab/, harvester/
 ├── docs/adr/                # architecture decision records
 ├── ROADMAP.md
 └── .github/workflows/       # go.yml, cli.yml, image.yml, release.yml
@@ -64,7 +64,7 @@ make lint          # golangci-lint (incl. forbidigo read-only rule) + ADR-0001 d
 make test          # go test ./... (unit + in-memory OVSDB tests)
 make build         # daemon + TUI binaries
 make image         # daemon container image (distroless, non-root)
-make dev-cluster   # hack/: kind or lima cluster with Kube-OVN + sample VPCs
+make dev-cluster   # hack/: k3s + Kube-OVN lab in local Lima VMs (scenarios: test/e2e/scenarios)
 ```
 
 Run `make generate lint test` before declaring any task done. If you change `api/openapi.yaml`, regenerate and update the Go consumers in the same change.
