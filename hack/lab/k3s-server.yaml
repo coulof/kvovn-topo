@@ -1,0 +1,102 @@
+# Lima template: k3s server of the ovn-topology lab, Kube-OVN as the CNI.
+# Created by hack/dev-cluster.sh, which passes the PARAM_* values from lab.env.
+# Adapted from github.com/coulof/k3k-kube-ovn (lima/k3k-kube-ovn.yaml).
+minimumLimaVersion: 2.0.0
+images:
+  - location: https://download.opensuse.org/distribution/leap/15.6/appliances/openSUSE-Leap-15.6-Minimal-VM.x86_64-Cloud.qcow2
+    arch: x86_64
+cpus: 2
+memory: 4GiB
+disk: 20GiB
+mounts: []
+containerd: {system: false, user: false}
+# eth0: the shared user-v2 network (Lima on Linux/qemu makes it the only NIC):
+# node traffic, Geneve and internet egress.
+# egress0 (dummy, see provision): the external NIC of the NAT scenarios.
+networks:
+  - lima: user-v2
+portForwards:
+  - guestPort: 6443
+    hostPort: 16443
+    hostIP: 127.0.0.1
+  - guestPortRange: [1, 65535]
+    ignore: true
+param:
+  K3S_VERSION: ""
+  KUBE_OVN_VERSION: ""
+  MULTUS_VERSION: ""
+  LAB_TOKEN: ""
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      systemctl disable --now firewalld 2>/dev/null || true
+      modprobe openvswitch; modprobe geneve
+      printf 'openvswitch\ngeneve\n' > /etc/modules-load.d/ovn.conf
+      echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/90-ovn-lab.conf; sysctl -w net.ipv4.ip_forward=1
+      # egress0: the NIC of the NAT scenarios' external networks. A dummy: the
+      # scenarios need the NB state, not external traffic (provision runs every boot).
+      ip link show egress0 >/dev/null 2>&1 || ip link add egress0 type dummy
+      ip link set egress0 up
+      NODE_IP=$(ip -4 -o addr show eth0 | awk '{print $4}' | cut -d/ -f1)
+      mkdir -p /etc/rancher/k3s
+      cat > /etc/rancher/k3s/config.yaml <<CFG
+      token: ${PARAM_LAB_TOKEN}
+      node-name: $(hostname | sed 's/^lima-//')   # the VM name, without Lima's prefix
+      node-ip: ${NODE_IP}
+      node-label: [kube-ovn/role=master]   # ovn-central's nodeSelector (install.sh sets it; the chart does not)
+      flannel-backend: none
+      disable-network-policy: true
+      disable: [traefik, servicelb]
+      write-kubeconfig-mode: "0644"
+      tls-san: [127.0.0.1, ${NODE_IP}]
+      CFG
+      if ! command -v k3s >/dev/null; then
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${PARAM_K3S_VERSION}" sh -
+      fi
+      until [ -f /var/lib/rancher/k3s/agent/etc/containerd/config.toml ]; do sleep 2; done
+      # The CNI directories of this k3s build, for Kube-OVN and Multus. With
+      # flannel-backend: none, k3s 1.35 writes no CNI section (containerd 2,
+      # config version 3), so containerd's defaults apply.
+      CFG_TOML=/var/lib/rancher/k3s/agent/etc/containerd/config.toml
+      CNI_BIN=$(grep -oE 'bin_dirs? = .*' "$CFG_TOML" | grep -oE '/[^"]+' | head -1 || true)
+      CNI_CONF=$(grep -oE 'conf_dir = .*' "$CFG_TOML" | grep -oE '/[^"]+' | head -1 || true)
+      CNI_BIN=${CNI_BIN:-/opt/cni/bin}; CNI_CONF=${CNI_CONF:-/etc/cni/net.d}
+      echo "CNI bin=${CNI_BIN} conf=${CNI_CONF}"
+      M=/var/lib/rancher/k3s/server/manifests; mkdir -p $M   # k3s may not have created it yet
+      cat > $M/kube-ovn.yaml <<CHART
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: kube-ovn
+        namespace: kube-system
+      spec:
+        bootstrap: true   # host network: there is no CNI yet
+        repo: https://kubeovn.github.io/kube-ovn/
+        chart: kube-ovn
+        version: "${PARAM_KUBE_OVN_VERSION}"
+        targetNamespace: kube-system
+        valuesContent: |-
+          MASTER_NODES: "${NODE_IP}"
+          networking:
+            IFACE: eth0
+            TUNNEL_TYPE: geneve
+          ipv4:
+            POD_CIDR: 10.42.0.0/16
+            POD_GATEWAY: 10.42.0.1
+            SVC_CIDR: 10.43.0.0/16
+            JOIN_CIDR: 100.64.0.0/16
+          func:
+            ENABLE_EXTERNAL_VPC: true   # custom-vpc-ovn-nat: Vpc.enableExternal
+            ENABLE_NAT_GW: true         # vpc-nat-gw
+          cni_conf:
+            CNI_CONFIG_PRIORITY: "10"
+            CNI_CONF_DIR: ${CNI_CONF}
+            MOUNT_CNI_CONF_DIR: ${CNI_CONF}
+            CNI_BIN_DIR: ${CNI_BIN}
+      CHART
+      curl -sSfL "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/${PARAM_MULTUS_VERSION}/deployments/multus-daemonset-thick.yml" |
+        sed -e "s/:snapshot-thick/:${PARAM_MULTUS_VERSION}-thick/g" \
+            -e "s#path: /etc/cni/net.d\$#path: ${CNI_CONF}#" \
+            -e "s#path: /opt/cni/bin\$#path: ${CNI_BIN}#" > $M/multus.yaml

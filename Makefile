@@ -44,4 +44,4 @@ image:
 .PHONY: dev-cluster
 dev-cluster:
 	@echo "==> Setting up local dev cluster..."
-	./hack/dev-cluster.sh
+	./hack/dev-cluster.sh create

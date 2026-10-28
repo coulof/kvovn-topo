@@ -1,0 +1,44 @@
+# Lima template: k3s agent of the ovn-topology lab. Created by hack/dev-cluster.sh
+# with PARAM_SERVER_IP set to the server's eth0 address.
+minimumLimaVersion: 2.0.0
+images:
+  - location: https://download.opensuse.org/distribution/leap/15.6/appliances/openSUSE-Leap-15.6-Minimal-VM.x86_64-Cloud.qcow2
+    arch: x86_64
+cpus: 2
+memory: 3GiB
+disk: 20GiB
+mounts: []
+containerd: {system: false, user: false}
+networks:
+  - lima: user-v2
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+param:
+  K3S_VERSION: ""
+  LAB_TOKEN: ""
+  SERVER_IP: ""
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      systemctl disable --now firewalld 2>/dev/null || true
+      modprobe openvswitch; modprobe geneve
+      printf 'openvswitch\ngeneve\n' > /etc/modules-load.d/ovn.conf
+      echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/90-ovn-lab.conf; sysctl -w net.ipv4.ip_forward=1
+      # egress0: the NIC of the NAT scenarios' external networks. A dummy: the
+      # scenarios need the NB state, not external traffic (provision runs every boot).
+      ip link show egress0 >/dev/null 2>&1 || ip link add egress0 type dummy
+      ip link set egress0 up
+      NODE_IP=$(ip -4 -o addr show eth0 | awk '{print $4}' | cut -d/ -f1)
+      mkdir -p /etc/rancher/k3s
+      cat > /etc/rancher/k3s/config.yaml <<CFG
+      server: https://${PARAM_SERVER_IP}:6443
+      token: ${PARAM_LAB_TOKEN}
+      node-name: $(hostname | sed 's/^lima-//')   # the VM name, without Lima's prefix
+      node-ip: ${NODE_IP}
+      CFG
+      if ! command -v k3s >/dev/null; then
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${PARAM_K3S_VERSION}" K3S_URL="https://${PARAM_SERVER_IP}:6443" K3S_TOKEN="${PARAM_LAB_TOKEN}" sh -
+      fi
