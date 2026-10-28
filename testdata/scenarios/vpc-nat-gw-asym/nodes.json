@@ -1,0 +1,79 @@
+[
+ {
+  "metadata": {
+   "annotations": {
+    "ovn.kubernetes.io/chassis": "d0129946-1963-421b-ba5f-64456708d28b"
+   },
+   "labels": {
+    "beta.kubernetes.io/arch": "amd64",
+    "beta.kubernetes.io/instance-type": "k3s",
+    "beta.kubernetes.io/os": "linux",
+    "kubernetes.io/arch": "amd64",
+    "kubernetes.io/hostname": "ovn-topo-agent1",
+    "kubernetes.io/os": "linux",
+    "node.kubernetes.io/instance-type": "k3s"
+   },
+   "name": "ovn-topo-agent1"
+  },
+  "status": {
+   "addresses": [
+    {
+     "address": "lima-ovn-topo-agent1",
+     "type": "Hostname"
+    }
+   ]
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "ovn.kubernetes.io/chassis": "f0c72eaf-1087-4604-b676-502cad13530c"
+   },
+   "labels": {
+    "beta.kubernetes.io/arch": "amd64",
+    "beta.kubernetes.io/instance-type": "k3s",
+    "beta.kubernetes.io/os": "linux",
+    "kubernetes.io/arch": "amd64",
+    "kubernetes.io/hostname": "ovn-topo-agent2",
+    "kubernetes.io/os": "linux",
+    "node.kubernetes.io/instance-type": "k3s"
+   },
+   "name": "ovn-topo-agent2"
+  },
+  "status": {
+   "addresses": [
+    {
+     "address": "lima-ovn-topo-agent2",
+     "type": "Hostname"
+    }
+   ]
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "ovn.kubernetes.io/chassis": "40ceb476-0209-4a66-b051-a9baf77a8040"
+   },
+   "labels": {
+    "beta.kubernetes.io/arch": "amd64",
+    "beta.kubernetes.io/instance-type": "k3s",
+    "beta.kubernetes.io/os": "linux",
+    "kube-ovn/role": "master",
+    "kubernetes.io/arch": "amd64",
+    "kubernetes.io/hostname": "ovn-topo-server",
+    "kubernetes.io/os": "linux",
+    "node-role.kubernetes.io/control-plane": "true",
+    "node.kubernetes.io/instance-type": "k3s"
+   },
+   "name": "ovn-topo-server"
+  },
+  "status": {
+   "addresses": [
+    {
+     "address": "lima-ovn-topo-server",
+     "type": "Hostname"
+    }
+   ]
+  }
+ }
+]

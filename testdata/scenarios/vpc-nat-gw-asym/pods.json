@@ -1,0 +1,518 @@
+[
+ {
+  "metadata": {
+   "labels": {
+    "k8s-app": "kube-dns",
+    "pod-template-hash": "b644fd95b"
+   },
+   "name": "coredns-b644fd95b-j4n7p",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "coredns-b644fd95b",
+     "uid": "b0a5cf08-8d7f-4b77-86a8-1dbf0659869b"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "batch.kubernetes.io/controller-uid": "b3295a8b-b3fb-467e-9a76-f7798ef96736",
+    "batch.kubernetes.io/job-name": "helm-install-kube-ovn",
+    "controller-uid": "b3295a8b-b3fb-467e-9a76-f7798ef96736",
+    "helmcharts.helm.cattle.io/chart": "kube-ovn",
+    "job-name": "helm-install-kube-ovn"
+   },
+   "name": "helm-install-kube-ovn-x87tx",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "batch/v1",
+     "kind": "Job",
+     "name": "helm-install-kube-ovn",
+     "uid": "b3295a8b-b3fb-467e-9a76-f7798ef96736"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "multus",
+    "controller-revision-hash": "54d9758f67",
+    "name": "multus",
+    "pod-template-generation": "1",
+    "tier": "node"
+   },
+   "name": "kube-multus-ds-dvqtr",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-multus-ds",
+     "uid": "bc690cfe-ce8b-4942-b0ba-7a69a6ef69c8"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "multus",
+    "controller-revision-hash": "54d9758f67",
+    "name": "multus",
+    "pod-template-generation": "1",
+    "tier": "node"
+   },
+   "name": "kube-multus-ds-fzx5q",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-multus-ds",
+     "uid": "bc690cfe-ce8b-4942-b0ba-7a69a6ef69c8"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "multus",
+    "controller-revision-hash": "54d9758f67",
+    "name": "multus",
+    "pod-template-generation": "1",
+    "tier": "node"
+   },
+   "name": "kube-multus-ds-pddz6",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-multus-ds",
+     "uid": "bc690cfe-ce8b-4942-b0ba-7a69a6ef69c8"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent2"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-cni",
+    "component": "network",
+    "controller-revision-hash": "5fbf8964c9",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-cni-7phjg",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-cni",
+     "uid": "f38cbb0b-80b3-4f71-a0e6-8d64ad52e096"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-cni",
+    "component": "network",
+    "controller-revision-hash": "5fbf8964c9",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-cni-j2tfs",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-cni",
+     "uid": "f38cbb0b-80b3-4f71-a0e6-8d64ad52e096"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-cni",
+    "component": "network",
+    "controller-revision-hash": "5fbf8964c9",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-cni-nqsf4",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-cni",
+     "uid": "f38cbb0b-80b3-4f71-a0e6-8d64ad52e096"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent2"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-controller",
+    "component": "network",
+    "pod-template-hash": "dbcb47b97",
+    "type": "infra"
+   },
+   "name": "kube-ovn-controller-dbcb47b97-hfj6n",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "kube-ovn-controller-dbcb47b97",
+     "uid": "d66bc290-4b02-4ee3-a7e3-28e79aca3b7a"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-monitor",
+    "component": "network",
+    "pod-template-hash": "65fbc76698",
+    "type": "infra"
+   },
+   "name": "kube-ovn-monitor-65fbc76698-v7l85",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "kube-ovn-monitor-65fbc76698",
+     "uid": "e2aeef14-3794-465b-bd5d-59f7cbcb89fd"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-pinger",
+    "component": "network",
+    "controller-revision-hash": "79474c89d5",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-pinger-2svjl",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-pinger",
+     "uid": "e0067ecb-d89a-453a-a498-eeafb2a4e1cb"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "kube-ovn-pinger",
+    "component": "network",
+    "controller-revision-hash": "79474c89d5",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-pinger-r59b4",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-pinger",
+     "uid": "e0067ecb-d89a-453a-a498-eeafb2a4e1cb"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "k8s.v1.cni.cncf.io/network-status": "[{\n    \"name\": \"kube-ovn\",\n    \"interface\": \"eth0\",\n    \"ips\": [\n        \"10.42.0.7\"\n    ],\n    \"mac\": \"a6:32:4e:02:61:3f\",\n    \"default\": true,\n    \"dns\": {},\n    \"gateway\": [\n        \"10.42.0.1\"\n    ]\n}]"
+   },
+   "labels": {
+    "app": "kube-ovn-pinger",
+    "component": "network",
+    "controller-revision-hash": "79474c89d5",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "kube-ovn-pinger-zrv9n",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "kube-ovn-pinger",
+     "uid": "e0067ecb-d89a-453a-a498-eeafb2a4e1cb"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent2"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "local-path-provisioner",
+    "pod-template-hash": "d9d8769b6"
+   },
+   "name": "local-path-provisioner-d9d8769b6-f9plh",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "local-path-provisioner-d9d8769b6",
+     "uid": "2474bc88-b53b-4f96-baf9-8fea3e60004d"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "k8s-app": "metrics-server",
+    "pod-template-hash": "7f4b6d9bd7"
+   },
+   "name": "metrics-server-7f4b6d9bd7-gmstm",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "metrics-server-7f4b6d9bd7",
+     "uid": "82e34503-b2b3-4de3-88f1-401e36d1b102"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "ovn-central",
+    "component": "network",
+    "ovn-nb-leader": "true",
+    "ovn-northd-leader": "true",
+    "ovn-sb-leader": "true",
+    "pod-template-hash": "c4d68cc6f",
+    "type": "infra"
+   },
+   "name": "ovn-central-c4d68cc6f-hgk8t",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "ReplicaSet",
+     "name": "ovn-central-c4d68cc6f",
+     "uid": "dfe390fc-8846-427e-8f79-7ac1019d7795"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "ovs",
+    "component": "network",
+    "controller-revision-hash": "5d6d658cf6",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "ovs-ovn-9qjhk",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "ovs-ovn",
+     "uid": "0d5efb01-241b-4ee3-b1f0-d94856b6752b"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "ovs",
+    "component": "network",
+    "controller-revision-hash": "5d6d658cf6",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "ovs-ovn-gc57k",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "ovs-ovn",
+     "uid": "0d5efb01-241b-4ee3-b1f0-d94856b6752b"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-server"
+  }
+ },
+ {
+  "metadata": {
+   "labels": {
+    "app": "ovs",
+    "component": "network",
+    "controller-revision-hash": "5d6d658cf6",
+    "pod-template-generation": "1",
+    "type": "infra"
+   },
+   "name": "ovs-ovn-h8rxn",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "DaemonSet",
+     "name": "ovs-ovn",
+     "uid": "0d5efb01-241b-4ee3-b1f0-d94856b6752b"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent2"
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "k8s.v1.cni.cncf.io/network-status": "[{\n    \"name\": \"kube-ovn\",\n    \"interface\": \"eth0\",\n    \"ips\": [\n        \"10.30.0.253\"\n    ],\n    \"mac\": \"c6:49:8b:93:4e:13\",\n    \"default\": true,\n    \"dns\": {},\n    \"gateway\": [\n        \"10.30.0.1\"\n    ]\n},{\n    \"name\": \"kube-system/ovn-vpc-external-network\",\n    \"interface\": \"net1\",\n    \"ips\": [\n        \"192.168.107.201\"\n    ],\n    \"mac\": \"5e:9b:b2:22:c6:69\",\n    \"dns\": {},\n    \"gateway\": [\n        \"192.168.107.1\"\n    ]\n}]"
+   },
+   "labels": {
+    "app": "vpc-nat-gw-gw-in",
+    "apps.kubernetes.io/pod-index": "0",
+    "controller-revision-hash": "vpc-nat-gw-gw-in-8769b8f9",
+    "ovn.kubernetes.io/vpc-nat-gw": "true",
+    "statefulset.kubernetes.io/pod-name": "vpc-nat-gw-gw-in-0"
+   },
+   "name": "vpc-nat-gw-gw-in-0",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "StatefulSet",
+     "name": "vpc-nat-gw-gw-in",
+     "uid": "c7894c5d-6795-4657-b0bd-b1c2f827f508"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent2"
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "k8s.v1.cni.cncf.io/network-status": "[{\n    \"name\": \"kube-ovn\",\n    \"interface\": \"eth0\",\n    \"ips\": [\n        \"10.30.0.254\"\n    ],\n    \"mac\": \"6e:b8:36:57:21:cf\",\n    \"default\": true,\n    \"dns\": {},\n    \"gateway\": [\n        \"10.30.0.1\"\n    ]\n},{\n    \"name\": \"kube-system/ovn-vpc-external-network\",\n    \"interface\": \"net1\",\n    \"ips\": [\n        \"192.168.107.200\"\n    ],\n    \"mac\": \"6e:84:3b:05:95:5b\",\n    \"dns\": {},\n    \"gateway\": [\n        \"192.168.107.1\"\n    ]\n}]"
+   },
+   "labels": {
+    "app": "vpc-nat-gw-gw-out",
+    "apps.kubernetes.io/pod-index": "0",
+    "controller-revision-hash": "vpc-nat-gw-gw-out-7d8fbf9fff",
+    "ovn.kubernetes.io/vpc-nat-gw": "true",
+    "statefulset.kubernetes.io/pod-name": "vpc-nat-gw-gw-out-0"
+   },
+   "name": "vpc-nat-gw-gw-out-0",
+   "namespace": "kube-system",
+   "ownerReferences": [
+    {
+     "apiVersion": "apps/v1",
+     "kind": "StatefulSet",
+     "name": "vpc-nat-gw-gw-out",
+     "uid": "fb2db80b-e402-4257-b3e2-c1264ffeb259"
+    }
+   ]
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ },
+ {
+  "metadata": {
+   "annotations": {
+    "k8s.v1.cni.cncf.io/network-status": "[{\n    \"name\": \"kube-ovn\",\n    \"interface\": \"eth0\",\n    \"ips\": [\n        \"10.30.0.10\"\n    ],\n    \"mac\": \"fe:cf:64:17:b9:53\",\n    \"default\": true,\n    \"dns\": {},\n    \"gateway\": [\n        \"10.30.0.1\"\n    ]\n}]"
+   },
+   "name": "web",
+   "namespace": "vpc-c"
+  },
+  "spec": {
+   "nodeName": "ovn-topo-agent1"
+  }
+ }
+]

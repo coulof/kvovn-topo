@@ -1,0 +1,108 @@
+edges:
+- id: edge:lr:6999cf79-94bf-4d9c-8cde-1339d4d18ccd-ls:6c52190d-4ce1-42e4-9757-951bdcf66806-router-peer
+  label: 10.42.0.1/16
+  properties:
+    lrp: ovn-cluster-ovn-default
+    lrpMac: 22:85:f8:85:e8:d7
+    lsp: ovn-default-ovn-cluster
+    networks:
+    - 10.42.0.1/16
+  source: lr:6999cf79-94bf-4d9c-8cde-1339d4d18ccd
+  target: ls:6c52190d-4ce1-42e4-9757-951bdcf66806
+  type: router-peer
+- id: edge:lr:6999cf79-94bf-4d9c-8cde-1339d4d18ccd-ls:8bcdead8-2dba-489e-b218-9d9ef6154552-router-peer
+  label: 100.64.0.1/16
+  properties:
+    lrp: ovn-cluster-join
+    lrpMac: b6:67:a9:bb:b8:b3
+    lsp: join-ovn-cluster
+    networks:
+    - 100.64.0.1/16
+  source: lr:6999cf79-94bf-4d9c-8cde-1339d4d18ccd
+  target: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  type: router-peer
+- id: edge:lr:77c89da6-74b6-4d82-bbc5-6c2dd4f3a385-ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68-router-peer
+  label: 10.30.0.1/24
+  properties:
+    lrp: vpc-c-vpc-c-net
+    lrpMac: f6:c1:9d:e6:81:91
+    lsp: vpc-c-net-vpc-c
+    networks:
+    - 10.30.0.1/24
+  source: lr:77c89da6-74b6-4d82-bbc5-6c2dd4f3a385
+  target: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  type: router-peer
+nodes:
+- id: lr:6999cf79-94bf-4d9c-8cde-1339d4d18ccd
+  k8s:
+    vendor: kube-ovn
+  name: ovn-cluster
+  parent: vpc:ovn-cluster
+  properties:
+    enabled: true
+    lbCount: 0
+    natCount: 0
+    policyCount: 8
+    routeCount: 1
+  type: LR
+- id: lr:77c89da6-74b6-4d82-bbc5-6c2dd4f3a385
+  k8s:
+    vendor: kube-ovn
+  name: vpc-c
+  parent: vpc:vpc-c
+  properties:
+    enabled: true
+    lbCount: 0
+    natCount: 0
+    policyCount: 1
+    routeCount: 2
+  type: LR
+- id: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  k8s:
+    vendor: kube-ovn
+  name: vpc-c-net
+  parent: vpc:vpc-c
+  properties:
+    boundPortCount: 3
+    portCount: 4
+    subnet: vpc-c-net
+    unboundPortCount: 0
+  type: LS
+- id: ls:6c52190d-4ce1-42e4-9757-951bdcf66806
+  k8s:
+    vendor: kube-ovn
+  name: ovn-default
+  parent: vpc:ovn-cluster
+  properties:
+    boundPortCount: 6
+    portCount: 7
+    subnet: ovn-default
+    unboundPortCount: 0
+  type: LS
+- id: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  k8s:
+    vendor: kube-ovn
+  name: join
+  parent: vpc:ovn-cluster
+  properties:
+    boundPortCount: 3
+    portCount: 4
+    subnet: join
+    unboundPortCount: 0
+  type: LS
+- id: vpc:ovn-cluster
+  k8s:
+    vendor: kube-ovn
+  name: ovn-cluster
+  properties:
+    isDefault: true
+  type: VPC
+- id: vpc:vpc-c
+  k8s:
+    vendor: kube-ovn
+  name: vpc-c
+  properties:
+    isDefault: false
+  type: VPC
+revision: 1
+view: l3

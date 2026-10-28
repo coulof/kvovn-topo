@@ -1,0 +1,17 @@
+nats: null
+policies:
+- action: allow
+  id: 5eb9aab1-ac6a-47c0-8d86-9e152de7cf86
+  match: ip4.dst == 10.30.0.0/24
+  priority: 31000
+staticRoutes:
+- ecmp: false
+  id: ba80e98a-72fb-40cc-9039-dc4a6e5d377c
+  ipPrefix: 10.30.0.0/24
+  nexthop: 10.30.0.1
+  policy: src-ip
+- ecmp: false
+  id: 349fdcc4-8800-4a12-a74e-2927bd03a080
+  ipPrefix: 0.0.0.0/0
+  nexthop: 10.30.0.254
+  policy: dst-ip

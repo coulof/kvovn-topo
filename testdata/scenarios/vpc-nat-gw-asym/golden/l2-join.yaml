@@ -1,0 +1,133 @@
+edges:
+- id: edge:ls:8bcdead8-2dba-489e-b218-9d9ef6154552-lsp:382d7d37-085a-4c19-827c-0dc55927ba2c-contains
+  source: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  target: lsp:382d7d37-085a-4c19-827c-0dc55927ba2c
+  type: contains
+- id: edge:lsp:382d7d37-085a-4c19-827c-0dc55927ba2c-chassis:f0c72eaf-1087-4604-b676-502cad13530c-bound-on
+  source: lsp:382d7d37-085a-4c19-827c-0dc55927ba2c
+  target: chassis:f0c72eaf-1087-4604-b676-502cad13530c
+  type: bound-on
+- id: edge:ls:8bcdead8-2dba-489e-b218-9d9ef6154552-lsp:44a50657-5d1d-4809-a201-89ecbdc12b46-contains
+  source: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  target: lsp:44a50657-5d1d-4809-a201-89ecbdc12b46
+  type: contains
+- id: edge:lsp:44a50657-5d1d-4809-a201-89ecbdc12b46-chassis:40ceb476-0209-4a66-b051-a9baf77a8040-bound-on
+  source: lsp:44a50657-5d1d-4809-a201-89ecbdc12b46
+  target: chassis:40ceb476-0209-4a66-b051-a9baf77a8040
+  type: bound-on
+- id: edge:ls:8bcdead8-2dba-489e-b218-9d9ef6154552-lsp:8fb6030b-b438-4a19-b859-54456c02bf2c-contains
+  source: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  target: lsp:8fb6030b-b438-4a19-b859-54456c02bf2c
+  type: contains
+- id: edge:lsp:8fb6030b-b438-4a19-b859-54456c02bf2c-chassis:d0129946-1963-421b-ba5f-64456708d28b-bound-on
+  source: lsp:8fb6030b-b438-4a19-b859-54456c02bf2c
+  target: chassis:d0129946-1963-421b-ba5f-64456708d28b
+  type: bound-on
+- id: edge:ls:8bcdead8-2dba-489e-b218-9d9ef6154552-lsp:b0c72ca8-b8c0-41e8-ba6a-214838dd0164-contains
+  source: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  target: lsp:b0c72ca8-b8c0-41e8-ba6a-214838dd0164
+  type: contains
+nodes:
+- id: ls:8bcdead8-2dba-489e-b218-9d9ef6154552
+  k8s:
+    vendor: kube-ovn
+  name: join
+  properties:
+    portCount: 4
+  type: LS
+- id: lsp:382d7d37-085a-4c19-827c-0dc55927ba2c
+  k8s:
+    node: ovn-topo-agent2
+    owner: Node/ovn-topo-agent2
+    subnet: join
+    vendor: kube-ovn
+    workloadKind: Node
+    workloadName: ovn-topo-agent2
+  name: node-ovn-topo-agent2
+  properties:
+    addresses:
+    - c2:2a:ae:49:ad:6c 100.64.0.4
+    boundChassis: f0c72eaf-1087-4604-b676-502cad13530c
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:44a50657-5d1d-4809-a201-89ecbdc12b46
+  k8s:
+    node: ovn-topo-server
+    owner: Node/ovn-topo-server
+    subnet: join
+    vendor: kube-ovn
+    workloadKind: Node
+    workloadName: ovn-topo-server
+  name: node-ovn-topo-server
+  properties:
+    addresses:
+    - 9e:81:ac:85:44:b1 100.64.0.2
+    boundChassis: 40ceb476-0209-4a66-b051-a9baf77a8040
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:8fb6030b-b438-4a19-b859-54456c02bf2c
+  k8s:
+    node: ovn-topo-agent1
+    owner: Node/ovn-topo-agent1
+    subnet: join
+    vendor: kube-ovn
+    workloadKind: Node
+    workloadName: ovn-topo-agent1
+  name: node-ovn-topo-agent1
+  properties:
+    addresses:
+    - 06:4c:8d:91:de:74 100.64.0.3
+    boundChassis: d0129946-1963-421b-ba5f-64456708d28b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:b0c72ca8-b8c0-41e8-ba6a-214838dd0164
+  k8s:
+    subnet: join
+    vendor: kube-ovn
+  name: join-ovn-cluster
+  properties:
+    addresses:
+    - router
+    boundChassis: ""
+    boundState: unbound
+    enabled: true
+    type: router
+    up: true
+  type: LSP
+- id: chassis:40ceb476-0209-4a66-b051-a9baf77a8040
+  name: ovn-topo-server
+  properties:
+    chassis: 40ceb476-0209-4a66-b051-a9baf77a8040
+    hostname: ovn-topo-server
+    nodeName: ovn-topo-server
+  type: Chassis
+- id: chassis:d0129946-1963-421b-ba5f-64456708d28b
+  name: ovn-topo-agent1
+  properties:
+    chassis: d0129946-1963-421b-ba5f-64456708d28b
+    hostname: ovn-topo-agent1
+    nodeName: ovn-topo-agent1
+  type: Chassis
+- id: chassis:f0c72eaf-1087-4604-b676-502cad13530c
+  name: ovn-topo-agent2
+  properties:
+    chassis: f0c72eaf-1087-4604-b676-502cad13530c
+    hostname: ovn-topo-agent2
+    nodeName: ovn-topo-agent2
+  type: Chassis
+pagination:
+  page: 1
+  pageSize: 1000
+  totalItems: 4
+  totalPages: 1
+revision: 1
+view: l2

@@ -1,0 +1,135 @@
+edges:
+- id: edge:ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68-lsp:27fe0db9-e28f-48f9-8bca-ba66c4b51889-contains
+  source: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  target: lsp:27fe0db9-e28f-48f9-8bca-ba66c4b51889
+  type: contains
+- id: edge:ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68-lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed-contains
+  source: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  target: lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed
+  type: contains
+- id: edge:lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed-chassis:f0c72eaf-1087-4604-b676-502cad13530c-bound-on
+  source: lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed
+  target: chassis:f0c72eaf-1087-4604-b676-502cad13530c
+  type: bound-on
+- id: edge:ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68-lsp:5faf683f-502b-483e-9952-0c6154053260-contains
+  source: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  target: lsp:5faf683f-502b-483e-9952-0c6154053260
+  type: contains
+- id: edge:lsp:5faf683f-502b-483e-9952-0c6154053260-chassis:d0129946-1963-421b-ba5f-64456708d28b-bound-on
+  source: lsp:5faf683f-502b-483e-9952-0c6154053260
+  target: chassis:d0129946-1963-421b-ba5f-64456708d28b
+  type: bound-on
+- id: edge:ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68-lsp:cdfee5f5-41ad-492d-9843-a11a72b44651-contains
+  source: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  target: lsp:cdfee5f5-41ad-492d-9843-a11a72b44651
+  type: contains
+- id: edge:lsp:cdfee5f5-41ad-492d-9843-a11a72b44651-chassis:d0129946-1963-421b-ba5f-64456708d28b-bound-on
+  source: lsp:cdfee5f5-41ad-492d-9843-a11a72b44651
+  target: chassis:d0129946-1963-421b-ba5f-64456708d28b
+  type: bound-on
+nodes:
+- id: ls:5521a6e9-cd34-4e7b-9ebc-3b4bfffcaa68
+  k8s:
+    vendor: kube-ovn
+  name: vpc-c-net
+  properties:
+    portCount: 4
+  type: LS
+- id: lsp:27fe0db9-e28f-48f9-8bca-ba66c4b51889
+  k8s:
+    subnet: vpc-c-net
+    vendor: kube-ovn
+  name: vpc-c-net-vpc-c
+  properties:
+    addresses:
+    - router
+    boundChassis: ""
+    boundState: unbound
+    enabled: true
+    type: router
+    up: true
+  type: LSP
+- id: lsp:48867d75-e5c2-42a2-8499-ed4b1df04aed
+  k8s:
+    namespace: kube-system
+    networkAttachment: kube-ovn
+    node: ovn-topo-agent2
+    owner: StatefulSet/vpc-nat-gw-gw-in
+    pod: vpc-nat-gw-gw-in-0
+    subnet: vpc-c-net
+    vendor: kube-ovn
+    workloadKind: StatefulSet
+    workloadName: vpc-nat-gw-gw-in
+  name: vpc-nat-gw-gw-in-0.kube-system
+  properties:
+    addresses:
+    - c6:49:8b:93:4e:13 10.30.0.253
+    boundChassis: f0c72eaf-1087-4604-b676-502cad13530c
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:5faf683f-502b-483e-9952-0c6154053260
+  k8s:
+    namespace: vpc-c
+    networkAttachment: kube-ovn
+    node: ovn-topo-agent1
+    owner: Pod/web
+    pod: web
+    subnet: vpc-c-net
+    vendor: kube-ovn
+    workloadKind: Pod
+    workloadName: web
+  name: web.vpc-c
+  properties:
+    addresses:
+    - fe:cf:64:17:b9:53 10.30.0.10
+    boundChassis: d0129946-1963-421b-ba5f-64456708d28b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:cdfee5f5-41ad-492d-9843-a11a72b44651
+  k8s:
+    namespace: kube-system
+    networkAttachment: kube-ovn
+    node: ovn-topo-agent1
+    owner: StatefulSet/vpc-nat-gw-gw-out
+    pod: vpc-nat-gw-gw-out-0
+    subnet: vpc-c-net
+    vendor: kube-ovn
+    workloadKind: StatefulSet
+    workloadName: vpc-nat-gw-gw-out
+  name: vpc-nat-gw-gw-out-0.kube-system
+  properties:
+    addresses:
+    - 6e:b8:36:57:21:cf 10.30.0.254
+    boundChassis: d0129946-1963-421b-ba5f-64456708d28b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: chassis:d0129946-1963-421b-ba5f-64456708d28b
+  name: ovn-topo-agent1
+  properties:
+    chassis: d0129946-1963-421b-ba5f-64456708d28b
+    hostname: ovn-topo-agent1
+    nodeName: ovn-topo-agent1
+  type: Chassis
+- id: chassis:f0c72eaf-1087-4604-b676-502cad13530c
+  name: ovn-topo-agent2
+  properties:
+    chassis: f0c72eaf-1087-4604-b676-502cad13530c
+    hostname: ovn-topo-agent2
+    nodeName: ovn-topo-agent2
+  type: Chassis
+pagination:
+  page: 1
+  pageSize: 1000
+  totalItems: 4
+  totalPages: 1
+revision: 1
+view: l2
