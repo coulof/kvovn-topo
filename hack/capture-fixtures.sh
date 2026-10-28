@@ -4,9 +4,11 @@
 # pkg/ovsdb.LoadFixture.
 #
 #   hack/capture-fixtures.sh <scenario> [--flavor kube-ovn|ovnk] [--context <kubectx>]
-#                            [-n <namespace>] [--out <dir>]
+#                            [-n <namespace>] [--out <dir>] [--setup <text>]
 #
 # kube-ovn (default): one NB/SB, read in the ovn-central pod of kube-system.
+# --setup describes what was deployed for the scenario; it goes to meta.json.
+#
 # ovnk: ovn-kubernetes interconnect mode (OpenShift 4.14+) runs one NB/SB per node
 # in its ovnkube-node pod; each zone goes to <scenario>/zone-<node>/ (ADR-0004, Q14).
 #
@@ -22,12 +24,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
-  sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
 SCENARIO=""
 FLAVOR="kube-ovn"
+SETUP=""
 NAMESPACE=""
 OUT_BASE="${ROOT_DIR}/testdata/scenarios"
 KUBECTL=("${KUBECTL:-kubectl}")
@@ -39,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --context) KUBECTL+=(--context "$2"); shift 2 ;;
     -n|--namespace) NAMESPACE="$2"; shift 2 ;;
     --out) OUT_BASE="$2"; shift 2 ;;
+    --setup) SETUP="$2"; shift 2 ;;
     -*) echo "unknown option: $1" >&2; usage 1 ;;
     *) SCENARIO="$1"; shift ;;
   esac
@@ -225,16 +229,19 @@ PY
 
 IMAGE=$("${KUBECTL[@]}" -n "${NAMESPACE}" get pod "${POD}" -o jsonpath="{.spec.containers[?(@.name==\"${NB_CONTAINER}\")].image}")
 OVN_VERSION=$("${EXEC[@]}" ovn-nbctl --version 2>/dev/null | head -1 | tr -d '\r' || true)
-cat > "${OUT}/meta.json" <<EOF
-{
- "scenario": "${SCENARIO}",
- "flavor": "${FLAVOR}",
- "captured": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
- "ovnCentralImage": "${IMAGE}",
- "ovnVersion": "${OVN_VERSION}",
- "zones": [${ZONES}]
-}
-EOF
+K8S_VERSION=$("${KUBECTL[@]}" get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')
+"${PYTHON}" - "${OUT}/meta.json" "${SCENARIO}" "${FLAVOR}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  "${IMAGE}" "${OVN_VERSION}" "${K8S_VERSION}" "${SETUP}" "${ZONES}" <<'PY'
+import json, sys
+out, scenario, flavor, captured, image, ovn, k8s, setup, zones = sys.argv[1:]
+meta = {"scenario": scenario, "flavor": flavor, "captured": captured, "ovnCentralImage": image,
+        "ovnVersion": ovn, "kubernetesVersion": k8s,
+        "zones": [z.strip().strip('"') for z in zones.split(",") if z.strip()]}
+if setup:
+    meta["setup"] = setup
+json.dump(meta, open(out, "w"), indent=1)
+open(out, "a").write("\n")
+PY
 
 echo "==> wrote ${OUT}"
 echo "    next: go test ./pkg/ovsdb -run TestScenarioGoldens -update   (then review the goldens)"

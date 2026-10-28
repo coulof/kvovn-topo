@@ -1,0 +1,223 @@
+edges:
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:07b78c04-7743-4fca-9a75-c061284a54cd-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:07b78c04-7743-4fca-9a75-c061284a54cd
+  type: contains
+- id: edge:lsp:07b78c04-7743-4fca-9a75-c061284a54cd-chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b-bound-on
+  source: lsp:07b78c04-7743-4fca-9a75-c061284a54cd
+  target: chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b
+  type: bound-on
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:23d1fe22-5af1-4926-a19e-7d94a4a2b7b9-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:23d1fe22-5af1-4926-a19e-7d94a4a2b7b9
+  type: contains
+- id: edge:lsp:23d1fe22-5af1-4926-a19e-7d94a4a2b7b9-chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b-bound-on
+  source: lsp:23d1fe22-5af1-4926-a19e-7d94a4a2b7b9
+  target: chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b
+  type: bound-on
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:662bc60e-16ee-4b74-8b05-35f78cff95a9-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:662bc60e-16ee-4b74-8b05-35f78cff95a9
+  type: contains
+- id: edge:lsp:662bc60e-16ee-4b74-8b05-35f78cff95a9-chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a-bound-on
+  source: lsp:662bc60e-16ee-4b74-8b05-35f78cff95a9
+  target: chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a
+  type: bound-on
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:72a3d60b-5731-4a26-8333-32a5cfc4c6d5-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:72a3d60b-5731-4a26-8333-32a5cfc4c6d5
+  type: contains
+- id: edge:lsp:72a3d60b-5731-4a26-8333-32a5cfc4c6d5-chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b-bound-on
+  source: lsp:72a3d60b-5731-4a26-8333-32a5cfc4c6d5
+  target: chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b
+  type: bound-on
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:82a13896-437c-4032-bf3c-99eeb3716d9a-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:82a13896-437c-4032-bf3c-99eeb3716d9a
+  type: contains
+- id: edge:lsp:82a13896-437c-4032-bf3c-99eeb3716d9a-chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0-bound-on
+  source: lsp:82a13896-437c-4032-bf3c-99eeb3716d9a
+  target: chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0
+  type: bound-on
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:b7472239-34b0-4a97-ac17-e7883438f304-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:b7472239-34b0-4a97-ac17-e7883438f304
+  type: contains
+- id: edge:ls:765b2e05-1537-4f56-be7e-7e27664e775d-lsp:f4387248-1f82-4085-862d-15eaa72793f2-contains
+  source: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  target: lsp:f4387248-1f82-4085-862d-15eaa72793f2
+  type: contains
+- id: edge:lsp:f4387248-1f82-4085-862d-15eaa72793f2-chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b-bound-on
+  source: lsp:f4387248-1f82-4085-862d-15eaa72793f2
+  target: chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b
+  type: bound-on
+nodes:
+- id: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  k8s:
+    vendor: kube-ovn
+  name: ovn-default
+  properties:
+    portCount: 7
+  type: LS
+- id: lsp:07b78c04-7743-4fca-9a75-c061284a54cd
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-server
+    owner: Deployment/local-path-provisioner
+    pod: local-path-provisioner-d9d8769b6-wdx5l
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: Deployment
+    workloadName: local-path-provisioner
+  name: local-path-provisioner-d9d8769b6-wdx5l.kube-system
+  properties:
+    addresses:
+    - 5e:bc:a7:4f:57:9e 10.42.0.3
+    boundChassis: ae97b77d-6372-43c2-9f45-ab78bf65a30b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:23d1fe22-5af1-4926-a19e-7d94a4a2b7b9
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-server
+    owner: DaemonSet/kube-ovn-pinger
+    pod: kube-ovn-pinger-8whjz
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: DaemonSet
+    workloadName: kube-ovn-pinger
+  name: kube-ovn-pinger-8whjz.kube-system
+  properties:
+    addresses:
+    - 0e:3b:6e:90:1d:0d 10.42.0.6
+    boundChassis: ae97b77d-6372-43c2-9f45-ab78bf65a30b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:662bc60e-16ee-4b74-8b05-35f78cff95a9
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-agent1
+    owner: DaemonSet/kube-ovn-pinger
+    pod: kube-ovn-pinger-49gz4
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: DaemonSet
+    workloadName: kube-ovn-pinger
+  name: kube-ovn-pinger-49gz4.kube-system
+  properties:
+    addresses:
+    - fe:a6:41:c4:f0:f2 10.42.0.4
+    boundChassis: 4406141c-cc13-49b0-ac40-56233ba6cb5a
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:72a3d60b-5731-4a26-8333-32a5cfc4c6d5
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-server
+    owner: Deployment/coredns
+    pod: coredns-b644fd95b-w85xd
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: Deployment
+    workloadName: coredns
+  name: coredns-b644fd95b-w85xd.kube-system
+  properties:
+    addresses:
+    - 02:df:d8:cd:76:28 10.42.0.2
+    boundChassis: ae97b77d-6372-43c2-9f45-ab78bf65a30b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:82a13896-437c-4032-bf3c-99eeb3716d9a
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-agent2
+    owner: DaemonSet/kube-ovn-pinger
+    pod: kube-ovn-pinger-h5d7k
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: DaemonSet
+    workloadName: kube-ovn-pinger
+  name: kube-ovn-pinger-h5d7k.kube-system
+  properties:
+    addresses:
+    - 2a:53:61:94:c3:c8 10.42.0.7
+    boundChassis: 0b9841ec-e39d-414d-82c1-6a353cb5dee0
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:b7472239-34b0-4a97-ac17-e7883438f304
+  k8s:
+    subnet: ovn-default
+    vendor: kube-ovn
+  name: ovn-default-ovn-cluster
+  properties:
+    addresses:
+    - router
+    boundChassis: ""
+    boundState: unbound
+    enabled: true
+    type: router
+    up: true
+  type: LSP
+- id: lsp:f4387248-1f82-4085-862d-15eaa72793f2
+  k8s:
+    namespace: kube-system
+    node: ovn-topo-server
+    owner: Deployment/metrics-server
+    pod: metrics-server-7f4b6d9bd7-8qgfr
+    subnet: ovn-default
+    vendor: kube-ovn
+    workloadKind: Deployment
+    workloadName: metrics-server
+  name: metrics-server-7f4b6d9bd7-8qgfr.kube-system
+  properties:
+    addresses:
+    - 8a:de:a6:01:80:a7 10.42.0.5
+    boundChassis: ae97b77d-6372-43c2-9f45-ab78bf65a30b
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0
+  name: ovn-topo-agent2
+  properties:
+    chassis: 0b9841ec-e39d-414d-82c1-6a353cb5dee0
+    hostname: ovn-topo-agent2
+    nodeName: ovn-topo-agent2
+  type: Chassis
+- id: chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a
+  name: ovn-topo-agent1
+  properties:
+    chassis: 4406141c-cc13-49b0-ac40-56233ba6cb5a
+    hostname: ovn-topo-agent1
+    nodeName: ovn-topo-agent1
+  type: Chassis
+- id: chassis:ae97b77d-6372-43c2-9f45-ab78bf65a30b
+  name: ovn-topo-server
+  properties:
+    chassis: ae97b77d-6372-43c2-9f45-ab78bf65a30b
+    hostname: ovn-topo-server
+    nodeName: ovn-topo-server
+  type: Chassis
+pagination:
+  page: 1
+  pageSize: 1000
+  totalItems: 7
+  totalPages: 1
+revision: 1
+view: l2

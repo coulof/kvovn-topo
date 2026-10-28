@@ -1,0 +1,106 @@
+edges:
+- id: edge:ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524-lsp:5188bbb1-86fb-4cdc-a344-c31ad3665d7a-contains
+  source: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  target: lsp:5188bbb1-86fb-4cdc-a344-c31ad3665d7a
+  type: contains
+- id: edge:lsp:5188bbb1-86fb-4cdc-a344-c31ad3665d7a-chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0-bound-on
+  source: lsp:5188bbb1-86fb-4cdc-a344-c31ad3665d7a
+  target: chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0
+  type: bound-on
+- id: edge:ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524-lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d-contains
+  source: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  target: lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d
+  type: contains
+- id: edge:lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d-chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a-bound-on
+  source: lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d
+  target: chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a
+  type: bound-on
+- id: edge:ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524-lsp:c87f9ad8-6200-4ae6-866c-32c638ef227f-contains
+  source: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  target: lsp:c87f9ad8-6200-4ae6-866c-32c638ef227f
+  type: contains
+nodes:
+- id: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  k8s:
+    vendor: kube-ovn
+  name: vpc-a-net
+  properties:
+    portCount: 3
+  type: LS
+- id: lsp:5188bbb1-86fb-4cdc-a344-c31ad3665d7a
+  k8s:
+    namespace: vpc-a
+    networkAttachment: kube-ovn
+    node: ovn-topo-agent2
+    owner: Pod/web-2
+    pod: web-2
+    subnet: vpc-a-net
+    vendor: kube-ovn
+    workloadKind: Pod
+    workloadName: web-2
+  name: web-2.vpc-a
+  properties:
+    addresses:
+    - a6:ea:5e:43:20:08 10.10.0.3
+    boundChassis: 0b9841ec-e39d-414d-82c1-6a353cb5dee0
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:72ed393e-932e-47b6-9bb9-a83f6a02e08d
+  k8s:
+    namespace: vpc-a
+    networkAttachment: kube-ovn
+    node: ovn-topo-agent1
+    owner: Pod/web-1
+    pod: web-1
+    subnet: vpc-a-net
+    vendor: kube-ovn
+    workloadKind: Pod
+    workloadName: web-1
+  name: web-1.vpc-a
+  properties:
+    addresses:
+    - 56:ed:75:f1:53:96 10.10.0.2
+    boundChassis: 4406141c-cc13-49b0-ac40-56233ba6cb5a
+    boundState: bound
+    enabled: true
+    type: ""
+    up: true
+  type: LSP
+- id: lsp:c87f9ad8-6200-4ae6-866c-32c638ef227f
+  k8s:
+    subnet: vpc-a-net
+    vendor: kube-ovn
+  name: vpc-a-net-vpc-a
+  properties:
+    addresses:
+    - router
+    boundChassis: ""
+    boundState: unbound
+    enabled: true
+    type: router
+    up: true
+  type: LSP
+- id: chassis:0b9841ec-e39d-414d-82c1-6a353cb5dee0
+  name: ovn-topo-agent2
+  properties:
+    chassis: 0b9841ec-e39d-414d-82c1-6a353cb5dee0
+    hostname: ovn-topo-agent2
+    nodeName: ovn-topo-agent2
+  type: Chassis
+- id: chassis:4406141c-cc13-49b0-ac40-56233ba6cb5a
+  name: ovn-topo-agent1
+  properties:
+    chassis: 4406141c-cc13-49b0-ac40-56233ba6cb5a
+    hostname: ovn-topo-agent1
+    nodeName: ovn-topo-agent1
+  type: Chassis
+pagination:
+  page: 1
+  pageSize: 1000
+  totalItems: 3
+  totalPages: 1
+revision: 1
+view: l2

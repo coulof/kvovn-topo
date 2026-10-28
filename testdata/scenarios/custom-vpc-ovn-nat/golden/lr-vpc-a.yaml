@@ -1,0 +1,27 @@
+nats:
+- externalIp: 192.168.107.100
+  externalMac: 56:ed:75:f1:53:96
+  id: eea7a860-fa37-4338-8fe4-56cb8913f04f
+  logicalIp: 10.10.0.2
+  logicalPort: web-1.vpc-a
+  type: dnat_and_snat
+- externalIp: 192.168.107.102
+  id: 65665a09-27ef-4c25-b0bf-cffa13c84e38
+  logicalIp: 10.10.0.0/24
+  type: snat
+policies:
+- action: allow
+  id: 39df6038-22ad-4c6a-ad49-aae9898fb6ba
+  match: ip4.dst == 10.10.0.0/24
+  priority: 31000
+staticRoutes:
+- ecmp: false
+  id: f110f4a7-21f3-413b-8e15-403f348b5774
+  ipPrefix: 10.10.0.0/24
+  nexthop: 10.10.0.1
+  policy: src-ip
+- ecmp: false
+  id: cffe62a1-c897-4604-9b7f-2de14f238f57
+  ipPrefix: 0.0.0.0/0
+  nexthop: 192.168.107.1
+  policy: dst-ip

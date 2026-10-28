@@ -1,0 +1,10 @@
+{
+ "scenario": "vpc-nat-gw",
+ "flavor": "kube-ovn",
+ "captured": "2026-10-28T14:35:45Z",
+ "ovnCentralImage": "docker.io/kubeovn/kube-ovn:v1.16.2",
+ "ovnVersion": "ovn-nbctl 25.03.4",
+ "kubernetesVersion": "v1.35.9+k3s1",
+ "zones": [],
+ "setup": "Custom VPC `vpc-b` behind the iptables VPC NAT gateway `gw-b` (a pod on `ovn-topo-agent2` with a macvlan leg on `egress0`). Pod `web` (10.20.0.10) has a DNAT 8080\u219280 and the subnet an SNAT, both as `Iptables*` rules inside the gateway pod."
+}

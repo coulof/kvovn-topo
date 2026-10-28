@@ -1,0 +1,52 @@
+nats: null
+policies:
+- action: allow
+  id: df2221e0-7381-4a59-9914-ec2f3088ec69
+  match: ip4.dst == 10.42.0.0/16
+  priority: 31000
+- action: allow
+  id: 11fe5e01-4b54-46cf-8c81-d49d77aa7f1e
+  match: ip4.dst == 100.64.0.0/16
+  priority: 31000
+- action: reroute
+  id: 7da25e24-a04d-4228-a2ab-a5879ce70653
+  match: ip4.dst == 192.168.104.1
+  nexthops:
+  - 100.64.0.3
+  priority: 30000
+- action: reroute
+  id: 5a125dc4-dbed-452c-835f-848b347c3e1e
+  match: ip4.dst == 192.168.104.3
+  nexthops:
+  - 100.64.0.2
+  priority: 30000
+- action: reroute
+  id: 93ff8bcb-7c39-447d-a9a4-dcc86f16f5fa
+  match: ip4.dst == 192.168.104.4
+  nexthops:
+  - 100.64.0.4
+  priority: 30000
+- action: reroute
+  id: 8ea19483-7472-443c-b9df-61eea9d3014d
+  match: ip4.src == $ovn.default.ovn.topo.agent1_ip4
+  nexthops:
+  - 100.64.0.2
+  priority: 29000
+- action: reroute
+  id: 1431e68a-e34f-4441-b469-1b88313a83b0
+  match: ip4.src == $ovn.default.ovn.topo.agent2_ip4
+  nexthops:
+  - 100.64.0.4
+  priority: 29000
+- action: reroute
+  id: c040f4be-0e9c-4cc1-a380-6364f8566873
+  match: ip4.src == $ovn.default.ovn.topo.server_ip4
+  nexthops:
+  - 100.64.0.3
+  priority: 29000
+staticRoutes:
+- ecmp: false
+  id: 423ba3b5-e64f-4f2f-9ea3-632b7f13d021
+  ipPrefix: 0.0.0.0/0
+  nexthop: 100.64.0.1
+  policy: dst-ip

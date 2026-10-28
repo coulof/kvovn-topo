@@ -1,0 +1,52 @@
+edges: []
+nodes:
+- id: chassis:02215ef1-6c2e-4330-9711-8e90381e0030
+  name: ovn-topo-agent1
+  properties:
+    bindingCount: 3
+    encaps:
+    - ip: 192.168.104.3
+      type: geneve
+    hostname: ovn-topo-agent1
+    hostnameShared: 1
+    hostnameSharedWith: []
+    isInterconn: false
+    name: 02215ef1-6c2e-4330-9711-8e90381e0030
+    nodeMatch: annotation
+    nodeName: ovn-topo-agent1
+    uuid: 62af8a8b-aa45-4f91-afda-c54728483fe1
+  type: Chassis
+- id: chassis:cff02b1a-3794-4258-98c9-27f470efc258
+  name: ovn-topo-agent2
+  properties:
+    bindingCount: 3
+    encaps:
+    - ip: 192.168.104.4
+      type: geneve
+    hostname: ovn-topo-agent2
+    hostnameShared: 1
+    hostnameSharedWith: []
+    isInterconn: false
+    name: cff02b1a-3794-4258-98c9-27f470efc258
+    nodeMatch: annotation
+    nodeName: ovn-topo-agent2
+    uuid: dbca1518-a75d-4f51-9d58-00f7d4536b63
+  type: Chassis
+- id: chassis:f9e3a772-effe-4609-876b-22897c5ace12
+  name: ovn-topo-server
+  properties:
+    bindingCount: 5
+    encaps:
+    - ip: 192.168.104.1
+      type: geneve
+    hostname: ovn-topo-server
+    hostnameShared: 1
+    hostnameSharedWith: []
+    isInterconn: false
+    name: f9e3a772-effe-4609-876b-22897c5ace12
+    nodeMatch: annotation
+    nodeName: ovn-topo-server
+    uuid: a73dbc29-ffd7-49a0-b0a4-f7fcd64de7a5
+  type: Chassis
+revision: 1
+view: chassis

@@ -1,0 +1,157 @@
+edges:
+- id: edge:lr:5d174813-447d-42c7-846c-11cbac6abcae-ls:03436300-f1dc-4d26-abb6-5b4d993b7519-router-peer
+  label: 100.64.0.1/16
+  properties:
+    lrp: ovn-cluster-join
+    lrpMac: 5e:1f:28:20:fe:5e
+    lsp: join-ovn-cluster
+    networks:
+    - 100.64.0.1/16
+  source: lr:5d174813-447d-42c7-846c-11cbac6abcae
+  target: ls:03436300-f1dc-4d26-abb6-5b4d993b7519
+  type: router-peer
+- id: edge:lr:5d174813-447d-42c7-846c-11cbac6abcae-ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104-router-peer
+  label: 192.168.107.103/24
+  properties:
+    activeGateway: ovn-topo-agent1
+    isGateway: true
+    lrp: ovn-cluster-external
+    lrpMac: 12:1c:84:78:7f:91
+    lsp: external-ovn-cluster
+    networks:
+    - 192.168.107.103/24
+  source: lr:5d174813-447d-42c7-846c-11cbac6abcae
+  target: ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104
+  type: router-peer
+- id: edge:lr:5d174813-447d-42c7-846c-11cbac6abcae-ls:765b2e05-1537-4f56-be7e-7e27664e775d-router-peer
+  label: 10.42.0.1/16
+  properties:
+    lrp: ovn-cluster-ovn-default
+    lrpMac: ee:ee:05:75:48:2f
+    lsp: ovn-default-ovn-cluster
+    networks:
+    - 10.42.0.1/16
+  source: lr:5d174813-447d-42c7-846c-11cbac6abcae
+  target: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  type: router-peer
+- id: edge:lr:e7d259f6-c4b2-4907-85ca-e04855723315-ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524-router-peer
+  label: 10.10.0.1/24
+  properties:
+    lrp: vpc-a-vpc-a-net
+    lrpMac: 42:95:7e:a5:8d:a6
+    lsp: vpc-a-net-vpc-a
+    networks:
+    - 10.10.0.1/24
+  source: lr:e7d259f6-c4b2-4907-85ca-e04855723315
+  target: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  type: router-peer
+- id: edge:lr:e7d259f6-c4b2-4907-85ca-e04855723315-ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104-router-peer
+  label: 192.168.107.101/24
+  properties:
+    activeGateway: ovn-topo-agent1
+    isGateway: true
+    lrp: vpc-a-external
+    lrpMac: da:dd:49:93:dd:d9
+    lsp: external-vpc-a
+    networks:
+    - 192.168.107.101/24
+  source: lr:e7d259f6-c4b2-4907-85ca-e04855723315
+  target: ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104
+  type: router-peer
+- id: edge:ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104-ext:external-localnet
+  source: ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104
+  target: ext:external
+  type: localnet
+nodes:
+- id: ext:external
+  name: external
+  type: External
+- id: lr:5d174813-447d-42c7-846c-11cbac6abcae
+  k8s:
+    vendor: kube-ovn
+  name: ovn-cluster
+  parent: vpc:ovn-cluster
+  properties:
+    enabled: true
+    gateways:
+    - activeChassis: ovn-topo-agent1
+      lrp: ovn-cluster-external
+    lbCount: 0
+    natCount: 0
+    policyCount: 8
+    routeCount: 1
+  type: LR
+- id: lr:e7d259f6-c4b2-4907-85ca-e04855723315
+  k8s:
+    vendor: kube-ovn
+  name: vpc-a
+  parent: vpc:vpc-a
+  properties:
+    enabled: true
+    gateways:
+    - activeChassis: ovn-topo-agent1
+      lrp: vpc-a-external
+    lbCount: 0
+    natCount: 2
+    policyCount: 1
+    routeCount: 2
+  type: LR
+- id: ls:03436300-f1dc-4d26-abb6-5b4d993b7519
+  k8s:
+    vendor: kube-ovn
+  name: join
+  parent: vpc:ovn-cluster
+  properties:
+    boundPortCount: 3
+    portCount: 4
+    subnet: join
+    unboundPortCount: 0
+  type: LS
+- id: ls:34fe03c6-6c39-43e5-8f2b-5f66ee0a0524
+  k8s:
+    vendor: kube-ovn
+  name: vpc-a-net
+  parent: vpc:vpc-a
+  properties:
+    boundPortCount: 2
+    portCount: 3
+    subnet: vpc-a-net
+    unboundPortCount: 0
+  type: LS
+- id: ls:56a82fba-e5d0-46f7-9aaa-9b4cbd465104
+  k8s:
+    vendor: kube-ovn
+  name: external
+  properties:
+    boundPortCount: 0
+    portCount: 3
+    subnet: external
+    unboundPortCount: 0
+  type: LS
+- id: ls:765b2e05-1537-4f56-be7e-7e27664e775d
+  k8s:
+    vendor: kube-ovn
+  name: ovn-default
+  parent: vpc:ovn-cluster
+  properties:
+    boundPortCount: 6
+    portCount: 7
+    subnet: ovn-default
+    unboundPortCount: 0
+  type: LS
+- id: vpc:ovn-cluster
+  k8s:
+    vendor: kube-ovn
+  name: ovn-cluster
+  properties:
+    isDefault: true
+  type: VPC
+- id: vpc:vpc-a
+  k8s:
+    vendor: kube-ovn
+  name: vpc-a
+  properties:
+    isDefault: false
+  type: VPC
+revision: 1
+view: l3

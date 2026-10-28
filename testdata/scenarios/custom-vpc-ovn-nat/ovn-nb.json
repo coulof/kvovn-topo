@@ -1,0 +1,3791 @@
+{
+ "OVN_Northbound": {
+  "ACL": {
+   "489ae62d-65ef-4283-8113-ee7bc23d6c8b": {
+    "action": "drop",
+    "direction": "from-lport",
+    "external_ids": [
+     "map",
+     [
+      [
+       "parent",
+       "ovn.sg.kubeovn_deny_all"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "label": 0,
+    "log": false,
+    "match": "inport == @ovn.sg.kubeovn_deny_all && ip",
+    "meter": [
+     "set",
+     []
+    ],
+    "name": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 2003,
+    "sample_est": [
+     "set",
+     []
+    ],
+    "sample_new": [
+     "set",
+     []
+    ],
+    "severity": [
+     "set",
+     []
+    ],
+    "tier": 3
+   },
+   "4a00802c-54e7-48c9-bb0a-934493dc97bf": {
+    "action": "drop",
+    "direction": "to-lport",
+    "external_ids": [
+     "map",
+     [
+      [
+       "parent",
+       "ovn.sg.kubeovn_deny_all"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "label": 0,
+    "log": false,
+    "match": "outport == @ovn.sg.kubeovn_deny_all && ip",
+    "meter": [
+     "set",
+     []
+    ],
+    "name": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 2003,
+    "sample_est": [
+     "set",
+     []
+    ],
+    "sample_new": [
+     "set",
+     []
+    ],
+    "severity": [
+     "set",
+     []
+    ],
+    "tier": 3
+   },
+   "5206e713-97d6-48e1-9188-aca1a5215435": {
+    "action": "drop",
+    "direction": "from-lport",
+    "external_ids": [
+     "map",
+     [
+      [
+       "parent",
+       "ovn.sg.kubeovn_deny_all"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "label": 0,
+    "log": false,
+    "match": "inport == @ovn.sg.kubeovn_deny_all && ip",
+    "meter": [
+     "set",
+     []
+    ],
+    "name": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 2003,
+    "sample_est": [
+     "set",
+     []
+    ],
+    "sample_new": [
+     "set",
+     []
+    ],
+    "severity": [
+     "set",
+     []
+    ],
+    "tier": 2
+   },
+   "98c35d94-3bdd-483f-8ca9-1a88a65e975e": {
+    "action": "drop",
+    "direction": "to-lport",
+    "external_ids": [
+     "map",
+     [
+      [
+       "parent",
+       "ovn.sg.kubeovn_deny_all"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "label": 0,
+    "log": false,
+    "match": "outport == @ovn.sg.kubeovn_deny_all && ip",
+    "meter": [
+     "set",
+     []
+    ],
+    "name": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 2003,
+    "sample_est": [
+     "set",
+     []
+    ],
+    "sample_new": [
+     "set",
+     []
+    ],
+    "severity": [
+     "set",
+     []
+    ],
+    "tier": 2
+   }
+  },
+  "Address_Set": {
+   "46d15af4-e502-4d53-ab83-fdbf0b1ea78b": {
+    "addresses": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "isU2OOverlayCIDRs",
+       "true"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ],
+      [
+       "vpc",
+       "vpc-a"
+      ]
+     ]
+    ],
+    "name": "vpc.a.u2o_overlay_cidrs.ip6"
+   },
+   "4982ee76-1f30-4fee-92ec-0884fb5db05a": {
+    "addresses": [
+     "set",
+     [
+      "10.42.0.0/16",
+      "100.64.0.0/16"
+     ]
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "isU2OOverlayCIDRs",
+       "true"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ],
+      [
+       "vpc",
+       "ovn-cluster"
+      ]
+     ]
+    ],
+    "name": "ovn.cluster.u2o_overlay_cidrs.ip4"
+   },
+   "533960a6-072e-41c5-908e-87def1a408e8": {
+    "addresses": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "isU2OOverlayCIDRs",
+       "true"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ],
+      [
+       "vpc",
+       "ovn-cluster"
+      ]
+     ]
+    ],
+    "name": "ovn.cluster.u2o_overlay_cidrs.ip6"
+   },
+   "b3ee1ff0-a4be-467d-92d9-3cf59def4eb6": {
+    "addresses": "10.10.0.0/24",
+    "external_ids": [
+     "map",
+     [
+      [
+       "isU2OOverlayCIDRs",
+       "true"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ],
+      [
+       "vpc",
+       "vpc-a"
+      ]
+     ]
+    ],
+    "name": "vpc.a.u2o_overlay_cidrs.ip4"
+   }
+  },
+  "Gateway_Chassis": {
+   "118200a8-fc99-4925-a32c-ad7d019ba127": {
+    "chassis_name": "4406141c-cc13-49b0-ac40-56233ba6cb5a",
+    "external_ids": [
+     "map",
+     [
+      [
+       "lrp",
+       "ovn-cluster-external"
+      ]
+     ]
+    ],
+    "name": "ovn-cluster-external-4406141c-cc13-49b0-ac40-56233ba6cb5a",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 100
+   },
+   "3faf2071-6de4-4555-a30c-151f2809b950": {
+    "chassis_name": "4406141c-cc13-49b0-ac40-56233ba6cb5a",
+    "external_ids": [
+     "map",
+     [
+      [
+       "lrp",
+       "vpc-a-external"
+      ]
+     ]
+    ],
+    "name": "vpc-a-external-4406141c-cc13-49b0-ac40-56233ba6cb5a",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 100
+   }
+  },
+  "HA_Chassis": {},
+  "HA_Chassis_Group": {},
+  "Load_Balancer": {
+   "115722d8-d702-4ddd-99d2-267a6adff523": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-tcp-load",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "tcp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "4d4d6e39-c96f-4f0a-a434-e4a7600447aa": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-udp-sess-load",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "udp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "59782184-19a1-48b4-9ad2-40f1ec8c39e2": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-sctp-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "sctp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "5ec10d83-2865-4015-81da-3bb6e4a19878": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-sctp-session-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "sctp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "66495f8d-48d5-4724-964e-ae490c24e6f3": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-udp-session-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "udp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "b767cad4-ca2f-4638-a052-c03a06615f7b": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-sctp-sess-load",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "sctp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "bc3af351-6f7a-436a-b875-8bcc047debb1": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-tcp-session-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "tcp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "d3c41120-e66e-4136-9790-aa2e7b81ab7a": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-sctp-load",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "sctp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "df8ef16e-5486-49d4-8f11-edec03dd657f": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-tcp-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "tcp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     [
+      [
+       "10.43.0.10:53",
+       "10.42.0.2:53"
+      ],
+      [
+       "10.43.0.10:9153",
+       "10.42.0.2:9153"
+      ],
+      [
+       "10.43.0.1:443",
+       "192.168.104.1:6443"
+      ],
+      [
+       "10.43.151.224:6641",
+       "192.168.104.1:6641"
+      ],
+      [
+       "10.43.155.237:443",
+       "10.42.0.5:10250"
+      ],
+      [
+       "10.43.217.150:10665",
+       "192.168.104.1:10665,192.168.104.3:10665,192.168.104.4:10665"
+      ],
+      [
+       "10.43.218.137:10661",
+       "192.168.104.1:10661"
+      ],
+      [
+       "10.43.250.154:6642",
+       "192.168.104.1:6642"
+      ],
+      [
+       "10.43.41.127:6643",
+       "192.168.104.1:6643"
+      ],
+      [
+       "10.43.72.144:8080",
+       "10.42.0.4:8080,10.42.0.6:8080,10.42.0.7:8080"
+      ],
+      [
+       "10.43.99.241:10660",
+       "192.168.104.1:10660"
+      ]
+     ]
+    ]
+   },
+   "e0dc9fd9-363d-4339-8ffb-9d77242acc81": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "cluster-udp-loadbalancer",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "udp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     [
+      [
+       "10.43.0.10:53",
+       "10.42.0.2:53"
+      ]
+     ]
+    ]
+   },
+   "ec008a24-a346-4a9b-aea8-35f61eeb4927": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-udp-load",
+    "options": [
+     "map",
+     [
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "udp",
+    "selection_fields": [
+     "set",
+     []
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   },
+   "f0eb69be-bddc-44b8-b3a3-1af5379a6e5a": {
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "health_check": [
+     "set",
+     []
+    ],
+    "ip_port_mappings": [
+     "map",
+     []
+    ],
+    "name": "vpc-vpc-a-tcp-sess-load",
+    "options": [
+     "map",
+     [
+      [
+       "affinity_timeout",
+       "10800"
+      ],
+      [
+       "prefer_local_backend",
+       "false"
+      ]
+     ]
+    ],
+    "protocol": "tcp",
+    "selection_fields": [
+     "set",
+     [
+      "ip_src",
+      "ipv6_src"
+     ]
+    ],
+    "vips": [
+     "map",
+     []
+    ]
+   }
+  },
+  "Logical_Router": {
+   "5d174813-447d-42c7-846c-11cbac6abcae": {
+    "copp": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "load_balancer": [
+     "set",
+     []
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "ovn-cluster",
+    "nat": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     [
+      [
+       "dynamic_neigh_routers",
+       "true"
+      ],
+      [
+       "mac_binding_age_threshold",
+       "300"
+      ]
+     ]
+    ],
+    "policies": [
+     "set",
+     [
+      [
+       "uuid",
+       "39865c7f-7b33-45d0-a884-308a6ad3ddcc"
+      ],
+      [
+       "uuid",
+       "4ddc67b3-05fa-4b0f-9a99-072a9f81c8f2"
+      ],
+      [
+       "uuid",
+       "5e3588ee-5007-4614-983d-3b3ae9d26fa5"
+      ],
+      [
+       "uuid",
+       "7b3d7ecb-40f7-4e7e-b8ef-3957392f8121"
+      ],
+      [
+       "uuid",
+       "a19e33bd-70f7-4098-8e1e-efc30883a766"
+      ],
+      [
+       "uuid",
+       "ae0583f6-d8c6-4e65-a532-6e3c9a1df64f"
+      ],
+      [
+       "uuid",
+       "cfee3ab6-5b7c-4871-9bf2-178d45121ea6"
+      ],
+      [
+       "uuid",
+       "ece9ab6b-a084-4c92-9142-410bd0dfaa06"
+      ]
+     ]
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "56c2c728-5094-4288-932a-e6a1ff0d25b9"
+      ],
+      [
+       "uuid",
+       "96af4cf0-ef02-4f3b-b314-8a60660dcfe5"
+      ],
+      [
+       "uuid",
+       "e2d12d4c-46f9-4ab3-96db-a87ec96f7e0b"
+      ]
+     ]
+    ],
+    "static_routes": [
+     "uuid",
+     "6b8a7c0c-9025-406b-bd20-0c2e44398517"
+    ]
+   },
+   "e7d259f6-c4b2-4907-85ca-e04855723315": {
+    "copp": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "load_balancer": [
+     "set",
+     []
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "vpc-a",
+    "nat": [
+     "set",
+     [
+      [
+       "uuid",
+       "65665a09-27ef-4c25-b0bf-cffa13c84e38"
+      ],
+      [
+       "uuid",
+       "eea7a860-fa37-4338-8fe4-56cb8913f04f"
+      ]
+     ]
+    ],
+    "options": [
+     "map",
+     [
+      [
+       "dynamic_neigh_routers",
+       "true"
+      ],
+      [
+       "mac_binding_age_threshold",
+       "300"
+      ]
+     ]
+    ],
+    "policies": [
+     "uuid",
+     "39df6038-22ad-4c6a-ad49-aae9898fb6ba"
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "195c7820-aa6d-4257-851b-97666056e064"
+      ],
+      [
+       "uuid",
+       "c56428bd-2e78-42be-905d-00f44e61cf31"
+      ]
+     ]
+    ],
+    "static_routes": [
+     "set",
+     [
+      [
+       "uuid",
+       "cffe62a1-c897-4604-9b7f-2de14f238f57"
+      ],
+      [
+       "uuid",
+       "f110f4a7-21f3-413b-8e15-403f348b5774"
+      ]
+     ]
+    ]
+   }
+  },
+  "Logical_Router_Policy": {
+   "39865c7f-7b33-45d0-a884-308a6ad3ddcc": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "address-family",
+       "4"
+      ],
+      [
+       "node",
+       "ovn-topo-server"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 192.168.104.1",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.3",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 30000
+   },
+   "39df6038-22ad-4c6a-ad49-aae9898fb6ba": {
+    "action": "allow",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "subnet",
+       "vpc-a-net"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 10.10.0.0/24",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 31000
+   },
+   "4ddc67b3-05fa-4b0f-9a99-072a9f81c8f2": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent1"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.src == $ovn.default.ovn.topo.agent1_ip4",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.2",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 29000
+   },
+   "5e3588ee-5007-4614-983d-3b3ae9d26fa5": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-server"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.src == $ovn.default.ovn.topo.server_ip4",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.3",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 29000
+   },
+   "7b3d7ecb-40f7-4e7e-b8ef-3957392f8121": {
+    "action": "allow",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 10.42.0.0/16",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 31000
+   },
+   "a19e33bd-70f7-4098-8e1e-efc30883a766": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "address-family",
+       "4"
+      ],
+      [
+       "node",
+       "ovn-topo-agent2"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 192.168.104.4",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.4",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 30000
+   },
+   "ae0583f6-d8c6-4e65-a532-6e3c9a1df64f": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent2"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.src == $ovn.default.ovn.topo.agent2_ip4",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.4",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 29000
+   },
+   "cfee3ab6-5b7c-4871-9bf2-178d45121ea6": {
+    "action": "allow",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "subnet",
+       "join"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 100.64.0.0/16",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": [
+     "set",
+     []
+    ],
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 31000
+   },
+   "ece9ab6b-a084-4c92-9142-410bd0dfaa06": {
+    "action": "reroute",
+    "bfd_sessions": [
+     "set",
+     []
+    ],
+    "chain": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "address-family",
+       "4"
+      ],
+      [
+       "node",
+       "ovn-topo-agent1"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "jump_chain": [
+     "set",
+     []
+    ],
+    "match": "ip4.dst == 192.168.104.3",
+    "nexthop": [
+     "set",
+     []
+    ],
+    "nexthops": "100.64.0.2",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 30000
+   }
+  },
+  "Logical_Router_Port": {
+   "195c7820-aa6d-4257-851b-97666056e064": {
+    "dhcp_relay": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "lr",
+       "vpc-a"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "gateway_chassis": [
+     "uuid",
+     "3faf2071-6de4-4555-a30c-151f2809b950"
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "ipv6_prefix": [
+     "set",
+     []
+    ],
+    "ipv6_ra_configs": [
+     "map",
+     []
+    ],
+    "mac": "da:dd:49:93:dd:d9",
+    "name": "vpc-a-external",
+    "networks": "192.168.107.101/24",
+    "options": [
+     "map",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "status": [
+     "map",
+     [
+      [
+       "hosting-chassis",
+       "4406141c-cc13-49b0-ac40-56233ba6cb5a"
+      ]
+     ]
+    ]
+   },
+   "56c2c728-5094-4288-932a-e6a1ff0d25b9": {
+    "dhcp_relay": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "lr",
+       "ovn-cluster"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "gateway_chassis": [
+     "set",
+     []
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "ipv6_prefix": [
+     "set",
+     []
+    ],
+    "ipv6_ra_configs": [
+     "map",
+     []
+    ],
+    "mac": "ee:ee:05:75:48:2f",
+    "name": "ovn-cluster-ovn-default",
+    "networks": "10.42.0.1/16",
+    "options": [
+     "map",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "status": [
+     "map",
+     []
+    ]
+   },
+   "96af4cf0-ef02-4f3b-b314-8a60660dcfe5": {
+    "dhcp_relay": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "lr",
+       "ovn-cluster"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "gateway_chassis": [
+     "uuid",
+     "118200a8-fc99-4925-a32c-ad7d019ba127"
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "ipv6_prefix": [
+     "set",
+     []
+    ],
+    "ipv6_ra_configs": [
+     "map",
+     []
+    ],
+    "mac": "12:1c:84:78:7f:91",
+    "name": "ovn-cluster-external",
+    "networks": "192.168.107.103/24",
+    "options": [
+     "map",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "status": [
+     "map",
+     [
+      [
+       "hosting-chassis",
+       "4406141c-cc13-49b0-ac40-56233ba6cb5a"
+      ]
+     ]
+    ]
+   },
+   "c56428bd-2e78-42be-905d-00f44e61cf31": {
+    "dhcp_relay": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "lr",
+       "vpc-a"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "gateway_chassis": [
+     "set",
+     []
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "ipv6_prefix": [
+     "set",
+     []
+    ],
+    "ipv6_ra_configs": [
+     "map",
+     []
+    ],
+    "mac": "42:95:7e:a5:8d:a6",
+    "name": "vpc-a-vpc-a-net",
+    "networks": "10.10.0.1/24",
+    "options": [
+     "map",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "status": [
+     "map",
+     []
+    ]
+   },
+   "e2d12d4c-46f9-4ab3-96db-a87ec96f7e0b": {
+    "dhcp_relay": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "lr",
+       "ovn-cluster"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "gateway_chassis": [
+     "set",
+     []
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "ipv6_prefix": [
+     "set",
+     []
+    ],
+    "ipv6_ra_configs": [
+     "map",
+     []
+    ],
+    "mac": "5e:1f:28:20:fe:5e",
+    "name": "ovn-cluster-join",
+    "networks": "100.64.0.1/16",
+    "options": [
+     "map",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "status": [
+     "map",
+     []
+    ]
+   }
+  },
+  "Logical_Router_Static_Route": {
+   "6b8a7c0c-9025-406b-bd20-0c2e44398517": {
+    "bfd": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ip_prefix": "0.0.0.0/0",
+    "nexthop": "100.64.0.1",
+    "options": [
+     "map",
+     []
+    ],
+    "output_port": [
+     "set",
+     []
+    ],
+    "policy": "dst-ip",
+    "route_table": "",
+    "selection_fields": [
+     "set",
+     []
+    ]
+   },
+   "cffe62a1-c897-4604-9b7f-2de14f238f57": {
+    "bfd": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ip_prefix": "0.0.0.0/0",
+    "nexthop": "192.168.107.1",
+    "options": [
+     "map",
+     []
+    ],
+    "output_port": [
+     "set",
+     []
+    ],
+    "policy": "dst-ip",
+    "route_table": "",
+    "selection_fields": [
+     "set",
+     []
+    ]
+   },
+   "f110f4a7-21f3-413b-8e15-403f348b5774": {
+    "bfd": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ip_prefix": "10.10.0.0/24",
+    "nexthop": "10.10.0.1",
+    "options": [
+     "map",
+     []
+    ],
+    "output_port": [
+     "set",
+     []
+    ],
+    "policy": "src-ip",
+    "route_table": "",
+    "selection_fields": [
+     "set",
+     []
+    ]
+   }
+  },
+  "Logical_Switch": {
+   "03436300-f1dc-4d26-abb6-5b4d993b7519": {
+    "acls": [
+     "set",
+     []
+    ],
+    "copp": [
+     "set",
+     []
+    ],
+    "dns_records": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "forwarding_groups": [
+     "set",
+     []
+    ],
+    "load_balancer": [
+     "set",
+     []
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "join",
+    "other_config": [
+     "map",
+     []
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "3b2fe593-eafc-4848-b4b6-ce500ebcc3b5"
+      ],
+      [
+       "uuid",
+       "8a85fac8-9d32-4d62-820a-a9272f238aeb"
+      ],
+      [
+       "uuid",
+       "a1b1f309-e358-4e8e-a0ad-081efba4ec1e"
+      ],
+      [
+       "uuid",
+       "cd4712ec-e74b-49a1-aa8f-cfdd313006cd"
+      ]
+     ]
+    ],
+    "qos_rules": [
+     "set",
+     []
+    ]
+   },
+   "34fe03c6-6c39-43e5-8f2b-5f66ee0a0524": {
+    "acls": [
+     "set",
+     []
+    ],
+    "copp": [
+     "set",
+     []
+    ],
+    "dns_records": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "forwarding_groups": [
+     "set",
+     []
+    ],
+    "load_balancer": [
+     "set",
+     [
+      [
+       "uuid",
+       "115722d8-d702-4ddd-99d2-267a6adff523"
+      ],
+      [
+       "uuid",
+       "4d4d6e39-c96f-4f0a-a434-e4a7600447aa"
+      ],
+      [
+       "uuid",
+       "b767cad4-ca2f-4638-a052-c03a06615f7b"
+      ],
+      [
+       "uuid",
+       "d3c41120-e66e-4136-9790-aa2e7b81ab7a"
+      ],
+      [
+       "uuid",
+       "ec008a24-a346-4a9b-aea8-35f61eeb4927"
+      ],
+      [
+       "uuid",
+       "f0eb69be-bddc-44b8-b3a3-1af5379a6e5a"
+      ]
+     ]
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "vpc-a-net",
+    "other_config": [
+     "map",
+     []
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "5188bbb1-86fb-4cdc-a344-c31ad3665d7a"
+      ],
+      [
+       "uuid",
+       "72ed393e-932e-47b6-9bb9-a83f6a02e08d"
+      ],
+      [
+       "uuid",
+       "c87f9ad8-6200-4ae6-866c-32c638ef227f"
+      ]
+     ]
+    ],
+    "qos_rules": [
+     "set",
+     []
+    ]
+   },
+   "56a82fba-e5d0-46f7-9aaa-9b4cbd465104": {
+    "acls": [
+     "set",
+     []
+    ],
+    "copp": [
+     "set",
+     []
+    ],
+    "dns_records": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "forwarding_groups": [
+     "set",
+     []
+    ],
+    "load_balancer": [
+     "set",
+     [
+      [
+       "uuid",
+       "59782184-19a1-48b4-9ad2-40f1ec8c39e2"
+      ],
+      [
+       "uuid",
+       "5ec10d83-2865-4015-81da-3bb6e4a19878"
+      ],
+      [
+       "uuid",
+       "66495f8d-48d5-4724-964e-ae490c24e6f3"
+      ],
+      [
+       "uuid",
+       "bc3af351-6f7a-436a-b875-8bcc047debb1"
+      ],
+      [
+       "uuid",
+       "df8ef16e-5486-49d4-8f11-edec03dd657f"
+      ],
+      [
+       "uuid",
+       "e0dc9fd9-363d-4339-8ffb-9d77242acc81"
+      ]
+     ]
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "external",
+    "other_config": [
+     "map",
+     []
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "450e8049-5e0b-49c2-952a-6afcf9bb3a37"
+      ],
+      [
+       "uuid",
+       "6e173e18-ed46-491a-9569-fb6b0214764c"
+      ],
+      [
+       "uuid",
+       "dacd1a77-e5c9-4358-a533-b3a5c9cf3afe"
+      ]
+     ]
+    ],
+    "qos_rules": [
+     "set",
+     []
+    ]
+   },
+   "765b2e05-1537-4f56-be7e-7e27664e775d": {
+    "acls": [
+     "set",
+     []
+    ],
+    "copp": [
+     "set",
+     []
+    ],
+    "dns_records": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "forwarding_groups": [
+     "set",
+     []
+    ],
+    "load_balancer": [
+     "set",
+     [
+      [
+       "uuid",
+       "59782184-19a1-48b4-9ad2-40f1ec8c39e2"
+      ],
+      [
+       "uuid",
+       "5ec10d83-2865-4015-81da-3bb6e4a19878"
+      ],
+      [
+       "uuid",
+       "66495f8d-48d5-4724-964e-ae490c24e6f3"
+      ],
+      [
+       "uuid",
+       "bc3af351-6f7a-436a-b875-8bcc047debb1"
+      ],
+      [
+       "uuid",
+       "df8ef16e-5486-49d4-8f11-edec03dd657f"
+      ],
+      [
+       "uuid",
+       "e0dc9fd9-363d-4339-8ffb-9d77242acc81"
+      ]
+     ]
+    ],
+    "load_balancer_group": [
+     "set",
+     []
+    ],
+    "name": "ovn-default",
+    "other_config": [
+     "map",
+     []
+    ],
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "07b78c04-7743-4fca-9a75-c061284a54cd"
+      ],
+      [
+       "uuid",
+       "23d1fe22-5af1-4926-a19e-7d94a4a2b7b9"
+      ],
+      [
+       "uuid",
+       "662bc60e-16ee-4b74-8b05-35f78cff95a9"
+      ],
+      [
+       "uuid",
+       "72a3d60b-5731-4a26-8333-32a5cfc4c6d5"
+      ],
+      [
+       "uuid",
+       "82a13896-437c-4032-bf3c-99eeb3716d9a"
+      ],
+      [
+       "uuid",
+       "b7472239-34b0-4a97-ac17-e7883438f304"
+      ],
+      [
+       "uuid",
+       "f4387248-1f82-4085-862d-15eaa72793f2"
+      ]
+     ]
+    ],
+    "qos_rules": [
+     "set",
+     []
+    ]
+   }
+  },
+  "Logical_Switch_Port": {
+   "07b78c04-7743-4fca-9a75-c061284a54cd": {
+    "addresses": "5e:bc:a7:4f:57:9e 10.42.0.3",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/local-path-provisioner-d9d8769b6-wdx5l"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "local-path-provisioner-d9d8769b6-wdx5l.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "23d1fe22-5af1-4926-a19e-7d94a4a2b7b9": {
+    "addresses": "0e:3b:6e:90:1d:0d 10.42.0.6",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/kube-ovn-pinger-8whjz"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "kube-ovn-pinger-8whjz.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "3b2fe593-eafc-4848-b4b6-ce500ebcc3b5": {
+    "addresses": "fa:eb:4c:a8:27:1e 100.64.0.4",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "join"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "node-ovn-topo-agent2",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "450e8049-5e0b-49c2-952a-6afcf9bb3a37": {
+    "addresses": "router",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "external"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "external-vpc-a",
+    "options": [
+     "map",
+     [
+      [
+       "router-port",
+       "vpc-a-external"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "router",
+    "up": true
+   },
+   "5188bbb1-86fb-4cdc-a344-c31ad3665d7a": {
+    "addresses": "a6:ea:5e:43:20:08 10.10.0.3",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "associated_sg_default-securitygroup",
+       "false"
+      ],
+      [
+       "ls",
+       "vpc-a-net"
+      ],
+      [
+       "pod",
+       "vpc-a/web-2"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "web-2.vpc-a",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "662bc60e-16ee-4b74-8b05-35f78cff95a9": {
+    "addresses": "fe:a6:41:c4:f0:f2 10.42.0.4",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/kube-ovn-pinger-49gz4"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "kube-ovn-pinger-49gz4.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "6e173e18-ed46-491a-9569-fb6b0214764c": {
+    "addresses": "router",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "external"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "external-ovn-cluster",
+    "options": [
+     "map",
+     [
+      [
+       "router-port",
+       "ovn-cluster-external"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "router",
+    "up": true
+   },
+   "72a3d60b-5731-4a26-8333-32a5cfc4c6d5": {
+    "addresses": "02:df:d8:cd:76:28 10.42.0.2",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/coredns-b644fd95b-w85xd"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "coredns-b644fd95b-w85xd.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "72ed393e-932e-47b6-9bb9-a83f6a02e08d": {
+    "addresses": "56:ed:75:f1:53:96 10.10.0.2",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "associated_sg_default-securitygroup",
+       "false"
+      ],
+      [
+       "ls",
+       "vpc-a-net"
+      ],
+      [
+       "pod",
+       "vpc-a/web-1"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "web-1.vpc-a",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "82a13896-437c-4032-bf3c-99eeb3716d9a": {
+    "addresses": "2a:53:61:94:c3:c8 10.42.0.7",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/kube-ovn-pinger-h5d7k"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "kube-ovn-pinger-h5d7k.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "8a85fac8-9d32-4d62-820a-a9272f238aeb": {
+    "addresses": "router",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "join"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "join-ovn-cluster",
+    "options": [
+     "map",
+     [
+      [
+       "router-port",
+       "ovn-cluster-join"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "router",
+    "up": true
+   },
+   "a1b1f309-e358-4e8e-a0ad-081efba4ec1e": {
+    "addresses": "f6:84:e3:b3:bf:51 100.64.0.3",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "join"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "node-ovn-topo-server",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "b7472239-34b0-4a97-ac17-e7883438f304": {
+    "addresses": "router",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "ovn-default-ovn-cluster",
+    "options": [
+     "map",
+     [
+      [
+       "router-port",
+       "ovn-cluster-ovn-default"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "router",
+    "up": true
+   },
+   "c87f9ad8-6200-4ae6-866c-32c638ef227f": {
+    "addresses": "router",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "vpc-a-net"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "vpc-a-net-vpc-a",
+    "options": [
+     "map",
+     [
+      [
+       "router-port",
+       "vpc-a-vpc-a-net"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "router",
+    "up": true
+   },
+   "cd4712ec-e74b-49a1-aa8f-cfdd313006cd": {
+    "addresses": "82:34:bc:8e:29:0a 100.64.0.2",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "join"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "node-ovn-topo-agent1",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   },
+   "dacd1a77-e5c9-4358-a533-b3a5c9cf3afe": {
+    "addresses": "unknown",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "external"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "localnet.external",
+    "options": [
+     "map",
+     [
+      [
+       "network_name",
+       "external"
+      ]
+     ]
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "localnet",
+    "up": false
+   },
+   "f4387248-1f82-4085-862d-15eaa72793f2": {
+    "addresses": "8a:de:a6:01:80:a7 10.42.0.5",
+    "dhcpv4_options": [
+     "set",
+     []
+    ],
+    "dhcpv6_options": [
+     "set",
+     []
+    ],
+    "dynamic_addresses": [
+     "set",
+     []
+    ],
+    "enabled": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "ls",
+       "ovn-default"
+      ],
+      [
+       "pod",
+       "kube-system/metrics-server-7f4b6d9bd7-8qgfr"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "ha_chassis_group": [
+     "set",
+     []
+    ],
+    "mirror_rules": [
+     "set",
+     []
+    ],
+    "name": "metrics-server-7f4b6d9bd7-8qgfr.kube-system",
+    "options": [
+     "map",
+     []
+    ],
+    "parent_name": [
+     "set",
+     []
+    ],
+    "peer": [
+     "set",
+     []
+    ],
+    "port_security": [
+     "set",
+     []
+    ],
+    "tag": [
+     "set",
+     []
+    ],
+    "tag_request": [
+     "set",
+     []
+    ],
+    "type": "",
+    "up": true
+   }
+  },
+  "NAT": {
+   "65665a09-27ef-4c25-b0bf-cffa13c84e38": {
+    "allowed_ext_ips": [
+     "set",
+     []
+    ],
+    "exempted_ext_ips": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     []
+    ],
+    "external_ip": "192.168.107.102",
+    "external_mac": [
+     "set",
+     []
+    ],
+    "external_port_range": "",
+    "gateway_port": [
+     "set",
+     []
+    ],
+    "logical_ip": "10.10.0.0/24",
+    "logical_port": [
+     "set",
+     []
+    ],
+    "match": "",
+    "options": [
+     "map",
+     []
+    ],
+    "priority": 0,
+    "type": "snat"
+   },
+   "eea7a860-fa37-4338-8fe4-56cb8913f04f": {
+    "allowed_ext_ips": [
+     "set",
+     []
+    ],
+    "exempted_ext_ips": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     []
+    ],
+    "external_ip": "192.168.107.100",
+    "external_mac": "56:ed:75:f1:53:96",
+    "external_port_range": "",
+    "gateway_port": [
+     "set",
+     []
+    ],
+    "logical_ip": "10.10.0.2",
+    "logical_port": "web-1.vpc-a",
+    "match": "",
+    "options": [
+     "map",
+     [
+      [
+       "stateless",
+       "true"
+      ]
+     ]
+    ],
+    "priority": 0,
+    "type": "dnat_and_snat"
+   }
+  },
+  "NB_Global": {
+   "4a04b0dc-5525-488a-b70f-9b696090c1c4": {
+    "connections": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "kube-ovn-version",
+       "v1.16.2"
+      ]
+     ]
+    ],
+    "hv_cfg": 0,
+    "hv_cfg_timestamp": 0,
+    "ipsec": false,
+    "name": "",
+    "nb_cfg": 0,
+    "nb_cfg_timestamp": 0,
+    "options": [
+     "map",
+     [
+      [
+       "inactivity_probe",
+       "180000"
+      ],
+      [
+       "ls_ct_skip_dst_lport_ips",
+       "true"
+      ],
+      [
+       "ls_dnat_mod_dl_dst",
+       "true"
+      ],
+      [
+       "mac_prefix",
+       "5a:be:94"
+      ],
+      [
+       "max_tunid",
+       "16711680"
+      ],
+      [
+       "northd_internal_version",
+       "25.03.4-20.41.0-78.9"
+      ],
+      [
+       "northd_probe_interval",
+       "5000"
+      ],
+      [
+       "svc_monitor_mac",
+       "42:f4:72:99:7e:00"
+      ],
+      [
+       "use_ct_inv_match",
+       "false"
+      ],
+      [
+       "use_logical_dp_groups",
+       "true"
+      ]
+     ]
+    ],
+    "sb_cfg": 0,
+    "sb_cfg_timestamp": 0,
+    "ssl": [
+     "set",
+     []
+    ]
+   }
+  },
+  "Port_Group": {
+   "4817c3a7-94ea-443a-a926-f0ff326cc362": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-server"
+      ],
+      [
+       "np",
+       "ovn-default/ovn-topo-server"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "ovn.default.ovn.topo.server",
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "07b78c04-7743-4fca-9a75-c061284a54cd"
+      ],
+      [
+       "uuid",
+       "23d1fe22-5af1-4926-a19e-7d94a4a2b7b9"
+      ],
+      [
+       "uuid",
+       "72a3d60b-5731-4a26-8333-32a5cfc4c6d5"
+      ],
+      [
+       "uuid",
+       "f4387248-1f82-4085-862d-15eaa72793f2"
+      ]
+     ]
+    ]
+   },
+   "782129a9-9248-4ddd-888e-d43425e69581": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent1"
+      ],
+      [
+       "np",
+       "ovn-default/ovn-topo-agent1"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "ovn.default.ovn.topo.agent1",
+    "ports": [
+     "uuid",
+     "662bc60e-16ee-4b74-8b05-35f78cff95a9"
+    ]
+   },
+   "788db45b-47db-4f50-88d9-422f7c70368e": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent2"
+      ],
+      [
+       "np",
+       "ovn-default/ovn-topo-agent2"
+      ],
+      [
+       "subnet",
+       "ovn-default"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "ovn.default.ovn.topo.agent2",
+    "ports": [
+     "uuid",
+     "82a13896-437c-4032-bf3c-99eeb3716d9a"
+    ]
+   },
+   "82456860-82ec-4643-91f3-4ec64ecf4527": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent1"
+      ],
+      [
+       "np",
+       "node/ovn-topo-agent1"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "node.ovn.topo.agent1",
+    "ports": [
+     "uuid",
+     "662bc60e-16ee-4b74-8b05-35f78cff95a9"
+    ]
+   },
+   "9f0c8496-18c5-497a-a28c-dddd2753b899": {
+    "acls": [
+     "set",
+     [
+      [
+       "uuid",
+       "489ae62d-65ef-4283-8113-ee7bc23d6c8b"
+      ],
+      [
+       "uuid",
+       "4a00802c-54e7-48c9-bb0a-934493dc97bf"
+      ],
+      [
+       "uuid",
+       "5206e713-97d6-48e1-9188-aca1a5215435"
+      ],
+      [
+       "uuid",
+       "98c35d94-3bdd-483f-8ca9-1a88a65e975e"
+      ]
+     ]
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "sg",
+       "kubeovn_deny_all"
+      ],
+      [
+       "type",
+       "security_group"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "ovn.sg.kubeovn_deny_all",
+    "ports": [
+     "set",
+     []
+    ]
+   },
+   "d2610e4a-3f10-415d-bf73-4e1a4421c2fa": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-server"
+      ],
+      [
+       "np",
+       "node/ovn-topo-server"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "node.ovn.topo.server",
+    "ports": [
+     "set",
+     [
+      [
+       "uuid",
+       "07b78c04-7743-4fca-9a75-c061284a54cd"
+      ],
+      [
+       "uuid",
+       "23d1fe22-5af1-4926-a19e-7d94a4a2b7b9"
+      ],
+      [
+       "uuid",
+       "72a3d60b-5731-4a26-8333-32a5cfc4c6d5"
+      ],
+      [
+       "uuid",
+       "f4387248-1f82-4085-862d-15eaa72793f2"
+      ]
+     ]
+    ]
+   },
+   "d72b88fb-740e-40ec-ac2b-3b5cc2a7b5c7": {
+    "acls": [
+     "set",
+     []
+    ],
+    "external_ids": [
+     "map",
+     [
+      [
+       "node",
+       "ovn-topo-agent2"
+      ],
+      [
+       "np",
+       "node/ovn-topo-agent2"
+      ],
+      [
+       "vendor",
+       "kube-ovn"
+      ]
+     ]
+    ],
+    "name": "node.ovn.topo.agent2",
+    "ports": [
+     "uuid",
+     "82a13896-437c-4032-bf3c-99eeb3716d9a"
+    ]
+   }
+  }
+ },
+ "_date": 1793197620
+}
