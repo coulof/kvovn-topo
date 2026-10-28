@@ -50,19 +50,20 @@ type ThemeStyles struct {
 	ModalBox          lipgloss.Style
 
 	// k9s-style shell (xray / tables)
-	Border   lipgloss.Style
-	Selected lipgloss.Style
-	Flash    lipgloss.Style
-	Key      lipgloss.Style
-	Label    lipgloss.Style
-	Value    lipgloss.Style
-	Faint    lipgloss.Style
-	Ok       lipgloss.Style
-	Warn     lipgloss.Style
-	Bad      lipgloss.Style
-	Kind     map[string]lipgloss.Style
-	Pill     lipgloss.Style
-	PillAlt  lipgloss.Style
+	Border     lipgloss.Style
+	Selected   lipgloss.Style
+	Flash      lipgloss.Style
+	ChangeMark lipgloss.Style
+	Key        lipgloss.Style
+	Label      lipgloss.Style
+	Value      lipgloss.Style
+	Faint      lipgloss.Style
+	Ok         lipgloss.Style
+	Warn       lipgloss.Style
+	Bad        lipgloss.Style
+	Kind       map[string]lipgloss.Style
+	Pill       lipgloss.Style
+	PillAlt    lipgloss.Style
 }
 
 // Built-in color themes
@@ -198,6 +199,7 @@ func CompileStyles(t Theme) ThemeStyles {
 	s.Border = fg(t.Primary)
 	s.Selected = lipgloss.NewStyle().Bold(true).Foreground(t.TitleFg).Background(t.Primary)
 	s.Flash = lipgloss.NewStyle().Foreground(t.TitleFg).Background(t.Header)
+	s.ChangeMark = fg(t.Header)
 	s.Key = fg(t.PortBadge).Bold(true)
 	s.Label = fg(t.Warning).Bold(true)
 	s.Value = fg(t.Text).Bold(true)

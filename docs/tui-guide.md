@@ -230,7 +230,7 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 **Keys:** keep a view open, with the header showing `● live`.
 
-- Each change on the daemon's event stream refetches only what changed. Changed rows flash for 3 s, and `5` (Changes) keeps the list: `r812 LSP vm-2… broken → ok`.
+- Each change on the daemon's event stream refetches only what changed. Changed rows flash for 3 s, then keep a `▌` mark in the gutter for 15 s (`--flash`, `0` turns it off), and `5` (Changes) keeps the list: `r812 LSP vm-2… broken → ok`.
 - A migrating VM's NIC moves from one chassis to another. With the diagnostics modal open on it, the modal warns `moved: hv-01 → hv-02` and re-targets the new node.
 - `L` pauses and resumes the live updates; `r` reloads everything.
 
@@ -351,7 +351,7 @@ In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes 
 - **Live updates:** the TUI subscribes to `/events` (SSE).
   - Each event refetches the L3 graph and only the switches whose ports changed. Unknown IDs fall back to all switches.
   - If the stream breaks, it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE. Through Rancher's proxy the stream may be buffered: the header then shows `◌ polling`, and updates arrive every 10 s instead of instantly.
-  - Rows whose content changed flash for 3 s.
+  - Rows whose content changed flash for 3 s, then keep a `▌` mark until 15 s (`--flash 30s` to keep it longer). The mark also shows on the selected row.
   - `L` pauses/resumes; `r` forces a full reload.
 - **Ports are fetched completely:** L2 pages (200 ports each) are followed until the last one.
 

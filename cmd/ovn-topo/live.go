@@ -88,8 +88,16 @@ func readSSE(s *sseStream) tea.Cmd {
 
 func pollTick() tea.Cmd { return tea.Tick(pollEvery, func(time.Time) tea.Msg { return pollTickMsg{} }) }
 
-func flashTick() tea.Cmd {
-	return tea.Tick(flashFor, func(time.Time) tea.Msg { return flashTickMsg{} })
+// flashTick repaints when the solid highlight ends and again when the mark
+// expires.
+func flashTick(flashFor time.Duration) tea.Cmd {
+	tick := func(d time.Duration) tea.Cmd {
+		return tea.Tick(d, func(time.Time) tea.Msg { return flashTickMsg{} })
+	}
+	if flashFor <= flashSolid {
+		return tick(flashFor)
+	}
+	return tea.Batch(tick(flashSolid), tick(flashFor))
 }
 
 func (m model) updateLive(msg tea.Msg) (model, tea.Cmd) {
@@ -131,6 +139,9 @@ func (m *model) markChanged(next *xtree) {
 	}
 	if m.graphResp.Revision > m.baseRevision {
 		m.recordChanges(next, m.graphResp.Revision)
+	}
+	if m.flashFor <= 0 {
+		return // --flash 0: the Changes view still records them
 	}
 	now := time.Now()
 	hit := false

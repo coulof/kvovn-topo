@@ -16,9 +16,24 @@ const (
 	scrHelp
 )
 
-const flashFor = 3 * time.Second
+// A changed row is painted solid for flashSolid, then keeps a ▌ mark in its
+// gutter until the model's flashFor (--flash) runs out.
+const (
+	flashSolid      = 3 * time.Second
+	defaultFlashFor = 15 * time.Second
+)
 
 func (m model) w() int { return m.width }
+
+// changeAge is how long ago id changed, if that is still within flashFor.
+func (m model) changeAge(id string) (time.Duration, bool) {
+	t, ok := m.changed[id]
+	if !ok {
+		return 0, false
+	}
+	age := time.Since(t)
+	return age, age < m.flashFor
+}
 
 func (m model) headerH() int {
 	if m.height < 18 {
@@ -295,16 +310,25 @@ func (m model) treeView() []string {
 			line = " " + st.Faint.Render(r.prefix) + fold + g + m.kind(r.n) + " " + name + "  " +
 				st.MutedText.Render(summary) + " " + m.badge(r.n)
 		}
-		if t, ok := m.changed[r.n.id]; ok && time.Since(t) < flashFor {
-			line = solid(line, inner, st.Flash)
+		// A recent change keeps a gutter mark, also under the cursor.
+		age, changed := m.changeAge(r.n.id)
+		mark, w := changed && (i == m.cursor || age >= flashSolid), inner
+		if mark {
+			line, w = strings.TrimPrefix(line, " "), inner-1
 		}
-		if i == m.cursor {
-			line = solid(line, inner, st.Selected)
+		switch {
+		case i == m.cursor:
+			line = solid(line, w, st.Selected)
+		case changed && age < flashSolid:
+			line = solid(line, w, st.Flash)
+		}
+		if mark {
+			line = st.ChangeMark.Render("▌") + line
 		}
 		body = append(body, line)
 	}
 	if len(m.rows) == 0 {
-		msg := "   nothing to show in this xray yet"
+		msg := "   nothing to show in this view yet"
 		if m.filter != "" {
 			msg = "   nothing matches “" + m.filter + "”  (esc clears the filter)"
 		} else if m.mode == modeChassis {

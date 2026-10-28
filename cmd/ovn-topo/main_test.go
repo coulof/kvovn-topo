@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -627,6 +629,46 @@ func TestLiveUpdatesFlashChangedRows(t *testing.T) {
 	}
 	if p := m.tree.byID["lsp:lsp-unbound-uuid"]; p.health != hOK {
 		t.Errorf("expected the port to be bound after the update")
+	}
+}
+
+// TestChangedRowMark: a changed row is solid for flashSolid, then keeps a
+// gutter mark until flashFor; the mark also shows under the cursor.
+func TestChangedRowMark(t *testing.T) {
+	m := loaded(t, 140, 40, false)
+	const id = "lr:lr-default-uuid"
+	i := rowIndex(m, kLR, "ovn_cluster", false)
+	if i < 0 {
+		t.Fatal("router row not found")
+	}
+	routerRow := regexp.MustCompile(`LR +ovn_cluster`)
+	line := func(m model) string {
+		for _, l := range m.treeView() {
+			if tree, _, _ := strings.Cut(l, "││"); routerRow.MatchString(tree) {
+				return tree
+			}
+		}
+		t.Fatal("router line not rendered")
+		return ""
+	}
+	m.cursor = (i + 1) % len(m.rows)
+	for _, c := range []struct {
+		age  time.Duration
+		mark bool
+	}{{time.Second, false}, {8 * time.Second, true}, {20 * time.Second, false}} {
+		m.changed[id] = time.Now().Add(-c.age)
+		if got := strings.HasPrefix(line(m), "│▌"); got != c.mark {
+			t.Errorf("changed %s ago: mark=%v, want %v: %q", c.age, got, c.mark, line(m))
+		}
+	}
+	m.cursor = i
+	m.changed[id] = time.Now().Add(-time.Second)
+	if !strings.HasPrefix(line(m), "│▌") {
+		t.Errorf("the selected row must keep the change mark: %q", line(m))
+	}
+	m.flashFor = 0
+	if strings.HasPrefix(line(m), "│▌") {
+		t.Errorf("--flash 0 must not mark rows")
 	}
 }
 

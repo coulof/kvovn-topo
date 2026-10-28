@@ -99,6 +99,7 @@ type model struct {
 	flashAt       time.Time
 	flashErr      bool
 	changed       map[string]time.Time
+	flashFor      time.Duration // --flash: how long a changed row stays marked
 	needFlashTick bool
 	live          liveState
 	livePaused    bool
@@ -213,6 +214,7 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kube 
 		expanded:         make(map[string]bool),
 		touched:          make(map[string]bool),
 		changed:          make(map[string]time.Time),
+		flashFor:         defaultFlashFor,
 		pinspect:         true,
 		nodeDetails:      make(map[string]*api.NodeDetail),
 		nodeErrs:         make(map[string]error),
@@ -265,7 +267,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	mm := res.(model)
 	if mm.needFlashTick {
 		mm.needFlashTick = false
-		cmd = tea.Batch(cmd, flashTick())
+		cmd = tea.Batch(cmd, flashTick(mm.flashFor))
 	}
 	// If details pane is visible and selected object is an LR whose detail isn't loaded, fetch it
 	if detailCmd := mm.lazyFetchSelectedDetailCmd(); detailCmd != nil {
@@ -401,7 +403,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case flashTickMsg:
 		for id, t := range m.changed {
-			if time.Since(t) >= flashFor {
+			if time.Since(t) >= m.flashFor {
 				delete(m.changed, id)
 			}
 		}
@@ -530,6 +532,7 @@ func main() {
 	var viewName string
 	var focusID string
 	var zone string
+	var flashFor time.Duration
 
 	var kubeContext, namespace, service, port string
 	flag.StringVar(&daemonURL, "daemon-url", "", "ovn-topologyd API URL, e.g. http://127.0.0.1:8080/api/v1 (default: the in-cluster daemon through the Kubernetes service proxy)")
@@ -546,6 +549,11 @@ func main() {
 	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
 	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
 	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
+	flashDefault := defaultFlashFor
+	if d, err := time.ParseDuration(os.Getenv("OVN_TOPO_FLASH")); err == nil {
+		flashDefault = d
+	}
+	flag.DurationVar(&flashFor, "flash", flashDefault, "How long a changed row stays highlighted: solid for 3s, then a ▌ mark; 0 turns it off (env OVN_TOPO_FLASH)")
 	flag.StringVar(&zone, "zone", "", "With --diag: live view of one ovn-kubernetes interconnect zone (node) through an exec relay, e.g. OpenShift; \"list\" prints the zones")
 
 	// "ovn-topo mcp": the MCP server has its own flags and never starts the TUI.
@@ -626,6 +634,7 @@ func main() {
 
 	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
+	m.flashFor = flashFor
 	m.zone = firstNonEmpty(zone, zoneOf(fixtureDir))
 	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext}
 	if raw, err := loader.RawConfig(); err == nil {
