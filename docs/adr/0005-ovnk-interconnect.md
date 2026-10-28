@@ -43,6 +43,24 @@ Both belong to the ADR-0004 adapter.
 
 ## Decision
 
+```mermaid
+flowchart LR
+  subgraph node["Each node: DaemonSet ovn-topology-zone"]
+    sock["/var/run/ovn-ic<br/>ovn{nb,sb}_db.sock<br/>read-only hostPath mount"]
+    col["zone collector<br/>libovsdb monitors, no graph logic"]
+    sock --> col
+  end
+  col -->|"raw rows: snapshot + deltas<br/>mTLS"| merge
+  subgraph deploy["Deployment ovn-topologyd"]
+    merge["merge (flavor adapter)<br/>replicated objects keyed by name<br/>zone-local IDs type:zone/uuid<br/>remote tstor-node → owning zone"]
+    api["graph, API, SSE, history"]
+    merge --> api
+  end
+  api -->|"service proxy"| tui["ovn-topo"] & mcp["ovn-topo mcp"]
+```
+
+The collector is the only privileged part (root, hostPath, SCC), and the sockets it reads accept writes. The current per-zone TUI mode is drawn in the [README](../../README.md#openshift-one-node-at-a-time).
+
 1. **Option (a): zone collectors plus a merger in the daemon.**
    - A DaemonSet `ovn-topology-zone` runs one collector per node. It reads the local NB/SB sockets with libovsdb monitors and serves the zone's raw rows to the daemon on the pod network, protected by mTLS between the daemon and its collectors.
    - The daemon stays a single Deployment and owns the merged graph, the API, SSE and history.

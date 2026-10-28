@@ -74,7 +74,34 @@ With `--diag`, `x` opens diagnostics on the selection: `ovn-trace`, tcpdump, con
 
 ### OpenShift: one node at a time
 
-OpenShift runs ovn-kubernetes in interconnect mode: one NB/SB per node and no central database, so there is no daemon yet ([ADR-0005](docs/adr/0005-ovnk-interconnect.md)). The TUI works per node, called a zone:
+OpenShift runs ovn-kubernetes in interconnect mode: one NB/SB per node and no central database, so there is no daemon yet. The TUI works per node, called a zone:
+
+```mermaid
+flowchart LR
+  subgraph ws["Workstation"]
+    topo["ovn-topo --diag --zone node-a"]
+    cap["hack/capture-fixtures.sh --flavor ovnk"]
+    fx[("zone-node-b/ capture")]
+  end
+  subgraph ocp["OpenShift: openshift-ovn-kubernetes"]
+    subgraph a["node-a: ovnkube-node (zone node-a)"]
+      nbA["nbdb<br/>ovnnb_db.sock"]
+      sbA["sbdb<br/>ovnsb_db.sock"]
+      ctlA["ovn-controller"]
+    end
+    subgraph b["node-b: ovnkube-node (zone node-b)"]
+      dbB["nbdb / sbdb"]
+    end
+    a <-.->|"transit_switch"| b
+  end
+  topo -->|"pods/exec + socat (T1)<br/>libovsdb monitors"| nbA & sbA
+  topo -.->|"x diagnostics"| ctlA
+  cap -->|"ovsdb-client select"| dbB
+  cap --> fx
+  fx -->|"--fixture-dir"| topo
+```
+
+Each zone's databases listen on root-owned unix sockets inside its `ovnkube-node` pod, with no Service. `ovn-topo` reads one zone at a time: live through an exec relay, with nothing deployed in the cluster, or offline from a read-only capture. Traffic to other nodes stops at `transit_switch`. The cluster-wide design, per-node collectors merged by the daemon, is proposed in [ADR-0005](docs/adr/0005-ovnk-interconnect.md#decision).
 
 ```bash
 ovn-topo --diag --zone list       # the zones (nodes)
