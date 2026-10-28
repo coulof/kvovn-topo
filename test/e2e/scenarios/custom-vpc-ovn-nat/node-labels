@@ -1,0 +1,2 @@
+# The centralized external gateway node (ovn-external-gw-config).
+${LAB_NAME}-agent1 ovn.kubernetes.io/external-gw=true
