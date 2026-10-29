@@ -22,14 +22,13 @@
 Install the chart once on each downstream cluster that runs Kube-OVN, in the namespace of the OVN databases:
 
 ```bash
-helm repo add coulof https://coulof.github.io/kvovn-topo
-helm install kvovn-topo coulof/kvovn-topo --namespace kube-system
+helm install kvovn-topo oci://ghcr.io/coulof/charts/kvovn-topo --namespace kube-system
 ```
 
 The defaults point at the Kube-OVN Services `ovn-nb:6641` / `ovn-sb:6642` in `kube-system`. That is the layout of both upstream Kube-OVN on RKE2 and the Harvester Kube-OVN addon (ROADMAP Q3). If your OVN databases live elsewhere or use TLS, override the defaults:
 
 ```bash
-helm install kvovn-topo coulof/kvovn-topo --namespace kube-system \
+helm install kvovn-topo oci://ghcr.io/coulof/charts/kvovn-topo --namespace kube-system \
   --set ovn.nbEndpoints="ssl:ovn-nb.kube-system.svc.cluster.local:6641" \
   --set ovn.sbEndpoints="ssl:ovn-sb.kube-system.svc.cluster.local:6642" \
   --set ovn.tls.enabled=true --set ovn.tls.secretName=<secret with tls.crt, tls.key, ca.crt>

@@ -13,7 +13,7 @@
 
 ---
 
-kvovn-topo shows how the OVN logical network of a Kubernetes cluster is wired: VPCs, routers, switches, ports, chassis and the pods and VMs behind them. It reads the OVN Northbound and Southbound databases directly, joins them into one live graph, and never writes anything.
+kvovn-topo shows how the OVN logical network of a Kubernetes cluster is wired: VPCs, routers, switches, ports, chassis and the pods and VMs behind them. It reads the OVN Northbound and Southbound databases directly, and joins them into one live graph.
 
 It consists of:
 - **`kvovn-topod`**: a Go daemon that monitors the OVN NB and SB databases, joins them into an in-memory graph, and serves it over HTTP JSON and SSE.
@@ -32,7 +32,7 @@ It consists of:
 - 🗺️ **Live joined graph**: NB and SB rows joined into VPCs, routers, switches, ports, chassis, NAT, routes, policies and load balancers.
 - ⚡ **Push updates**: OVSDB monitors in, Server-Sent Events out; no polling.
 - 🖥️ **k9s-style TUI**: tree views, relations you can follow, a details pane that explains each object, problems and changes.
-- 🩺 **Opt-in diagnostics** (`--diag`): `ovn-trace`, tcpdump, conntrack, OVS ports and bridges, `ovn-controller` logs on the right node.
+- 🩺 **Opt-in, contextual diagnostics** (`--diag`): `ovn-trace`, tcpdump, conntrack, OVS ports and bridges, `ovn-controller` logs, always run for the selected object on the node that hosts it.
 - 🤖 **MCP server**: AI agents can search and read the topology with Tier 0 tools.
 - 🧩 **Kube-OVN, Harvester and KubeVirt aware**: pods and VMs mapped to their ports, chassis mapped to nodes.
 - 🔴 **OpenShift / ovn-kubernetes**: one node (zone) at a time, live or from a capture.
@@ -64,7 +64,7 @@ flowchart TB
   apiserver -->|"service proxy"| api
   tui["kvovn-topo<br/>(TUI)"] -->|"kubeconfig<br/>(Rancher or :6443)"| apiserver
   mcp["kvovn-topo mcp<br/>(AI agents, stdio)"] -->|"kubeconfig"| apiserver
-  ui["Rancher UI Extension<br/>(paused)"] -.-> apiserver
+  ui["Rancher UI Extension<br/>(roadmap)"] -.-> apiserver
 ```
 
 The API server authenticates the kubeconfig user and checks `services/proxy` RBAC on `kube-system/kvovn-topod`. The security design is in the [API & Security Reference](docs/api.md).
@@ -76,15 +76,25 @@ The API server authenticates the kubeconfig user and checks `services/proxy` RBA
 ### 1. In-cluster daemon (`kvovn-topod`), RKE2 and Harvester
 
 ```bash
-helm repo add coulof https://coulof.github.io/kvovn-topo
-helm install kvovn-topo coulof/kvovn-topo --namespace kube-system
+helm install kvovn-topo oci://ghcr.io/coulof/charts/kvovn-topo --namespace kube-system
 ```
 
 TLS, endpoints and viewer RBAC are in the [chart README](charts/kvovn-topo/README.md#installation).
 
 ### 2. Client (`kvovn-topo`)
 
-Download the binary for your platform from [GitHub Releases](https://github.com/coulof/kvovn-topo/releases) (Linux amd64, macOS arm64, Windows amd64) and put it on your `PATH`.
+Linux (amd64) and macOS (arm64), into `~/.local/bin`:
+
+```bash
+OS=linux ARCH=amd64          # macOS: OS=darwin ARCH=arm64
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/coulof/kvovn-topo/releases/latest)
+VERSION=${VERSION##*/v}
+curl -fsSL "https://github.com/coulof/kvovn-topo/releases/download/v${VERSION}/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz" \
+  | tar -xz "kvovn-topo_${OS}_${ARCH}"
+mkdir -p ~/.local/bin && install -m 0755 "kvovn-topo_${OS}_${ARCH}" ~/.local/bin/kvovn-topo
+```
+
+Windows (amd64): download `kvovn-topo_<version>_windows_amd64.zip` from [GitHub Releases](https://github.com/coulof/kvovn-topo/releases) and put `kvovn-topo.exe` on your `PATH`.
 
 ---
 
