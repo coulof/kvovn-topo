@@ -60,10 +60,12 @@ jobs:
           for TARGET in linux/amd64 darwin/arm64; do
             OS=${TARGET%/*} ARCH=${TARGET#*/}
             echo "Building for ${OS}/${ARCH}..."
-            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/kvovn-topod_${OS}_${ARCH} ./cmd/kvovn-topod
-            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/kvovn-topo_${OS}_${ARCH} ./cmd/kvovn-topo
+            OUT=dist/${OS}_${ARCH}
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o ${OUT}/kvovn-topod ./cmd/kvovn-topod
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o ${OUT}/kvovn-topo ./cmd/kvovn-topo
 
-            tar -czf dist/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz -C dist kvovn-topod_${OS}_${ARCH} kvovn-topo_${OS}_${ARCH}
+            # Plain names inside the archive: `tar -xz kvovn-topo` gives the TUI.
+            tar -czf dist/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz -C ${OUT} kvovn-topod kvovn-topo
           done
 
           # Windows: the TUI only (the daemon targets in-cluster Linux).
