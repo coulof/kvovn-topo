@@ -83,15 +83,14 @@ TLS, endpoints and viewer RBAC are in the [chart README](charts/kvovn-topo/READM
 
 ### 2. Client (`kvovn-topo`)
 
-Linux (amd64) and macOS (arm64), into `~/.local/bin`:
+Linux (amd64) and macOS (arm64):
 
 ```bash
-OS=linux ARCH=amd64          # macOS: OS=darwin ARCH=arm64
-VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/coulof/kvovn-topo/releases/latest)
-VERSION=${VERSION##*/v}
-curl -fsSL "https://github.com/coulof/kvovn-topo/releases/download/v${VERSION}/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz" \
-  | tar -xz "kvovn-topo_${OS}_${ARCH}"
-mkdir -p ~/.local/bin && install -m 0755 "kvovn-topo_${OS}_${ARCH}" ~/.local/bin/kvovn-topo
+VERSION=0.1.0
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+curl -fsSL https://github.com/coulof/kvovn-topo/releases/download/v${VERSION}/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz | tar -xz kvovn-topo
+sudo install kvovn-topo /usr/local/bin/
 ```
 
 Windows (amd64): download `kvovn-topo_<version>_windows_amd64.zip` from [GitHub Releases](https://github.com/coulof/kvovn-topo/releases) and put `kvovn-topo.exe` on your `PATH`.
