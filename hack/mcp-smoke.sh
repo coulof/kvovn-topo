@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Smoke test for `ovn-topo mcp`: runs one stdio session (initialize, tools/list,
+# Smoke test for `kvovn-topo mcp`: runs one stdio session (initialize, tools/list,
 # one call per tool) and prints each result's summary. Arguments are passed to
-# `ovn-topo mcp` and pick the backend, e.g.:
+# `kvovn-topo mcp` and pick the backend, e.g.:
 #   hack/mcp-smoke.sh --fixture-dir testdata/scenarios/hv-01-lab
 #   hack/mcp-smoke.sh --daemon-url http://127.0.0.1:8888/api/v1
 # FIND_QUERY (default: kube-ovn's "join" switch) drives the find/get_node calls.
 
-BIN="${BIN:-./bin/ovn-topo}"
+BIN="${BIN:-./bin/kvovn-topo}"
 FIND_QUERY="${FIND_QUERY:-join}"
 TIMEOUT="${TIMEOUT:-30}"
 

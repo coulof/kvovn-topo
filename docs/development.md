@@ -13,7 +13,7 @@ mise install
 make generate    # Regenerate OVSDB models and OpenAPI Go types
 make lint        # Run golangci-lint (enforces forbidigo read-only rules)
 make test        # Run unit tests and golden-file comparisons
-make build       # Build bin/ovn-topologyd and bin/ovn-topo
+make build       # Build bin/kvovn-topod and bin/kvovn-topo
 make image       # Build the container image
 ```
 
@@ -24,7 +24,7 @@ Run `make generate lint test` before submitting. A change to `api/openapi.yaml` 
 A local daemon needs the cluster's NB (`6641`) and SB (`6642`). Kube-OVN's `ovn-central` pods use `hostNetwork` and listen on node IPs, so `kubectl port-forward svc/ovn-nb` fails: a port-forward always connects to `localhost` inside the pod.
 
 ### 1. Set Up the Proxy Relay
-`mise run pf` creates a small relay pod, `kube-system/ovn-topology-proxy`, that forwards 6641/6642 to the `ovn-nb`/`ovn-sb` Services, and port-forwards to it. It is the only thing any task creates in the cluster.
+`mise run pf` creates a small relay pod, `kube-system/kvovn-topo-proxy`, that forwards 6641/6642 to the `ovn-nb`/`ovn-sb` Services, and port-forwards to it. It is the only thing any task creates in the cluster.
 
 ```bash
 # Deploy the proxy relay and forward OVN database ports to localhost
@@ -70,8 +70,8 @@ go test ./... -update
 `make dev-cluster` (`hack/dev-cluster.sh create`) builds k3s with Kube-OVN and Multus in three Lima VMs (one server, two agents) on openSUSE Leap 15.6. Versions are pinned in `hack/lab/lab.env`. It needs `limactl` (rootless, qemu and `/dev/kvm`), about 10 GiB of RAM, and internet access. A build takes about 5 minutes.
 
 ```bash
-hack/dev-cluster.sh create                   # kubeconfig: ~/.kube/ovn-topology-lab.yaml
-export KUBECONFIG=~/.kube/ovn-topology-lab.yaml
+hack/dev-cluster.sh create                   # kubeconfig: ~/.kube/kvovn-topo-lab.yaml
+export KUBECONFIG=~/.kube/kvovn-topo-lab.yaml
 hack/dev-cluster.sh status
 hack/dev-cluster.sh delete
 ```
@@ -83,7 +83,7 @@ Each scenario in `test/e2e/scenarios/<name>/` has its manifests and a README wit
 ```bash
 hack/dev-cluster.sh delete && hack/dev-cluster.sh create
 test/e2e/scenarios/apply.sh vpc-nat-gw        # then run the README's checks
-hack/capture-fixtures.sh vpc-nat-gw --context ovn-topology-lab \
+hack/capture-fixtures.sh vpc-nat-gw --context kvovn-topo-lab \
   --setup "$(sed -n 3p test/e2e/scenarios/vpc-nat-gw/README.md)"
 go test ./pkg/ovsdb ./pkg/mcp -update          # scenario and MCP goldens; review the diff
 ```
@@ -98,9 +98,9 @@ A tag `vX.Y.Z` (or a `-dev` pre-release, which does not move `:latest`) runs `re
 
 | Artifact | Registry Path | Description |
 |---|---|---|
-| **Daemon Image** | `ghcr.io/coulof/ovn-topologyd:X.Y.Z` | `linux/amd64` distroless daemon |
-| **Daemon Chart** | `oci://ghcr.io/coulof/charts/ovn-topology:X.Y.Z` | OCI Helm chart for downstream clusters |
-| **Binaries** | GitHub Releases | Static `ovn-topologyd` + `ovn-topo` archives for Linux (amd64) and macOS (arm64); `ovn-topo` zip for Windows (amd64) |
+| **Daemon Image** | `ghcr.io/coulof/kvovn-topod:X.Y.Z` | `linux/amd64` distroless daemon |
+| **Daemon Chart** | `oci://ghcr.io/coulof/charts/kvovn-topo:X.Y.Z` | OCI Helm chart for downstream clusters |
+| **Binaries** | GitHub Releases | Static `kvovn-topod` + `kvovn-topo` archives for Linux (amd64) and macOS (arm64); `kvovn-topo` zip for Windows (amd64) |
 
 ### Air-Gapped Environments (Hauler)
 

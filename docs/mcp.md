@@ -1,6 +1,6 @@
-# MCP server: `ovn-topo mcp`
+# MCP server: `kvovn-topo mcp`
 
-`ovn-topo mcp` serves the OVN topology to AI agents over the [Model Context Protocol](https://modelcontextprotocol.io) on stdio. The agent can look up objects and their neighbours ("which switch is 10.244.0.10 on, and which chassis is it bound to?") from the same graph the daemon and the TUI use. Design: [ADR-0003](adr/0003-mcp-server.md).
+`kvovn-topo mcp` serves the OVN topology to AI agents over the [Model Context Protocol](https://modelcontextprotocol.io) on stdio. The agent can look up objects and their neighbours ("which switch is 10.244.0.10 on, and which chassis is it bound to?") from the same graph the daemon and the TUI use. Design: [ADR-0003](adr/0003-mcp-server.md).
 
 ## Guarantees
 
@@ -51,20 +51,20 @@ When `truncated` is true, pass `next` back as `cursor` to get the next page. Err
 
 | Mode | Flags | Needs |
 |---|---|---|
-| Daemon via service proxy (default) | None. The Service is discovered on the first tool call: `kube-system/ovn-topologyd` if it exists, else the one Service labelled `app.kubernetes.io/name=ovn-topology` in any namespace (several matches is an error, never a guess). `--namespace`/`--service` pin it and skip discovery; `--port` picks the port (default: the one named `http`). Optional `--kubeconfig`, `--context`. | `get` on `services/proxy` for the daemon Service (same RBAC as the TUI), plus `get` on that Service and `list` on `services` cluster-wide for discovery. Without `list`, pass `--namespace` and `--service`. The chart's `rbac.viewer.create` creates these roles ([chart README](../charts/ovn-topology/README.md#viewer-access)). Shared with the TUI through `pkg/kubeproxy`. |
-| Daemon at a URL | `--daemon-url http://127.0.0.1:8080/api/v1` | Network reach, e.g. `kubectl -n kube-system port-forward svc/ovn-topologyd 8080` |
-| Embedded graph | `--nb tcp:127.0.0.1:6641 --sb tcp:127.0.0.1:6642` (plus `--ovn-cert/--ovn-key/--ovn-ca` for TLS) | Reach to OVSDB. From a laptop use `mise run pf`: it creates the `ovn-topology-proxy` relay pod and port-forwards to it (see the README's *Local daemon development*). A plain `kubectl port-forward svc/ovn-nb` does not work, because the OVN databases listen on the node IP of host-network pods. Clean up with `mise run pf-proxy-remove`. Uses the kubeconfig for node and workload names when it loads. |
+| Daemon via service proxy (default) | None. The Service is discovered on the first tool call: `kube-system/kvovn-topod` if it exists, else the one Service labelled `app.kubernetes.io/name=kvovn-topo` in any namespace (several matches is an error, never a guess). `--namespace`/`--service` pin it and skip discovery; `--port` picks the port (default: the one named `http`). Optional `--kubeconfig`, `--context`. | `get` on `services/proxy` for the daemon Service (same RBAC as the TUI), plus `get` on that Service and `list` on `services` cluster-wide for discovery. Without `list`, pass `--namespace` and `--service`. The chart's `rbac.viewer.create` creates these roles ([chart README](../charts/kvovn-topo/README.md#viewer-access)). Shared with the TUI through `pkg/kubeproxy`. |
+| Daemon at a URL | `--daemon-url http://127.0.0.1:8080/api/v1` | Network reach, e.g. `kubectl -n kube-system port-forward svc/kvovn-topod 8080` |
+| Embedded graph | `--nb tcp:127.0.0.1:6641 --sb tcp:127.0.0.1:6642` (plus `--ovn-cert/--ovn-key/--ovn-ca` for TLS) | Reach to OVSDB. From a laptop use `mise run pf`: it creates the `kvovn-topo-proxy` relay pod and port-forwards to it (see the README's *Local daemon development*). A plain `kubectl port-forward svc/ovn-nb` does not work, because the OVN databases listen on the node IP of host-network pods. Clean up with `mise run pf-proxy-remove`. Uses the kubeconfig for node and workload names when it loads. |
 | Fixture | `--fixture` (dev fixture, run from the repo) or `--fixture-dir testdata/scenarios/<name>` | Nothing. |
 
 Logs go to stderr (`--log-level`, default `info`; `warn` for a quiet client); stdout carries only the protocol. At startup the server logs `mcp server ready on stdio` with the backend, then whether that backend is reachable: for the service proxy, the Service it found and its URL (or why it failed; tool calls retry); for the embedded graph, the OVSDB connection and the first synchronized snapshot. Run by hand in a terminal, the command waits for JSON-RPC on stdin and says so; use an MCP client or `hack/mcp-smoke.sh` instead.
 
 ## Tool setup
 
-Client configuration for OpenCode, Claude Code and agy is in the [README](../README.md#tool-setup). `ovn-topo` must be on your `PATH` (release binary, or `make build` and an absolute path to `bin/ovn-topo`). Pass the flags from [Backends](#backends) after `mcp` to choose another backend.
+Client configuration for OpenCode, Claude Code and agy is in the [README](../README.md#tool-setup). `kvovn-topo` must be on your `PATH` (release binary, or `make build` and an absolute path to `bin/kvovn-topo`). Pass the flags from [Backends](#backends) after `mcp` to choose another backend.
 
 ### Without a cluster
 
-Any client can serve a captured scenario instead: use `ovn-topo mcp --fixture-dir /path/to/ovn-topology/testdata/scenarios/hv-01-lab` as the command.
+Any client can serve a captured scenario instead: use `kvovn-topo mcp --fixture-dir /path/to/kvovn-topo/testdata/scenarios/hv-01-lab` as the command.
 
 ### Check the setup
 

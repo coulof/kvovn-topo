@@ -1,6 +1,6 @@
 # API & Security Reference
 
-The contract is `api/openapi.yaml`. How to reach the API (service-proxy URLs for Rancher and Harvester, viewer RBAC) is in the [chart README](../charts/ovn-topology/README.md#accessing-the-api-harvester-and-rke2).
+The contract is `api/openapi.yaml`. How to reach the API (service-proxy URLs for Rancher and Harvester, viewer RBAC) is in the [chart README](../charts/kvovn-topo/README.md#accessing-the-api-harvester-and-rke2).
 
 ## Security rules
 

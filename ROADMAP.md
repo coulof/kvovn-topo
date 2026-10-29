@@ -1,4 +1,4 @@
-# ROADMAP — ovn-topology
+# ROADMAP — kvovn-topo
 
 This file is the delivery plan for coding agents. Read it together with `AGENTS.md` (rules, layout, conventions) and `docs/adr/` (decisions). Where this file and `AGENTS.md` disagree, `AGENTS.md` wins. Flag the conflict instead of guessing.
 
@@ -25,7 +25,7 @@ This file is the delivery plan for coding agents. Read it together with `AGENTS.
 | M6 | TUI diagnostics: trace, tcpdump, wiring, conntrack, logs | T1 | TUI only | M4 |
 | M7 | Harvester validation + release hardening | — | all | M3, M4 |
 | M8 | Topology history & diff (ADR-0002) | T0 | daemon, TUI, extension | M4 (recorder may start after M1) |
-| M9 | MCP server (T0 tools only) | T0 | AI agents via `ovn-topo mcp` | M5; history tools gated on M8 |
+| M9 | MCP server (T0 tools only) | T0 | AI agents via `kvovn-topo mcp` | M5; history tools gated on M8 |
 | Backlog | ACL hit counters, OVN-IC, metrics overlay, logical flow browser, history archival to S3, segmentation audit report, fleet view | mixed | — | — |
 
 ## Status and tech-debt register (refreshed 2026-10-27)
@@ -43,7 +43,7 @@ Only small debt items closed. The foundation pass is still the next work.
 | M1 | 0/5 | API and goldens on one hand-written fixture, two lab captures and four scenario captures. Live data path fixed 2026-10-21. Layer 2/3 tests, scale test and API freeze missing. |
 | M2 | 6/6 | Done. Scenario navigation checked on the lab, not on scenario fixtures. |
 | M3 | 2/3 | Paused. No live updates and no API-version banner in the extension. |
-| M4, M5 | 0 | Not started. An interim NAT-gateway "Outside OVN" view lives in the TUI (`cmd/ovn-topo/flavor.go`). |
+| M4, M5 | 0 | Not started. An interim NAT-gateway "Outside OVN" view lives in the TUI (`cmd/kvovn-topo/flavor.go`). |
 | M6 | 5/5 | Done out of order; verified by hand on `hv-01`. Detrace follow-up open. |
 | M7, M8 | 0 | Not started. Two pre-releases (v0.1.0-dev, v0.1.1-dev) ran `release.yml` end to end. |
 | M9 | 2/5 | Started out of order (ADR-0003). `find`, `get_graph`, `get_node`, `list_chassis` on both backends; the rest waits for M4/M5/M8 data. |
@@ -55,11 +55,11 @@ Only small debt items closed. The foundation pass is still the next work.
 | B2 | Layers 2–5 absent: `test/e2e/scenarios/` holds the scenario manifests only, applied by hand on the local lab. | M0 / M1 / M7 |
 | B3 | No scale test. `/graph` rebuilds the whole view per request, with no per-revision cache. | M1 |
 | B5 | Extension has one unit test (`layout.test.ts`). | M3 (paused) |
-| E1 | `cmd/ovn-topo/diag_ui.go`: one 1.4k-line modal with flag-driven state. | before M5 |
+| E1 | `cmd/kvovn-topo/diag_ui.go`: one 1.4k-line modal with flag-driven state. | before M5 |
 | E3 | `ovn-trace` and OVS output parsed with regexes (`pkg/diag/ovs.go` grew with `92d27f9`); `ofproto/trace` and `ovn-detrace` would add two more formats. | M5 / M6 detrace follow-up |
 | F1 | Versions are `0.x-dev` pre-releases; no stable release yet. | M7 |
-| N1 | The `services/proxy` resourceName form in `charts/ovn-topology/templates/viewer-rbac.yaml` is unverified (both the bare Service name and `http:<svc>:http` are listed). | Foundation pass step 2 |
-| N2 | The service-proxy path (TUI and `ovn-topo mcp` default, `mise run test-live`) is tested only against a fake API server (`cmd/ovn-topo/proxy_test.go`), never through Rancher or the Harvester VIP. | Foundation pass step 2 |
+| N1 | The `services/proxy` resourceName form in `charts/kvovn-topo/templates/viewer-rbac.yaml` is unverified (both the bare Service name and `http:<svc>:http` are listed). | Foundation pass step 2 |
+| N2 | The service-proxy path (TUI and `kvovn-topo mcp` default, `mise run test-live`) is tested only against a fake API server (`cmd/kvovn-topo/proxy_test.go`), never through Rancher or the Harvester VIP. | Foundation pass step 2 |
 | N3 | ADR-0003 (MCP server) is still `Proposed`. | Foundation pass step 2 |
 
 Closed since 2026-10-21: B4 (deterministic codegen: libovsdb's `MaxLength()` overflows on amd64 only; `hack/normalize-models.py` and a CI diff check), C1 (`forbidigo` on client-go `Patch`/`Apply*`/`Evict*`), C2 (`depguard` for `pkg/mcp`), C3 (schemas were vendored all along), A6 (SSE keepalive), E2 (one chassis → node resolver), F2 (CORS removed).
@@ -69,7 +69,7 @@ Closed since 2026-10-21: B4 (deterministic codegen: libovsdb's `MaxLength()` ove
 One PR per step, in this order. Steps 1, 3 and 4 are done.
 
 1. ~~Register refresh.~~
-2. **Lab checks on hv-01 (N1–N3).** Deploy the latest image; run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP. Bind a test user to `ovn-topologyd-viewer` only and record which resourceName form works. Accept or amend ADR-0003.
+2. **Lab checks on hv-01 (N1–N3).** Deploy the latest image; run `mise run test-live`, `mcp-live` and `tui` through Rancher and through the Harvester VIP. Bind a test user to `kvovn-topod-viewer` only and record which resourceName form works. Accept or amend ADR-0003.
 3. ~~B4: deterministic codegen.~~
 4. ~~B1: scenario fixtures.~~ OVN models pinned to 25.03.3 (Q4). `overlay-default`, `custom-vpc-ovn-nat`, `vpc-nat-gw` and `vpc-nat-gw-asym` captured from the local lab, with scenario and MCP goldens (2026-10-28).
 5. **B2: layer 2 tests.** A 3-member raft `ovsdb-server` in CI with leader kill → reconnect → revision advances (M1 DoD 2), then the layer 3 `overlay-default` e2e in CI (M1 DoD 4). The local lab is k3s in Lima VMs; the CI runner (kind, or k3s on a runner with KVM) is still to choose.
@@ -92,9 +92,9 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
   - `oapi-codegen` (Go) and `openapi-typescript` (UI) from `api/openapi.yaml`.
 - golangci-lint:
   - `forbidigo` banning libovsdb write calls (`Create`, `Update`, `Mutate`, `Delete`, write `Transact`).
-  - `depguard` forbidding `pkg/diag` imports from `cmd/ovn-topologyd`, `pkg/graph`, `pkg/server`.
-- CI check script `hack/check-deps.sh`: `go list -deps ./cmd/ovn-topologyd` must not contain `pkg/diag` or `k8s.io/client-go/tools/remotecommand`.
-- `ui/` scaffold per `AGENTS.md` §7 (dev app `ovn-topology-ui`, package `ovn-topology`), building an empty cluster-level product page.
+  - `depguard` forbidding `pkg/diag` imports from `cmd/kvovn-topod`, `pkg/graph`, `pkg/server`.
+- CI check script `hack/check-deps.sh`: `go list -deps ./cmd/kvovn-topod` must not contain `pkg/diag` or `k8s.io/client-go/tools/remotecommand`.
+- `ui/` scaffold per `AGENTS.md` §7 (dev app `kvovn-topo-ui`, package `kvovn-topo`), building an empty cluster-level product page.
 - `make dev-cluster`: k3s + Kube-OVN + Multus at pinned versions in three local Lima VMs (`hack/dev-cluster.sh`, `hack/lab/`). Changed from kind on 2026-10-28: real VM kernels for OVS, closer to RKE2/Harvester.
 - `hack/capture-fixtures.sh <scenario>`: dumps the modelled NB and SB tables with `ovsdb-client query` into `testdata/scenarios/<scenario>/ovn-{nb,sb}.json`, plus the trimmed Kubernetes identity and `meta.json` (`--setup`).
 - CI workflows skeleton: `go.yml`, `ui.yml`, `e2e-pr.yml`, `e2e-nightly.yml`, `release.yml` (dry-run), all path-filtered.
@@ -129,7 +129,7 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
   - `/graph`, `/node/{id}`, `/chassis`, `/version`, `/healthz`, `/readyz`, `/events` (SSE).
   - ETag / `If-None-Match` on `revision`.
 - K8s reads: `Node` only in this milestone.
-- `charts/ovn-topology`:
+- `charts/kvovn-topo`:
   - Daemon chart: distroless, non-root, read-only rootfs.
   - Minimal RBAC per `AGENTS.md` §4.
   - README stating plainly that OVSDB NB has no read-only role.
@@ -155,7 +155,7 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
 **Goal:** a usable TUI that proves the graph model end to end. It's cheaper to iterate here than in the extension.
 
 **Scope**
-- `cmd/ovn-topo`, Bubble Tea (or a better-suited library if justified in the PR).
+- `cmd/kvovn-topo`, Bubble Tea (or a better-suited library if justified in the PR).
   - Navigation tree (VPC → LR → LS → LSP; chassis) and a detail view, with L2, L3 and chassis layers (since replaced by xray trees, see the follow-up).
   - NAT, routes and policies visible in the LR detail.
 - Data source: either embedded `pkg/graph` against OVSDB via port-forward, or a running daemon's API. Same view code either way.
@@ -166,7 +166,7 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
   - Node join ports (`node-<name>`) → k8s Node.
   - Adds read-only K8s watches on Pod, VMI, VM, NAD (as ADR-0001 allows). Missing CRDs (no KubeVirt) are handled silently.
 - On a port: workload name and kind, namespace, node, chassis and host veth (`<hash>_h`).
-- Machine output: `ovn-topo graph --view l3 -o json|yaml` (same shape as the API).
+- Machine output: `kvovn-topo graph --view l3 -o json|yaml` (same shape as the API).
 - `docs/tui-guide.md`: how to read each screen, organised by use case, with TUI/Harvester screenshot pairs.
 
 **Out of scope:** exec-based anything (M6), ACL/LB views (M4).
@@ -239,7 +239,7 @@ Then M4 prep, then M4, which unlocks the MCP tools `resolve_ip`, `effective_acls
    - duplicate MAC/IP
    - tunnel-key collisions
    - **asymmetric return around an opaque hop** (ADR-0004 decision 5): an LR with an opaque hop on one of its switches, a different egress, and no `src-ip` route or reroute policy sending that switch to the hop's LAN IP. A warning, labelled heuristic. Origin: the 2026-10 `vpc-onewater` / `one-water-nat` incident on `hv-01`.
-7. **Opaque hops (ADR-0004).** The `OpaqueHop` node type, for points where OVN hands traffic to something it cannot see. First case: the Kube-OVN VPC NAT gateway pod, joined to its LAN/WAN LSPs, with `inspect: iptables-nat`. It replaces the "not OVN NAT" footnote in the TUI (`cmd/ovn-topo/views.go`) with an object. *Interim (2026-10-27):* the TUI details pane already shows the NAT gateway as an "Outside OVN" section. It is detected client-side by pod name in `cmd/ovn-topo/flavor.go`, together with the Kube-OVN vocabulary, `← via` provenance and Inspect commands. This moves behind the M4-prep adapter; Q12 (the gateway pod's labels) is still open.
+7. **Opaque hops (ADR-0004).** The `OpaqueHop` node type, for points where OVN hands traffic to something it cannot see. First case: the Kube-OVN VPC NAT gateway pod, joined to its LAN/WAN LSPs, with `inspect: iptables-nat`. It replaces the "not OVN NAT" footnote in the TUI (`cmd/kvovn-topo/views.go`) with an object. *Interim (2026-10-27):* the TUI details pane already shows the NAT gateway as an "Outside OVN" section. It is detected client-side by pod name in `cmd/kvovn-topo/flavor.go`, together with the Kube-OVN vocabulary, `← via` provenance and Inspect commands. This moves behind the M4-prep adapter; Q12 (the gateway pod's labels) is still open.
 
 **M4 prep (2026-10-27, ADR-0004): CNI adapter boundary.** Before item 1, move the Kube-OVN conventions in `pkg/graph` behind a flavor adapter interface, with Kube-OVN as the only implementation:
 - identity from `external_ids`;
@@ -315,7 +315,7 @@ Extension: add the L2 and Chassis views here.
 - [x] Automated regression tests prevent view and pane index mismatches (now `TestDiagTargetIsAlwaysTheSelection` and the executor-level tests, see the follow-up below).
 - [x] Every `pkg/diag` command has a unit test asserting the exact argv produced from a fixture object (no injection possible from names containing spaces or quotes).
 
-**Follow-up (2026-10-21): diagnostic target audit.** *Done.* Diagnostics often acted on something other than the selection: the target was re-derived from the cursor on every redraw, through helpers that fell back to the first pod, the first node, `ovn0` or `br-int`. `cmd/ovn-topo/diagtarget.go` now captures one immutable target when `x` is pressed (port, datapath, IP/MAC, node and how it was found). Actions that can't be derived from the selection are disabled with the reason, the interface lookup returns `ErrIfaceNotFound` instead of guessing, and the target is revalidated on live updates. `TestDiagTargetIsAlwaysTheSelection` checks every xray row, and the suite is mutation-checked.
+**Follow-up (2026-10-21): diagnostic target audit.** *Done.* Diagnostics often acted on something other than the selection: the target was re-derived from the cursor on every redraw, through helpers that fell back to the first pod, the first node, `ovn0` or `br-int`. `cmd/kvovn-topo/diagtarget.go` now captures one immutable target when `x` is pressed (port, datapath, IP/MAC, node and how it was found). Actions that can't be derived from the selection are disabled with the reason, the interface lookup returns `ErrIfaceNotFound` instead of guessing, and the target is revalidated on live updates. `TestDiagTargetIsAlwaysTheSelection` checks every xray row, and the suite is mutation-checked.
 
 **Follow-up (2026-10-27, ADR-0004): opaque-hop inspection.** *Partly done.* The details pane's `!` runs `kubectl exec <vpc-nat-gw pod> -- iptables-save -t nat` locally, suspended (ADR-0001 amendment, `27dac63`). Still open, once M4 item 7 exists: the same inspection inside the diag modal through `pkg/diag` (`iptables-save -t nat -c`, legacy or nft variant, and `ip -4 -o addr` for the EIPs). The ovn-kubernetes `nft-ruleset` kind waits for an ovn-kubernetes adapter.
 
@@ -346,11 +346,11 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   - Self-hosted runner against the lab Harvester (dedicated namespace/VPC, created and destroyed per run).
   - Then ephemeral nested Harvester (single node, Kube-OVN addon) nightly.
 - Validate endpoint autodetection, TLS and namespaces for Harvester's Kube-OVN addon. Record the findings in § Open questions and the chart README.
-- **Access on Harvester (decision 2026-10-25):** the daemon is never exposed through kube-vip, an IP pool or ingress-nginx. The TUI and `ovn-topo mcp` reach it through the API-server service proxy (Rancher `/k8s/clusters/<id>` or the Harvester VIP `:6443`), via `pkg/kubeproxy`. The chart's optional `rbac.viewer` roles grant access. Lab item: check which `services/proxy` resourceName form the authorizer matches (bare name or `http:<svc>:http`), then keep only that one in `templates/viewer-rbac.yaml`. A browser hostname (Ingress plus kube-rbac-proxy) would need its own ADR.
+- **Access on Harvester (decision 2026-10-25):** the daemon is never exposed through kube-vip, an IP pool or ingress-nginx. The TUI and `kvovn-topo mcp` reach it through the API-server service proxy (Rancher `/k8s/clusters/<id>` or the Harvester VIP `:6443`), via `pkg/kubeproxy`. The chart's optional `rbac.viewer` roles grant access. Lab item: check which `services/proxy` resourceName form the authorizer matches (bare name or `http:<svc>:http`), then keep only that one in `templates/viewer-rbac.yaml`. A browser hostname (Ingress plus kube-rbac-proxy) would need its own ADR.
 - Same `expected.yaml` scenario assertions reused on Harvester (VM-centric scenarios: VM with 2 NICs, VM live migration, VPC + FIP to a VM).
 - Version matrix on release: Kube-OVN current and current-1; Rancher latest; Harvester current (and previous, on RC only).
 - `release.yml`:
-  - One version bump → `vX.Y.Z`, `ovn-topology-X.Y.Z`, `ovn-topology-ui-X.Y.Z` tags.
+  - One version bump → `vX.Y.Z`, `kvovn-topo-X.Y.Z`, `kvovn-topo-ui-X.Y.Z` tags.
   - Images, charts, ECI, Hauler manifest, SBOM, signed images (cosign).
 
 **DoD**
@@ -393,7 +393,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 - TUI:
   - A change-feed pane, filterable by object or kind, with jump-to-object.
   - `--at <time>` to browse the past, with a visible "HISTORICAL" badge.
-  - `ovn-topo diff --from --to [-o json]`.
+  - `kvovn-topo diff --from --to [-o json]`.
 - Extension:
   - A timeline panel (change feed with gaps drawn as breaks).
   - Time scrubber on the L3 view.
@@ -420,7 +420,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
 **Goal:** let AI agents answer network questions ("why can't vm-a reach vm-b?", "what changed in tenant-1 overnight?") from real data, kvtop-style.
 
 **Decisions (binding for this milestone)**
-- **Transport and host:** `ovn-topo mcp` subcommand over **stdio**, using the user's kubeconfig.
+- **Transport and host:** `kvovn-topo mcp` subcommand over **stdio**, using the user's kubeconfig.
   - **Backend A:** a daemon reached via the Kubernetes service proxy. Full feature set, including history.
   - **Backend B:** embedded `pkg/graph` against OVSDB through a port-forward. No history tools.
 
@@ -520,7 +520,7 @@ Record answers here with evidence (date, link to test run or doc).
 |---|---|---|---|
 | Q1 | Does the Rancher service proxy pass SSE without buffering? | M3 live updates | **Resolved (2026-10-20)**: Reverse proxies may buffer chunked HTTP. Clients must degrade: attempt SSE on `/events` and fall back to polling `/graph` with `If-None-Match`. The TUI does this. **The extension does not consume either yet** (2026-10-21, see the M3 DoD). Whether the Rancher proxy actually buffers has not been measured. |
 | Q2 | Do the Rancher reusable extension workflows run from `ui/`? | M3 release | **Resolved (2026-10-20)**: No. Reusable workflows hardcode `working-directory: ./`. Solved via custom workflow steps in `.github/workflows/ui.yml` and `release.yml`. |
-| Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. As a result, `kubectl port-forward` to them cannot reach NB/SB (it dials the pod's localhost), so local dev uses the `ovn-topology-proxy` relay pod (`mise run pf`). |
+| Q3 | Harvester Kube-OVN addon: namespace, service names, TLS secret, OVN version | M1 autodetect defaults, M7 | **Resolved (2026-10-20, lab hv-01)**: Namespace is `kube-system`, services are `ovn-nb:6641` and `ovn-sb:6642`. TLS is disabled (`ENABLE_SSL: false`). Pods use `hostNetwork: true` and bind to node IP. As a result, `kubectl port-forward` to them cannot reach NB/SB (it dials the pod's localhost), so local dev uses the `kvovn-topo-proxy` relay pod (`mise run pf`). |
 | Q4 | Which OVN version to pin in `hack/ovn-version` (match Harvester's addon and upstream Kube-OVN stable)? | M0 codegen | **Re-answered (2026-10-28)**: pinned to `v25.03.3`, the newest upstream 25.03 tag (NB schema 7.11.0, SB 20.41.0). The schemas match the hv-01 lab (Kube-OVN v1.16.2, OVN 25.03.4) and OpenShift 4.19 (ADR-0005). The only visible change is the new LSP `peer` column. Earlier answer (2026-10-20): `v24.03.2`. |
 | Q5 | KubeVirt LSP naming for secondary NICs across Kube-OVN versions | M2 identity | **Resolved (2026-10-20, lab hv-01)**: KubeVirt VMs attached to Kube-OVN NADs follow the pattern `<vm-name>.<namespace>.<nad-name>.<vlan|subnet>.ovn`. Default management interfaces (`multus: default/default`) bind to the physical bridge `mgmt-br` outside OVN and do not create OVN LSPs. |
 | Q6 | Does standalone (non-Rancher) Harvester UI need support? | scope | **No** for now: Rancher-managed Harvester only |

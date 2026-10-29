@@ -33,17 +33,17 @@ linters:
       rules:
         daemon-no-diag:
           files:
-            - "**/cmd/ovn-topologyd/**"
+            - "**/cmd/kvovn-topod/**"
             - "**/pkg/graph/**"
             - "**/pkg/server/**"
             - "**/pkg/ovsdb/**"
             - "**/pkg/mcp/**"
             - "**/pkg/kubeproxy/**"
           deny:
-            - pkg: "github.com/coulof/ovn-topology/pkg/diag"
-              desc: "ADR-0001: pkg/diag is strictly restricted to cmd/ovn-topo and must not be imported by the daemon or pkg/mcp"
+            - pkg: "github.com/coulof/kvovn-topo/pkg/diag"
+              desc: "ADR-0001: pkg/diag is strictly restricted to cmd/kvovn-topo and must not be imported by the daemon or pkg/mcp"
             - pkg: "k8s.io/client-go/tools/remotecommand"
-              desc: "ADR-0001: remotecommand is strictly restricted to cmd/ovn-topo and must not be imported by the daemon or pkg/mcp"
+              desc: "ADR-0001: remotecommand is strictly restricted to cmd/kvovn-topo and must not be imported by the daemon or pkg/mcp"
   exclusions:
     rules:
       # Event-handler struct fields (client-go ResourceEventHandlerFuncs, libovsdb

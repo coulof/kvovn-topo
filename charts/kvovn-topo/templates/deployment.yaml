@@ -1,0 +1,105 @@
+{{- /*
+OpenShift runs ovn-kubernetes in interconnect mode: one NB/SB per node on a unix
+socket, no ovn-nb/ovn-sb Service (ADR-0005). The Kube-OVN default endpoints can
+never connect there, so refuse instead of deploying a daemon that is never ready.
+Explicit endpoints (a central-DB ovn-kubernetes) are allowed.
+*/}}
+{{- $openshift := .Capabilities.APIVersions.Has "config.openshift.io/v1" }}
+{{- if and $openshift (eq .Values.ovn.nbEndpoints "tcp:ovn-nb.kube-system.svc.cluster.local:6641") }}
+{{- fail "OpenShift detected: ovn-kubernetes in interconnect mode has no central OVN database for the daemon to reach (ADR-0005). Use `kvovn-topo --diag --zone <node>` (live) or hack/capture-fixtures.sh --flavor ovnk with `kvovn-topo --fixture-dir` (offline); see the chart README, section OpenShift. Set ovn.nbEndpoints/ovn.sbEndpoints only for a central-DB deployment." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kvovn-topo.fullname" . }}
+  labels:
+    {{- include "kvovn-topo.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "kvovn-topo.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "kvovn-topo.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "kvovn-topo.serviceAccountName" . }}
+      securityContext:
+        {{- if $openshift }}
+        {{- /* restricted-v2 assigns the UID/GID from the namespace range. */}}
+        {{- toYaml (omit .Values.podSecurityContext "runAsUser" "runAsGroup" "fsGroup") | nindent 8 }}
+        {{- else }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LISTEN_ADDR
+              value: ":{{ .Values.service.port }}"
+            - name: OVN_NB_ENDPOINTS
+              value: {{ .Values.ovn.nbEndpoints | quote }}
+            - name: OVN_SB_ENDPOINTS
+              value: {{ .Values.ovn.sbEndpoints | quote }}
+            {{- if .Values.ovn.tls.enabled }}
+            - name: OVN_CERT
+              value: "/etc/ovn-tls/tls.crt"
+            - name: OVN_KEY
+              value: "/etc/ovn-tls/tls.key"
+            - name: OVN_CA
+              value: "/etc/ovn-tls/ca.crt"
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.ovn.tls.enabled }}
+          volumeMounts:
+            - name: ovn-tls
+              mountPath: /etc/ovn-tls
+              readOnly: true
+          {{- end }}
+      {{- if .Values.ovn.tls.enabled }}
+      volumes:
+        - name: ovn-tls
+          secret:
+            secretName: {{ .Values.ovn.tls.secretName | quote }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/api"
 )
 
 func TestFind(t *testing.T) {

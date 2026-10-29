@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/graph"
 	"sigs.k8s.io/yaml"
 )
 

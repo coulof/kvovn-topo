@@ -1,4 +1,4 @@
-# Lima template: k3s server of the ovn-topology lab, Kube-OVN as the CNI.
+# Lima template: k3s server of the kvovn-topo lab, Kube-OVN as the CNI.
 # Created by hack/dev-cluster.sh, which passes the PARAM_* values from lab.env.
 # Adapted from github.com/coulof/k3k-kube-ovn (lima/k3k-kube-ovn.yaml).
 minimumLimaVersion: 2.0.0

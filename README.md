@@ -1,17 +1,22 @@
-# ovn-topology
+<p align="center">
+  <img src="docs/images/kvovn-topo-logo.svg" alt="kvovn-topo logo" width="160">
+</p>
+<h1 align="center">kvovn-topo</h1>
+
+> Formerly `ovn-topology`: the daemon was `ovn-topologyd`, the TUI `ovn-topo`.
 
 A read-only network topology visualizer for OVN as deployed by Kube-OVN on Rancher-managed RKE2 and Harvester clusters. On OpenShift (ovn-kubernetes), the TUI shows one node at a time.
 
 It consists of:
-- **`ovn-topologyd`**: a Go daemon that monitors the OVN NB and SB databases, joins them into an in-memory graph, and serves it over HTTP JSON and SSE.
-- **`ovn-topo`**: a k9s-style terminal UI over the same graph.
-- **`ovn-topo mcp`**: an MCP server, so AI agents (OpenCode, Claude Code, agy) can query the graph read-only.
+- **`kvovn-topod`**: a Go daemon that monitors the OVN NB and SB databases, joins them into an in-memory graph, and serves it over HTTP JSON and SSE.
+- **`kvovn-topo`**: a k9s-style terminal UI over the same graph.
+- **`kvovn-topo mcp`**: an MCP server, so AI agents (OpenCode, Claude Code, agy) can query the graph read-only.
 
 ---
 
 ## Connection Architecture
 
-The TUI and `ovn-topo mcp` reach the daemon through the Kubernetes API server's service proxy. No port-forward, public IP or Ingress is needed:
+The TUI and `kvovn-topo mcp` reach the daemon through the Kubernetes API server's service proxy. No port-forward, public IP or Ingress is needed:
 
 ```text
   Downstream Cluster (RKE2 / Harvester)
@@ -21,7 +26,7 @@ The TUI and `ovn-topo mcp` reach the daemon through the Kubernetes API server's 
   │           │ OVSDB push monitor           │ OVSDB push      │
   │           │ (leader_only=false)          │ monitor         │
   │  ┌────────┴──────────────────────────────┴──────────────┐  │
-  │  │ ovn-topologyd                                        │  │
+  │  │ kvovn-topod                                        │  │
   │  │   • In-memory joined graph (atomic snapshots)        │  │
   │  │   • K8s NodeMapper (chassis <-> node)                │  │
   │  │   • HTTP REST + SSE API (ClusterIP :8080)            │  │
@@ -35,42 +40,42 @@ The TUI and `ovn-topo mcp` reach the daemon through the Kubernetes API server's 
                                 │ or the Harvester / RKE2 API, :6443)
           ┌─────────────────────┼─────────────────────┐
           │                     │                     │
-   ovn-topo (TUI)        ovn-topo mcp         Rancher UI Extension
+   kvovn-topo (TUI)        kvovn-topo mcp         Rancher UI Extension
    (Bubble Tea)          (AI agents, stdio)   (paused)
 ```
 
-The API server authenticates the kubeconfig user and checks `services/proxy` RBAC on `kube-system/ovn-topologyd`. The security design is in the [API & Security Reference](docs/api.md).
+The API server authenticates the kubeconfig user and checks `services/proxy` RBAC on `kube-system/kvovn-topod`. The security design is in the [API & Security Reference](docs/api.md).
 
 ---
 
 ## Installation
 
-### 1. In-cluster daemon (`ovn-topologyd`), RKE2 and Harvester
+### 1. In-cluster daemon (`kvovn-topod`), RKE2 and Harvester
 
 ```bash
-helm repo add coulof https://coulof.github.io/ovn-topology
-helm install ovn-topology coulof/ovn-topology --namespace kube-system
+helm repo add coulof https://coulof.github.io/kvovn-topo
+helm install kvovn-topo coulof/kvovn-topo --namespace kube-system
 ```
 
-TLS, endpoints and viewer RBAC are in the [chart README](charts/ovn-topology/README.md#installation).
+TLS, endpoints and viewer RBAC are in the [chart README](charts/kvovn-topo/README.md#installation).
 
-### 2. Client (`ovn-topo`)
+### 2. Client (`kvovn-topo`)
 
-Download the binary for your platform from [GitHub Releases](https://github.com/coulof/ovn-topology/releases) (Linux amd64, macOS arm64, Windows amd64) and put it on your `PATH`.
+Download the binary for your platform from [GitHub Releases](https://github.com/coulof/kvovn-topo/releases) (Linux amd64, macOS arm64, Windows amd64) and put it on your `PATH`.
 
 ---
 
-## Terminal UI (`ovn-topo`)
+## Terminal UI (`kvovn-topo`)
 
 ```bash
 export KUBECONFIG=~/.kube/hv-01.yaml
-ovn-topo            # passive (Tier 0)
-ovn-topo --diag     # plus exec-based diagnostics (Tier 1, ADR-0001)
+kvovn-topo            # passive (Tier 0)
+kvovn-topo --diag     # plus exec-based diagnostics (Tier 1, ADR-0001)
 ```
 
-`1`–`3` switch between the VPCs, Chassis and Workloads tree views; `4` lists problems (unbound ports, gateways without a chassis, NAT-gateway return paths) and `5` the changes since start. `Enter` follows a relation, `i` toggles the details pane, `d` describes the selection, `?` lists every key. The [TUI guide](docs/tui-guide.md) walks through use cases with screenshots, and its [§8](docs/tui-guide.md#8-keys) has the full key table. Theme, highlight duration and per-context daemon settings can live in `~/.config/ovn-topo/config.yaml` ([§0](docs/tui-guide.md#config-file)).
+`1`–`3` switch between the VPCs, Chassis and Workloads tree views; `4` lists problems (unbound ports, gateways without a chassis, NAT-gateway return paths) and `5` the changes since start. `Enter` follows a relation, `i` toggles the details pane, `d` describes the selection, `?` lists every key. The [TUI guide](docs/tui-guide.md) walks through use cases with screenshots, and its [§8](docs/tui-guide.md#8-keys) has the full key table. Theme, highlight duration and per-context daemon settings can live in `~/.config/kvovn-topo/config.yaml` ([§0](docs/tui-guide.md#config-file)).
 
-With `--diag`, `x` opens diagnostics on the selection: `ovn-trace`, tcpdump, conntrack, OVS ports and bridges, flows and `ovn-controller` logs ([§6](docs/tui-guide.md#6-tier-1-diagnostics--x-requires---diag)). `!` runs a details-pane Inspect command such as `kubectl ko nbctl lr-route-list` with the TUI suspended. `ovn-topo` finds the diagnostic pods itself: `ovn-central`, `kube-ovn-cni` and `ovs-ovn` for Kube-OVN, else `ovnkube-node` for ovn-kubernetes. `--k8s-namespace` pins the namespace.
+With `--diag`, `x` opens diagnostics on the selection: `ovn-trace`, tcpdump, conntrack, OVS ports and bridges, flows and `ovn-controller` logs ([§6](docs/tui-guide.md#6-tier-1-diagnostics--x-requires---diag)). `!` runs a details-pane Inspect command such as `kubectl ko nbctl lr-route-list` with the TUI suspended. `kvovn-topo` finds the diagnostic pods itself: `ovn-central`, `kube-ovn-cni` and `ovs-ovn` for Kube-OVN, else `ovnkube-node` for ovn-kubernetes. `--k8s-namespace` pins the namespace.
 
 ### OpenShift: one node at a time
 
@@ -79,7 +84,7 @@ OpenShift runs ovn-kubernetes in interconnect mode: one NB/SB per node and no ce
 ```mermaid
 flowchart LR
   subgraph ws["Workstation"]
-    topo["ovn-topo --diag --zone node-a"]
+    topo["kvovn-topo --diag --zone node-a"]
     cap["hack/capture-fixtures.sh --flavor ovnk"]
     fx[("zone-node-b/ capture")]
   end
@@ -101,13 +106,13 @@ flowchart LR
   fx -->|"--fixture-dir"| topo
 ```
 
-Each zone's databases listen on root-owned unix sockets inside its `ovnkube-node` pod, with no Service. `ovn-topo` reads one zone at a time: live through an exec relay, with nothing deployed in the cluster, or offline from a read-only capture. Traffic to other nodes stops at `transit_switch`. The cluster-wide design, per-node collectors merged by the daemon, is proposed in [ADR-0005](docs/adr/0005-ovnk-interconnect.md#decision).
+Each zone's databases listen on root-owned unix sockets inside its `ovnkube-node` pod, with no Service. `kvovn-topo` reads one zone at a time: live through an exec relay, with nothing deployed in the cluster, or offline from a read-only capture. Traffic to other nodes stops at `transit_switch`. The cluster-wide design, per-node collectors merged by the daemon, is proposed in [ADR-0005](docs/adr/0005-ovnk-interconnect.md#decision).
 
 ```bash
-ovn-topo --diag --zone list       # the zones (nodes)
-ovn-topo --diag --zone <node>     # live, through a pods/exec relay to the node's sockets
+kvovn-topo --diag --zone list       # the zones (nodes)
+kvovn-topo --diag --zone <node>     # live, through a pods/exec relay to the node's sockets
 KUBECTL=oc hack/capture-fixtures.sh <name> --flavor ovnk
-ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>   # offline
+kvovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>   # offline
 ```
 
 `x` diagnostics run in the `ovnkube-node` pod of the selected object's node, whatever zone is shown. A trace stops at `transit_switch`: other zones are not traced.
@@ -116,7 +121,7 @@ ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>   # offline
 
 ## Model Context Protocol (MCP)
 
-`ovn-topo mcp` serves Tier 0 tools to AI agents over stdio.
+`kvovn-topo mcp` serves Tier 0 tools to AI agents over stdio.
 
 ### Available Tools
 - `find`: Search routers, switches, ports, and chassis by name, IP, MAC, namespace, pod, or VM.
@@ -126,7 +131,7 @@ ovn-topo --fixture-dir testdata/scenarios/<name>/zone-<node>   # offline
 
 ### Tool Setup
 
-`ovn-topo` must be on the agent's `PATH`, or use an absolute path.
+`kvovn-topo` must be on the agent's `PATH`, or use an absolute path.
 
 #### 1. OpenCode
 Add this to your `opencode.json` (or `~/.config/opencode/opencode.json`):
@@ -134,9 +139,9 @@ Add this to your `opencode.json` (or `~/.config/opencode/opencode.json`):
 ```json
 {
   "mcp": {
-    "ovn-topology": {
+    "kvovn-topo": {
       "type": "local",
-      "command": ["ovn-topo", "mcp"],
+      "command": ["kvovn-topo", "mcp"],
       "enabled": false
     }
   }
@@ -145,12 +150,12 @@ Add this to your `opencode.json` (or `~/.config/opencode/opencode.json`):
 
 #### 2. Claude Code
 ```bash
-claude mcp add ovn-topology -- ovn-topo mcp
+claude mcp add kvovn-topo -- kvovn-topo mcp
 ```
 
 #### 3. agy
 ```bash
-agy mcp add ovn-topology -- ovn-topo mcp
+agy mcp add kvovn-topo -- kvovn-topo mcp
 ```
 
 Backends, result caps and offline use are in the [MCP guide](docs/mcp.md); ready-made prompts are in [docs/mcp-prompts.md](docs/mcp-prompts.md).

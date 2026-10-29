@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The ovn-topology lab: k3s with Kube-OVN as the CNI, in three local Lima VMs
+# The kvovn-topo lab: k3s with Kube-OVN as the CNI, in three local Lima VMs
 # (one server, two agents), for the scenario captures in test/e2e/scenarios/
 # (ROADMAP B1). Versions are pinned in hack/lab/lab.env.
 #
-#   hack/dev-cluster.sh create   create the VMs and write ~/.kube/ovn-topology-lab.yaml
+#   hack/dev-cluster.sh create   create the VMs and write ~/.kube/kvovn-topo-lab.yaml
 #   hack/dev-cluster.sh status   VMs, nodes and Kube-OVN pods
 #   hack/dev-cluster.sh delete   delete the VMs
 #
@@ -15,8 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lab/lab.env"
 SERVER="${LAB_NAME}-server"
 AGENTS=("${LAB_NAME}-agent1" "${LAB_NAME}-agent2")
-KUBECONFIG_OUT="${HOME}/.kube/ovn-topology-lab.yaml"
-CTX=ovn-topology-lab
+KUBECONFIG_OUT="${HOME}/.kube/kvovn-topo-lab.yaml"
+CTX=kvovn-topo-lab
 
 die() { echo "error: $*" >&2; exit 1; }
 kc() { kubectl --kubeconfig "${KUBECONFIG_OUT}" "$@"; }

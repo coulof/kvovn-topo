@@ -1,8 +1,8 @@
 # Concepts: OVN, Kube-OVN and ovn-kubernetes
 
-`ovn-topo` shows OVN's own objects, named the way Kube-OVN names them where it can. This page is the long form of the TUI's `?` help: what each object is, how to read it, and what usually goes wrong. The [TUI guide](tui-guide.md) covers the screens and keys.
+`kvovn-topo` shows OVN's own objects, named the way Kube-OVN names them where it can. This page is the long form of the TUI's `?` help: what each object is, how to read it, and what usually goes wrong. The [TUI guide](tui-guide.md) covers the screens and keys.
 
-OVN keeps two databases. The **Northbound (NB)** database holds the intended topology: routers, switches, ports, routes, NAT. The **Southbound (SB)** database holds what is running: which host (chassis) claimed which port. `ovn-topo` reads both and joins them; it never writes to either.
+OVN keeps two databases. The **Northbound (NB)** database holds the intended topology: routers, switches, ports, routes, NAT. The **Southbound (SB)** database holds what is running: which host (chassis) claimed which port. `kvovn-topo` reads both and joins them; it never writes to either.
 
 ## Logical router
 
@@ -56,7 +56,7 @@ A switch port of type `router` is the switch side of a router port (`options:rou
 
 ## VPC NAT gateway
 
-A Kube-OVN VPC NAT gateway is a pod, `vpc-nat-gw-<name>`, with two interfaces: a LAN interface on a VPC subnet and a WAN interface on the external network. Its EIPs, DNAT and SNAT rules are iptables inside the pod (the `Iptables*` resources). OVN sees only the two switch ports, so `ovn-topo` shows the gateway under *Outside OVN* and, with `--diag`, `!` runs `iptables-save -t nat` in the pod.
+A Kube-OVN VPC NAT gateway is a pod, `vpc-nat-gw-<name>`, with two interfaces: a LAN interface on a VPC subnet and a WAN interface on the external network. Its EIPs, DNAT and SNAT rules are iptables inside the pod (the `Iptables*` resources). OVN sees only the two switch ports, so `kvovn-topo` shows the gateway under *Outside OVN* and, with `--diag`, `!` runs `iptables-save -t nat` in the pod.
 
 Replies to traffic the gateway DNATs must return through it: the router needs a `src-ip` route, or its default route, pointing at the gateway's LAN IP. See [Logical router](#logical-router).
 
@@ -66,11 +66,11 @@ A chassis is one `ovn-controller`, identified by its host's OVS system-id. It cl
 
 ## VPC
 
-Not an OVN object: `ovn-topo` groups a router with its switches. In Kube-OVN, a Vpc is one router, its subnets, and optionally a NAT gateway and an external gateway. Its pane lists its egress gateway ports.
+Not an OVN object: `kvovn-topo` groups a router with its switches. In Kube-OVN, a Vpc is one router, its subnets, and optionally a NAT gateway and an external gateway. Its pane lists its egress gateway ports.
 
 ## Workload
 
-Not an OVN object: `ovn-topo` groups switch ports by their pod, and a VM through its virt-launcher pod and VMI, with one NIC per network.
+Not an OVN object: `kvovn-topo` groups switch ports by their pod, and a VM through its virt-launcher pod and VMI, with one NIC per network.
 
 ## Names across Kube-OVN, OVN and ovn-kubernetes
 
@@ -92,4 +92,4 @@ Not an OVN object: `ovn-topo` groups switch ports by their pod, and a VM through
 | natOutgoing | Subnet natOutgoing | policy reroute + node iptables | SNAT on `GR_<node>` |
 | Zone | — | one NB/SB | one node (interconnect mode) |
 
-ovn-kubernetes names come from the interconnect spike (ADR-0005) and upstream conventions; ovn-kubernetes has no adapter in `ovn-topo` yet.
+ovn-kubernetes names come from the interconnect spike (ADR-0005) and upstream conventions; ovn-kubernetes has no adapter in `kvovn-topo` yet.

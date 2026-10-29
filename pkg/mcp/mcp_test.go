@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/graph"
-	"github.com/coulof/ovn-topology/pkg/ovsdb"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
-	"github.com/coulof/ovn-topology/pkg/server"
+	"github.com/coulof/kvovn-topo/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/nbmodel"
+	"github.com/coulof/kvovn-topo/pkg/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -142,7 +142,7 @@ func TestToolGoldens(t *testing.T) {
 }
 
 // TestScenarioToolGoldens runs the MCP tools on the B1 lab captures, through
-// the same snapshot backend as `ovn-topo mcp --fixture-dir`.
+// the same snapshot backend as `kvovn-topo mcp --fixture-dir`.
 func TestScenarioToolGoldens(t *testing.T) {
 	finds := map[string]string{
 		"overlay-default":    "demo",

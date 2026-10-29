@@ -29,8 +29,8 @@ test:
 build:
 	@echo "==> Building daemon and TUI binaries..."
 	mkdir -p bin
-	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/ovn-topologyd ./cmd/ovn-topologyd
-	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/ovn-topo ./cmd/ovn-topo
+	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/kvovn-topod ./cmd/kvovn-topod
+	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o bin/kvovn-topo ./cmd/kvovn-topo
 
 .PHONY: image
 image:
@@ -39,7 +39,7 @@ image:
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t ghcr.io/coulof/ovn-topologyd:$(VERSION) .
+		-t ghcr.io/coulof/kvovn-topod:$(VERSION) .
 
 .PHONY: dev-cluster
 dev-cluster:

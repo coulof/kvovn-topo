@@ -1,4 +1,4 @@
-module github.com/coulof/ovn-topology
+module github.com/coulof/kvovn-topo
 
 go 1.27.3
 

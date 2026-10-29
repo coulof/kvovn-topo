@@ -5,8 +5,8 @@
 // pods (ovn-central, ovs-ovn, kube-ovn-cni) using the operator's kubeconfig.
 //
 // Architectural Rules (ADR-0001):
-//   - Tier 1 code is strictly for the TUI (cmd/ovn-topo) behind an explicit --diag flag.
-//   - The daemon (cmd/ovn-topologyd), graph engine (pkg/graph), and HTTP server (pkg/server)
+//   - Tier 1 code is strictly for the TUI (cmd/kvovn-topo) behind an explicit --diag flag.
+//   - The daemon (cmd/kvovn-topod), graph engine (pkg/graph), and HTTP server (pkg/server)
 //     must NEVER import or depend on pkg/diag or k8s.io/client-go/tools/remotecommand.
 //   - All executed commands must come from a typed allowlist with sanitized arguments;
 //     free-form command strings are strictly forbidden.

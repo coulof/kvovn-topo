@@ -1,0 +1,41 @@
+{{- if .Values.rbac.viewer.create }}
+{{- $svc := include "kvovn-topo.fullname" . }}
+# Viewer access to the daemon API through the Kubernetes service proxy, the only
+# supported way in: nothing is exposed by IP, LoadBalancer or Ingress. No
+# bindings are created; bind users or groups (or a Rancher role) to these.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $svc }}-viewer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kvovn-topo.labels" . | nindent 4 }}
+rules:
+  # GET /api/v1/namespaces/<ns>/services/http:<svc>:http/proxy/... The
+  # authorizer may see the bare Service name or the scheme:name:port form;
+  # both are listed until the M7 lab check settles it (ROADMAP).
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: [{{ $svc | quote }}, {{ printf "http:%s:http" $svc | quote }}]
+    verbs: ["get"]
+  # kvovn-topo reads the Service to pick its port.
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: [{{ $svc | quote }}]
+    verbs: ["get"]
+{{- if .Values.rbac.viewer.discovery }}
+---
+# Lets kvovn-topo find the Service by label when it is not at the default
+# kube-system/kvovn-topod. Without it, users pass --namespace and --service.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $svc }}-discovery
+  labels:
+    {{- include "kvovn-topo.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["list"]
+{{- end }}
+{{- end }}

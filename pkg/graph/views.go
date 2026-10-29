@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/nbmodel"
 )
 
 // BuildGraph routes the graph request to the appropriate view builder.

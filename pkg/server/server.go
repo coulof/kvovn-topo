@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/graph"
 )
 
 // VersionConfig holds build-time version metadata.

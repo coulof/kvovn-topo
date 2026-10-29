@@ -1,12 +1,12 @@
-# OVN Topology TUI Guide (`ovn-topo`)
+# OVN Topology TUI Guide (`kvovn-topo`)
 
-`ovn-topo` is a k9s-style terminal explorer for the topology served by `ovn-topologyd`. You navigate **tree views** (VPCs, Chassis, Workloads: objects and what they contain), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
+`kvovn-topo` is a k9s-style terminal explorer for the topology served by `kvovn-topod`. You navigate **tree views** (VPCs, Chassis, Workloads: objects and what they contain), follow **relations** (`⇢`) between objects, read a **details pane** that explains the selection, and run Tier 1 diagnostics on whatever is selected.
 
 ```bash
-ovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
-ovn-topo --context harvester --diag                  # another context, + Tier 1 exec diagnostics (ADR-0001)
-ovn-topo --fixture                                   # bundled dataset, offline (run from the repo root)
-ovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourself (mise run tui-local)
+kvovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
+kvovn-topo --context harvester --diag                  # another context, + Tier 1 exec diagnostics (ADR-0001)
+kvovn-topo --fixture                                   # bundled dataset, offline (run from the repo root)
+kvovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourself (mise run tui-local)
 ```
 
 See [§0 Connecting](#0-connecting) for how the TUI reaches the daemon. `?` explains the selected object and the current view; [concepts.md](concepts.md) is the long form, with the Kube-OVN, OVN and ovn-kubernetes names side by side.
@@ -21,39 +21,39 @@ Part 1 is organised by **use case**: the question you have, the keys to press, w
 
 ## 0. Connecting
 
-The daemon is never exposed: no NodePort, LoadBalancer, kube-vip IP or Ingress. `ovn-topo` reaches it through the **Kubernetes API server's service proxy** with your kubeconfig credentials, so the API server authenticates you and checks RBAC. This works the same through Rancher (`https://<rancher>/k8s/clusters/<id>`) and against a Harvester VIP (`https://<vip>:6443`). No port-forward is needed.
+The daemon is never exposed: no NodePort, LoadBalancer, kube-vip IP or Ingress. `kvovn-topo` reaches it through the **Kubernetes API server's service proxy** with your kubeconfig credentials, so the API server authenticates you and checks RBAC. This works the same through Rancher (`https://<rancher>/k8s/clusters/<id>`) and against a Harvester VIP (`https://<vip>:6443`). No port-forward is needed.
 
-- **Finding the daemon:** with no flags, `ovn-topo` uses the Service `kube-system/ovn-topologyd`. If it isn't there, it looks for the one Service labelled `app.kubernetes.io/name=ovn-topology` in any namespace. Several matches is an error: the TUI never guesses.
+- **Finding the daemon:** with no flags, `kvovn-topo` uses the Service `kube-system/kvovn-topod`. If it isn't there, it looks for the one Service labelled `app.kubernetes.io/name=kvovn-topo` in any namespace. Several matches is an error: the TUI never guesses.
   - `--namespace` / `--service` pin the Service and skip the search.
   - `--port` picks the Service port (default: the one named `http`).
 - **Which kubeconfig:** `--kubeconfig` (default `$KUBECONFIG`, then `~/.kube/config`) and `--context`. The graph and the `--diag` exec diagnostics use the **same** kubeconfig and context, so they always target the same cluster.
-- **Permissions:** `get` on `services/proxy` for the daemon Service, plus `get` on that Service and `list services` for the search. The chart's `rbac.viewer.create=true` creates these roles ([chart README](../charts/ovn-topology/README.md#viewer-access)).
+- **Permissions:** `get` on `services/proxy` for the daemon Service, plus `get` on that Service and `list services` for the search. The chart's `rbac.viewer.create=true` creates these roles ([chart README](../charts/kvovn-topo/README.md#viewer-access)).
 - **Other sources:** `--daemon-url` talks to a daemon directly (one you run locally with `mise run daemon`). `--fixture` needs no cluster.
-- **If it fails:** with no usable kubeconfig, `ovn-topo` exits with the reason. If the daemon can't be reached, the *Daemon unreachable* screen names the path that was tried and what to check.
+- **If it fails:** with no usable kubeconfig, `kvovn-topo` exits with the reason. If the daemon can't be reached, the *Daemon unreachable* screen names the path that was tried and what to check.
 
 ### Config file
 
-Settings you'd otherwise retype go in `~/.config/ovn-topo/config.yaml` (`$XDG_CONFIG_HOME` if set; `--config` names another file). The `contexts` keys are kubeconfig context names. A flag beats its environment variable, which beats the file. A missing file is fine; an unknown key is an error.
+Settings you'd otherwise retype go in `~/.config/kvovn-topo/config.yaml` (`$XDG_CONFIG_HOME` if set; `--config` names another file). The `contexts` keys are kubeconfig context names. A flag beats its environment variable, which beats the file. A missing file is fine; an unknown key is an error.
 
 ```yaml
 ui:
   theme: suse        # as --theme / $THEME
-  flash: 30s         # as --flash / $OVN_TOPO_FLASH
+  flash: 30s         # as --flash / $KVOVN_TOPO_FLASH
   pane: false        # start with the details pane closed (i toggles it)
 contexts:
   harvester:
-    daemon: {namespace: ovn-topology, service: ovn-topologyd, port: http}   # pins the Service, as --namespace/--service
+    daemon: {namespace: kvovn-topo, service: kvovn-topod, port: http}   # pins the Service, as --namespace/--service
     k8sNamespace: kube-system                                              # as --k8s-namespace
 ```
 
-`--diag`, `--zone` and `--fixture-dir` are per run and have no file setting: Tier 1 stays an explicit opt-in (ADR-0001). The file does not configure `ovn-topo mcp`.
+`--diag`, `--zone` and `--fixture-dir` are per run and have no file setting: Tier 1 stays an explicit opt-in (ADR-0001). The file does not configure `kvovn-topo mcp`.
 
-The same connection is shared with `ovn-topo mcp` (AI agents, [docs/mcp.md](mcp.md)) through `pkg/kubeproxy`.
+The same connection is shared with `kvovn-topo mcp` (AI agents, [docs/mcp.md](mcp.md)) through `pkg/kubeproxy`.
 
 ## 1. Screen layout
 
 ```text
- ovn-topo │ rev 1842 ● live │ Kube-OVN │ 2 VPC 4 LS 412 LSP 3 ch │ DIAG ready     service proxy kube-system/ovn-topologyd
+ kvovn-topo │ rev 1842 ● live │ Kube-OVN │ 2 VPC 4 LS 412 LSP 3 ch │ DIAG ready     service proxy kube-system/kvovn-topod
  1-3 views  / filter  i pane  d describe  x diag  ! run  b back  ? help  q quit
 ┌────────────────────────── VPCs [18] ───────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
 │ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
@@ -339,7 +339,7 @@ Shapes and colours both carry the state, so it stays readable without colour.
 
 Opening the view fetches the routes of every router with a NAT gateway, again after each revision.
 
-**Changes** (`5`, `:changes`) logs what moved between revisions, newest first: `added`, `removed`, a health change (`ok → broken`), a badge change (`[unbound] → [—]`), else the new summary. It keeps 500 entries in memory from when `ovn-topo` started; an offline fixture or paused updates say so. History across restarts is M8.
+**Changes** (`5`, `:changes`) logs what moved between revisions, newest first: `added`, `removed`, a health change (`ok → broken`), a badge change (`[unbound] → [—]`), else the new summary. It keeps 500 entries in memory from when `kvovn-topo` started; an offline fixture or paused updates say so. History across restarts is M8.
 
 In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes back, and `/` filters.
 

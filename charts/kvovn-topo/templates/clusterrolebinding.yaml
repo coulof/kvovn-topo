@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kvovn-topo.fullname" . }}
+  labels:
+    {{- include "kvovn-topo.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kvovn-topo.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kvovn-topo.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

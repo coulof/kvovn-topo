@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/sbmodel"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/nbmodel"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/sbmodel"
 	"github.com/ovn-kubernetes/libovsdb/client"
 	"github.com/ovn-kubernetes/libovsdb/model"
 )

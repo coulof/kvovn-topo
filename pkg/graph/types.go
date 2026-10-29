@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/sbmodel"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/nbmodel"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/sbmodel"
 )
 
 // NodeMapper maps a Chassis hostname/name to a Kubernetes node name.

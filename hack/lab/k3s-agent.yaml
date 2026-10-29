@@ -1,4 +1,4 @@
-# Lima template: k3s agent of the ovn-topology lab. Created by hack/dev-cluster.sh
+# Lima template: k3s agent of the kvovn-topo lab. Created by hack/dev-cluster.sh
 # with PARAM_SERVER_IP set to the server's eth0 address.
 minimumLimaVersion: 2.0.0
 images:
