@@ -77,8 +77,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC1 — VPCs view with router details](images/tui/uc01-vpc-router.png) | ![UC1 — VPC in Harvester](images/harvester/uc01-vpc.png) |
-| `1`, VPC unfolded, cursor on its LR | *Suggested:* Networks › Virtual Private Cloud › *vpc* |
+| ![UC1 — VPCs view with router details](images/tui/uc01-vpc-router.png) | *Suggested:* Networks › Virtual Private Cloud › *vpc* |
+| `1`, VPC unfolded, cursor on its LR | |
 
 ## UC2. Where does my VM run and how does its traffic leave?
 
@@ -90,8 +90,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC2 — VM NIC and path out](images/tui/uc02-vm-path-out.png) | ![UC2 — VM network interfaces](images/harvester/uc02-vm-networks.png) |
-| `3`, VM → NIC selected, details pane | *Suggested:* Virtual Machines › *vm* › Network |
+| ![UC2 — VM NIC and path out](images/tui/uc02-vm-path-out.png) | *Suggested:* Virtual Machines › *vm* › Network |
+| `3`, VM → NIC selected, details pane | |
 
 ## UC3. A VM with several NICs on different networks
 
@@ -102,8 +102,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC3 — multi-NIC VM](images/tui/uc03-multi-nic-vm.png) | ![UC3 — VM with two networks](images/harvester/uc03-vm-two-networks.png) |
-| `3`, VM unfolded: NICs on two switches | *Suggested:* Virtual Machines › *vm* › Edit Config › Networks |
+| ![UC3 — multi-NIC VM](images/tui/uc03-multi-nic-vm.png) | *Suggested:* Virtual Machines › *vm* › Edit Config › Networks |
+| `3`, VM unfolded: NICs on two switches | |
 
 ## UC4. Why is a pod or VM not working? (unbound port)
 
@@ -115,8 +115,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC4 — unbound port](images/tui/uc04-unbound-port.png) | ![UC4 — VM not running / pending](images/harvester/uc04-vm-pending.png) |
-| `/pending`, unbound LSP selected | *Suggested:* Virtual Machines list, VM in *Starting* / *Unschedulable* |
+| ![UC4 — unbound port](images/tui/uc04-unbound-port.png) | *Suggested:* Virtual Machines list, VM in *Starting* / *Unschedulable* |
+| `/pending`, unbound LSP selected | |
 
 ## UC5. How do VPCs reach each other and the nodes? (shared switches)
 
@@ -141,10 +141,10 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC6a — centralized gateway port](images/tui/uc06-gateway-port.png) | ![UC6a — VM network / provider config](images/harvester/uc06-vm-network-config.png) |
-| `1`, gateway LRP selected, details pane | *Suggested:* Networks › Virtual Machine Networks |
-| ![UC6b — provider network (localnet)](images/tui/uc06-external-network.png) | ![UC6b — cluster network / VLAN uplink](images/harvester/uc06-cluster-network.png) |
-| `1`, External networks unfolded | *Suggested:* Networks › Cluster Network Configuration |
+| ![UC6a — centralized gateway port](images/tui/uc06-gateway-port.png) | *Suggested:* Networks › Virtual Machine Networks |
+| `1`, gateway LRP selected, details pane | |
+| ![UC6b — provider network (localnet)](images/tui/uc06-external-network.png) | *Suggested:* Networks › Cluster Network Configuration |
+| `1`, External networks unfolded | |
 
 ## UC7. Which host runs what, and how does a chassis map to a node?
 
@@ -159,8 +159,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC7 — chassis and node mapping](images/tui/uc07-chassis.png) | ![UC7 — host details](images/harvester/uc07-host.png) |
-| `2`, chassis selected, details pane | *Suggested:* Hosts › *hv-01* |
+| ![UC7 — chassis and node mapping](images/tui/uc07-chassis.png) | *Suggested:* Hosts › *hv-01* |
+| `2`, chassis selected, details pane | |
 
 ## UC8. Follow a relation and come back
 
@@ -183,8 +183,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC9a — describe](images/tui/uc09-describe.png) | ![UC9 — VM YAML](images/harvester/uc09-vm-yaml.png) |
-| ![UC9b — raw OVSDB row](images/tui/uc09-raw.png) | *Suggested:* Virtual Machines › *vm* › ⋮ › Edit YAML |
+| ![UC9a — describe](images/tui/uc09-describe.png) | *Suggested:* Virtual Machines › *vm* › ⋮ › Edit YAML |
+| ![UC9b — raw OVSDB row](images/tui/uc09-raw.png) | |
 
 ## UC10. Will this packet get through? (`ovn-trace`)
 
@@ -197,8 +197,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 | TUI | Harvester |
 |---|---|
 | ![UC10a — destination picker](images/tui/uc10-trace-picker.png) | — |
-| ![UC10b — trace delivered](images/tui/uc10-trace-delivered.png) | ![UC10 — VM console ping](images/harvester/uc10-vm-console-ping.png) |
-| ![UC10c — trace dropped](images/tui/uc10-trace-dropped.png) | *Suggested:* Virtual Machines › *vm* › Console (ping the same destination) |
+| ![UC10b — trace delivered](images/tui/uc10-trace-delivered.png) | *Suggested:* Virtual Machines › *vm* › Console (ping the same destination) |
+| ![UC10c — trace dropped](images/tui/uc10-trace-dropped.png) | |
 
 ## UC11. Show me the live traffic (`tcpdump`)
 
@@ -210,8 +210,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC11a — capture on the VM veth](images/tui/uc11-tcpdump-vm.png) | ![UC11 — VM generating traffic](images/harvester/uc11-vm-console.png) |
-| ![UC11b — chassis picker for the join port](images/tui/uc11-chassis-picker.png) | *Suggested:* Virtual Machines › *vm* › Console |
+| ![UC11a — capture on the VM veth](images/tui/uc11-tcpdump-vm.png) | *Suggested:* Virtual Machines › *vm* › Console |
+| ![UC11b — chassis picker for the join port](images/tui/uc11-chassis-picker.png) | |
 
 ## UC12. Node-level checks
 
@@ -223,8 +223,8 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 | TUI | Harvester |
 |---|---|
-| ![UC12a — ovs-vsctl show](images/tui/uc12-vsctl-show.png) | ![UC12 — host network status](images/harvester/uc12-host-network.png) |
-| ![UC12b — ovn-controller logs](images/tui/uc12-controller-logs.png) | *Suggested:* Hosts › *hv-01* › Network |
+| ![UC12a — ovs-vsctl show](images/tui/uc12-vsctl-show.png) | *Suggested:* Hosts › *hv-01* › Network |
+| ![UC12b — ovn-controller logs](images/tui/uc12-controller-logs.png) | |
 
 ## UC13. Watch a change happen (live migration, VM start)
 

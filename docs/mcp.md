@@ -70,4 +70,12 @@ Any client can serve a captured scenario instead: use `kvovn-topo mcp --fixture-
 
 From the repository, `mise run mcp-offline` (fixture), `mise run mcp-live` (service proxy), `mise run mcp-local` (local daemon) or `mise run mcp-embedded` (OVN port-forwards) runs one MCP session through `hack/mcp-smoke.sh` and prints a summary per tool.
 
+### Agent in Action
+
+AI agents consuming `kvovn-topo mcp` can query topology, trace relationships, and produce comprehensive troubleshooting briefs:
+
+| Investigation Brief | Topology Breakdown |
+|---|---|
+| ![MCP Agent Report 1](images/tui/mcp-report-01.png) | ![MCP Agent Report 2](images/tui/mcp-report-02.png) |
+
 For ready-to-use questions, see the [MCP Prompt Guide](mcp-prompts.md).
