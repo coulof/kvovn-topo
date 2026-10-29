@@ -990,7 +990,7 @@ func (m *model) freezeFollow() {
 // diagModalHead is the modal title and the target block shown on every step.
 func (m model) diagModalHead() string {
 	var box strings.Builder
-	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS - ADR-0001]") + "\n")
+	box.WriteString(m.styles.Header.Render("⚡ [TIER 1 DIAGNOSTICS]") + "\n")
 	box.WriteString(m.styles.MutedText.Render("Executed inside privileged cluster pods using operator credentials") + "\n\n")
 
 	// Target: captured when the modal opened; every action below acts on exactly this.

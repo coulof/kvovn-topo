@@ -4,7 +4,7 @@
 
 ```bash
 kvovn-topo                                             # in-cluster daemon via your kubeconfig (mise run tui)
-kvovn-topo --context harvester --diag                  # another context, + Tier 1 exec diagnostics (ADR-0001)
+kvovn-topo --context harvester --diag                  # another context, + Tier 1 exec diagnostics
 kvovn-topo --fixture                                   # bundled dataset, offline (run from the repo root)
 kvovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourself (mise run tui-local)
 ```
@@ -52,24 +52,7 @@ The same connection is shared with `kvovn-topo mcp` (AI agents, [docs/mcp.md](mc
 
 ## 1. Screen layout
 
-```text
- kvovn-topo │ rev 1842 ● live │ Kube-OVN │ 2 VPC 4 LS 412 LSP 3 ch │ DIAG ready     service proxy kube-system/kvovn-topod
- 1-3 views  / filter  i pane  d describe  x diag  ! run  b back  ? help  q quit
-┌────────────────────────── VPCs [18] ───────────────────────────┐┌───────── Details lr:lr-default-uuid ─────────┐
-│ ▾      VPCS (2)                                                ││ ● LR   ovn_cluster                           │
-│ ├─ ▾ ● VPC  default  1 router · 1 switch [default]             ││   ports 3 · routes 1 · nat 0 · pol 1 · lb 1  │
-│ │  ├─ ▸ ● LR   ovn_cluster  ports 3 · routes 1 · nat 0 · pol 1 ││                                              │
-│ │  └─ ▸ ! LS   default-subnet  10.244.0.1/24 · 412 ports · 1 u…││ Ports & interconnections (3)                 │
-│ └─ ▾ ● VPC  custom-vpc  1 router · 1 switch                    ││ • lrp-default  10.244.0.1/24                 │
-│    ├─ ▸ ● LR   custom-vpc  ports 2 · routes 0 · nat 1 · pol 0  ││     → LS   default-subnet                    │
-│    └─ ▸ ● LS   custom-subnet  10.100.0.1/24 · 2 ports · 1 bound││ • lrp-gw                                     │
-│ ▾      SHARED & STANDALONE SWITCHES (2)                        ││     Active GW on node-1                      │
-│ └─ ▾ ● LS   join  100.64.0.2/16, 100.64.0.1/16 [shared by 2 r…]││ • lrp-join-def  100.64.0.1/16                │
-│    ├╌ router ⇢ LR   custom-vpc                                 ││     → LS   join  (shared interconnect)       │
-│    └╌ router ⇢ LR   ovn_cluster                                ││ L3  Routes 1 · Policies 1 · NAT 0 · LBs 1    │
-└────────────────────────────────────────────────────────────────┘└──────────────────────────────────────────────┘
- VPCs  lr:lr-default-uuid
-```
+![kvovn-topo home screen: the VPC tree and the details pane](images/tui/home.png)
 
 - **Header (2 rows).** The status line has the state on the left: revision and live state (`● live` over SSE, `◌ polling`, `‖ paused`, `○ offline fixture`), the CNI, topology totals, the problem count when there are problems, and the diagnostics badge (`DIAG ready`, or `T0` without `--diag`). How the daemon is reached sits on the right (`service proxy <ns>/<svc>:<port>`, `direct <host:port>`, `fixture: …`) and is cut first on a narrow terminal. The second row hints the main keys; `?` has them all. Terminals shorter than 18 rows get one line.
 - **Main box:** the title names what it shows (`VPCs`, `Chassis`, `Workloads`, `Problems`, `Changes`, `Describe(lsp)`…), the row count and the active filter (`</pod>`).
@@ -381,8 +364,8 @@ In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes 
 
 | Key | Action |
 |---|---|
-| `1` | **`ovn-trace`.** Destination picker with fzf-style search and custom IP (`10.144.97.201` or `10.144.97.201:22`). Category tabs (`Tab`): All / VM / Pod / Gateway / **Node ovn0** (a node's port on the join switch, inside OVN) / **Underlay** (the chassis tunnel IP, outside OVN) / Public DNS. Protocol presets: `Ctrl+P`, `F1`–`F5` (ICMP, TCP 22/80/443, UDP 53). The microflow starts at the **selected** port (inport, MAC, IP); traffic leaving the subnet gets the router's MAC as `eth.dst`. Output: verdict, hop-by-hop path, pipeline stages; `o` toggles raw output |
-| `2` | **Live tcpdump** on the port's own host interface: its veth (`<hash>_h`), looked up by `external_ids:iface-id` on the port's node. A centralized gateway port uses `br-external` on the active chassis; the join router port uses the chosen node's `ovn0`. Presets or a custom BPF filter. `Space`/`Esc` stops the capture |
+| `1` | **`ovn-trace`**<br>• **Destination picker** with fzf-style search and custom IP (`10.144.97.201` or `10.144.97.201:22`).<br>• **Category tabs** (`Tab`): All / VM / Pod / Gateway / **Node ovn0** (a node's port on the join switch, inside OVN) / **Underlay** (the chassis tunnel IP, outside OVN) / Public DNS.<br>• **Protocol presets:** `Ctrl+P`, `F1`–`F5` (ICMP, TCP 22/80/443, UDP 53).<br>• **Microflow:** starts at the **selected** port (inport, MAC, IP); traffic leaving the subnet gets the router's MAC as `eth.dst`.<br>• **Output:** verdict, hop-by-hop path, pipeline stages; `o` toggles raw output |
+| `2` | **Live tcpdump**<br>• Captures on the port's own host interface: its veth (`<hash>_h`), looked up by `external_ids:iface-id` on the port's node.<br>• A centralized gateway port uses `br-external` on the active chassis; the join router port uses the chosen node's `ovn0`.<br>• Presets or a custom BPF filter.<br>• `Space`/`Esc` stops the capture |
 | `3` | **Conntrack** on the node: filtered on the port IP from a port, unfiltered from a chassis |
 | `4` | **OVS port interface:** link state, ofport, MTU, rx/tx counters of the port's OVS interface |
 | `5` | **`ovs-vsctl show`** on the node: bridges, tunnels, BFD |
