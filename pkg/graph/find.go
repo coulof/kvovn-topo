@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/api"
 )
 
 // FindMaxLimit caps the hits returned by one Find call.

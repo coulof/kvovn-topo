@@ -1,12 +1,12 @@
 name: CLI (macOS & Windows)
 
-# Builds and tests the ovn-topo TUI natively on macOS and Windows, and uploads
+# Builds and tests the kvovn-topo TUI natively on macOS and Windows, and uploads
 # the binaries (darwin/arm64, windows/amd64) as workflow artifacts. Linux is covered by go.yml.
 
 on:
   push:
     paths:
-      - 'cmd/ovn-topo/**'
+      - 'cmd/kvovn-topo/**'
       - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
@@ -14,7 +14,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'cmd/ovn-topo/**'
+      - 'cmd/kvovn-topo/**'
       - 'pkg/**'
       - 'go.mod'
       - 'go.sum'
@@ -53,7 +53,7 @@ jobs:
           cache: true
 
       - name: Test TUI
-        run: go test ./cmd/ovn-topo
+        run: go test ./cmd/kvovn-topo
 
       - name: Build
         env:
@@ -63,15 +63,15 @@ jobs:
         run: |
           mkdir -p dist
           LDFLAGS="-w -s -X main.version=dev-${GITHUB_SHA::7} -X main.gitCommit=${GITHUB_SHA} -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          go build -ldflags="${LDFLAGS}" -o dist/ovn-topo_${GOOS}_${GOARCH}${{ matrix.ext }} ./cmd/ovn-topo
+          go build -ldflags="${LDFLAGS}" -o dist/kvovn-topo_${GOOS}_${GOARCH}${{ matrix.ext }} ./cmd/kvovn-topo
 
       - name: Smoke test native binary
         run: |
-          BIN=dist/ovn-topo_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
+          BIN=dist/kvovn-topo_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}
           "$BIN" --fixture --view l3 -o json > /dev/null
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: ovn-topo-${{ matrix.goos }}
+          name: kvovn-topo-${{ matrix.goos }}
           path: dist/*

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/api"
 )
 
 // asToolError keeps a ToolError as is and reports any other error as backend_error.

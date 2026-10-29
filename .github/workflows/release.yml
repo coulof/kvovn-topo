@@ -60,16 +60,16 @@ jobs:
           for TARGET in linux/amd64 darwin/arm64; do
             OS=${TARGET%/*} ARCH=${TARGET#*/}
             echo "Building for ${OS}/${ARCH}..."
-            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topologyd_${OS}_${ARCH} ./cmd/ovn-topologyd
-            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/ovn-topo_${OS}_${ARCH} ./cmd/ovn-topo
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/kvovn-topod_${OS}_${ARCH} ./cmd/kvovn-topod
+            CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -ldflags="${LDFLAGS}" -o dist/kvovn-topo_${OS}_${ARCH} ./cmd/kvovn-topo
 
-            tar -czf dist/ovn-topology_${VERSION}_${OS}_${ARCH}.tar.gz -C dist ovn-topologyd_${OS}_${ARCH} ovn-topo_${OS}_${ARCH}
+            tar -czf dist/kvovn-topo_${VERSION}_${OS}_${ARCH}.tar.gz -C dist kvovn-topod_${OS}_${ARCH} kvovn-topo_${OS}_${ARCH}
           done
 
           # Windows: the TUI only (the daemon targets in-cluster Linux).
-          echo "Building ovn-topo for windows/amd64..."
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/ovn-topo.exe ./cmd/ovn-topo
-          (cd dist && zip -q ovn-topo_${VERSION}_windows_amd64.zip ovn-topo.exe && rm ovn-topo.exe)
+          echo "Building kvovn-topo for windows/amd64..."
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/kvovn-topo.exe ./cmd/kvovn-topo
+          (cd dist && zip -q kvovn-topo_${VERSION}_windows_amd64.zip kvovn-topo.exe && rm kvovn-topo.exe)
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
@@ -106,8 +106,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/ovn-topologyd:${{ needs.prepare-version.outputs.version }}
-            ${{ needs.prepare-version.outputs.prerelease == 'false' && format('ghcr.io/{0}/ovn-topologyd:latest', github.repository_owner) || '' }}
+            ghcr.io/${{ github.repository_owner }}/kvovn-topod:${{ needs.prepare-version.outputs.version }}
+            ${{ needs.prepare-version.outputs.prerelease == 'false' && format('ghcr.io/{0}/kvovn-topod:latest', github.repository_owner) || '' }}
           build-args: |
             VERSION=${{ needs.prepare-version.outputs.version }}
             GIT_COMMIT=${{ github.sha }}
@@ -129,16 +129,16 @@ jobs:
           VERSION: ${{ needs.prepare-version.outputs.version }}
         run: |
           mkdir -p chart-dist
-          sed -i "s/^version:.*/version: ${VERSION}/" charts/ovn-topology/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" charts/ovn-topology/Chart.yaml
-          helm package charts/ovn-topology -d chart-dist/
+          sed -i "s/^version:.*/version: ${VERSION}/" charts/kvovn-topo/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" charts/kvovn-topo/Chart.yaml
+          helm package charts/kvovn-topo -d chart-dist/
 
       - name: Push chart to GHCR OCI
         env:
           HELM_EXPERIMENTAL_OCI: 1
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push chart-dist/ovn-topology-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+          helm push chart-dist/kvovn-topo-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
 
       - name: Upload chart artifact
         uses: actions/upload-artifact@v4
@@ -170,12 +170,12 @@ jobs:
           apiVersion: content.hauler.cattle.io/v1alpha1
           kind: Content
           metadata:
-            name: ovn-topology-airgap-bundle
+            name: kvovn-topo-airgap-bundle
           spec:
             images:
-              - name: ghcr.io/${OWNER}/ovn-topologyd:${VERSION}
+              - name: ghcr.io/${OWNER}/kvovn-topod:${VERSION}
             charts:
-              - name: ovn-topology
+              - name: kvovn-topo
                 repo: oci://ghcr.io/${OWNER}/charts
                 version: ${VERSION}
           EOF

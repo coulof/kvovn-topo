@@ -1,4 +1,4 @@
-// Package kubeproxy reaches the ovn-topologyd API through the Kubernetes API
+// Package kubeproxy reaches the kvovn-topod API through the Kubernetes API
 // server's service proxy, the only supported way in (AGENTS.md §4): the API
 // server authenticates the caller and checks services/proxy RBAC. Nothing is
 // exposed by IP, LoadBalancer or Ingress. Tier 0: it only gets and lists
@@ -22,9 +22,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// ChartSelector matches the Service the ovn-topology chart creates
-// (selectorLabels in charts/ovn-topology/templates/_helpers.tpl).
-const ChartSelector = "app.kubernetes.io/name=ovn-topology"
+// ChartSelector matches the Service the kvovn-topo chart creates
+// (selectorLabels in charts/kvovn-topo/templates/_helpers.tpl).
+const ChartSelector = "app.kubernetes.io/name=kvovn-topo"
 
 // ServiceRef locates the daemon Service. Port empty means "pick from the
 // Service": the port named http, else the first one.
@@ -35,7 +35,7 @@ type ServiceRef struct {
 }
 
 // Default is where the chart installs the daemon with default values.
-var Default = ServiceRef{Namespace: "kube-system", Name: "ovn-topologyd"}
+var Default = ServiceRef{Namespace: "kube-system", Name: "kvovn-topod"}
 
 // String renders namespace/name:port.
 func (r ServiceRef) String() string { return r.Namespace + "/" + r.Name + ":" + r.Port }
@@ -70,7 +70,7 @@ func Discover(ctx context.Context, client kubernetes.Interface, def ServiceRef) 
 	}
 	switch len(list.Items) {
 	case 0:
-		return ServiceRef{}, fmt.Errorf("no ovn-topologyd Service found (not at %s/%s, none labelled %s); install the chart or pass --namespace and --service", def.Namespace, def.Name, ChartSelector)
+		return ServiceRef{}, fmt.Errorf("no kvovn-topod Service found (not at %s/%s, none labelled %s); install the chart or pass --namespace and --service", def.Namespace, def.Name, ChartSelector)
 	case 1:
 		found := def
 		found.Namespace, found.Name = list.Items[0].Namespace, list.Items[0].Name
@@ -81,7 +81,7 @@ func Discover(ctx context.Context, client kubernetes.Interface, def ServiceRef) 
 		names = append(names, s.Namespace+"/"+s.Name)
 	}
 	sort.Strings(names)
-	return ServiceRef{}, fmt.Errorf("several ovn-topologyd Services found (%s); pass --namespace and --service", strings.Join(names, ", "))
+	return ServiceRef{}, fmt.Errorf("several kvovn-topod Services found (%s); pass --namespace and --service", strings.Join(names, ", "))
 }
 
 func withPort(ref ServiceRef, svc *corev1.Service, how string) ServiceRef {

@@ -9,17 +9,17 @@ NB_PORT = "6641"
 SB_PORT = "6642"
 DAEMON_PORT = "8888"
 DAEMON_URL = "http://127.0.0.1:8888/api/v1"
-PROXY_POD = "ovn-topology-proxy"
+PROXY_POD = "kvovn-topo-proxy"
 PROXY_NAMESPACE = "kube-system"
 # Image of the dev relay pod (any image with python3); match your Kube-OVN
 # version or point at your mirror (air-gap).
 PROXY_IMAGE = "{{env.PROXY_IMAGE | default(value='docker.io/kubeovn/kube-ovn:v1.16.2')}}"
 # The in-cluster daemon through the Kubernetes service proxy (authn + RBAC by
 # the API server); used by the api-* and test-live tasks. No port-forward.
-OVN_TOPO_API = "/api/v1/namespaces/kube-system/services/http:ovn-topologyd:http/proxy/api/v1"
+KVOVN_TOPO_API = "/api/v1/namespaces/kube-system/services/http:kvovn-topod:http/proxy/api/v1"
 
 [tasks.build]
-description = "Build ovn-topologyd and ovn-topo binaries"
+description = "Build kvovn-topod and kvovn-topo binaries"
 run = "make build"
 
 # Dev only. A locally run daemon must reach the OVN databases, but a plain
@@ -30,7 +30,7 @@ run = "make build"
 # It is the only thing any task creates in the cluster: remove it with
 # `mise run pf-proxy-remove`. The in-cluster daemon, the TUI and MCP never need it.
 [tasks.pf-proxy-deploy]
-description = "[dev] Create the ovn-topology-proxy relay pod in kube-system (OVSDB reach for a locally run daemon)"
+description = "[dev] Create the kvovn-topo-proxy relay pod in kube-system (OVSDB reach for a locally run daemon)"
 run = """
 if ! kubectl --kubeconfig "$KUBECONFIG" get pod -n "$PROXY_NAMESPACE" "$PROXY_POD" > /dev/null 2>&1; then
   echo "Deploying $PROXY_POD ($PROXY_IMAGE) in $PROXY_NAMESPACE; remove it with: mise run pf-proxy-remove"
@@ -38,10 +38,10 @@ if ! kubectl --kubeconfig "$KUBECONFIG" get pod -n "$PROXY_NAMESPACE" "$PROXY_PO
 apiVersion: v1
 kind: Pod
 metadata:
-  name: ovn-topology-proxy
+  name: kvovn-topo-proxy
   namespace: kube-system
   labels:
-    app: ovn-topology-proxy
+    app: kvovn-topo-proxy
 spec:
   containers:
     - name: proxy
@@ -92,7 +92,7 @@ fi
 """
 
 [tasks.pf-proxy-remove]
-description = "[dev] Stop the OVN port-forwards and delete the ovn-topology-proxy relay pod"
+description = "[dev] Stop the OVN port-forwards and delete the kvovn-topo-proxy relay pod"
 depends = ["pf-stop"]
 run = "kubectl --kubeconfig \"$KUBECONFIG\" delete pod -n \"$PROXY_NAMESPACE\" \"$PROXY_POD\" --ignore-not-found"
 
@@ -121,10 +121,10 @@ echo "Port-forwards stopped."
 """
 
 [tasks.daemon]
-description = "[dev] Run ovn-topologyd locally against the cluster OVN databases (needs mise run pf)"
+description = "[dev] Run kvovn-topod locally against the cluster OVN databases (needs mise run pf)"
 depends = ["build"]
 run = """
-./bin/ovn-topologyd \
+./bin/kvovn-topod \
   --kubeconfig="$KUBECONFIG" \
   --nb-endpoints="tcp:127.0.0.1:$NB_PORT" \
   --sb-endpoints="tcp:127.0.0.1:$SB_PORT" \
@@ -140,7 +140,7 @@ DIAG_FLAG=""
 if [ "${DIAG:-false}" = "true" ] || [ "${DIAG:-0}" = "1" ]; then
   DIAG_FLAG="--diag"
 fi
-./bin/ovn-topo --kubeconfig="$KUBECONFIG" $DIAG_FLAG
+./bin/kvovn-topo --kubeconfig="$KUBECONFIG" $DIAG_FLAG
 """
 
 [tasks.tui-diag]
@@ -151,39 +151,39 @@ run = "DIAG=true mise run tui"
 [tasks.tui-local]
 description = "[dev] Launch the TUI against the locally running daemon (mise run daemon)"
 depends = ["build"]
-run = "./bin/ovn-topo --daemon-url=$DAEMON_URL"
+run = "./bin/kvovn-topo --daemon-url=$DAEMON_URL"
 
 [tasks.tui-offline]
 description = "Launch TUI in offline mode using bundled dev fixtures"
 depends = ["build"]
-run = "./bin/ovn-topo --fixture"
+run = "./bin/kvovn-topo --fixture"
 
 [tasks.api-ready]
 alias = "curl-ready"
 description = "Check the in-cluster daemon's readiness through the service proxy"
-run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/readyz\" | jq ."
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$KVOVN_TOPO_API/readyz\" | jq ."
 
 [tasks.api-version]
 alias = "curl-version"
 description = "Query the in-cluster daemon and OVN schema versions through the service proxy"
-run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/version\" | jq ."
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$KVOVN_TOPO_API/version\" | jq ."
 
 [tasks.api-graph]
 alias = "curl-graph"
 description = "Fetch the aggregated L3 graph through the service proxy"
-run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/graph?view=l3\" | jq ."
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$KVOVN_TOPO_API/graph?view=l3\" | jq ."
 
 [tasks.api-chassis]
 alias = "curl-chassis"
 description = "Fetch the chassis list through the service proxy"
-run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$OVN_TOPO_API/chassis\" | jq ."
+run = "kubectl --kubeconfig \"$KUBECONFIG\" get --raw \"$KVOVN_TOPO_API/chassis\" | jq ."
 
 [tasks.api-find]
 description = "Search objects through the service proxy: mise run api-find <text>"
 usage = 'arg "[q]" help="name, IP, MAC, namespace, pod or VM" default="join"'
 run = """
 q="${usage_q:-join}"
-kubectl --kubeconfig "$KUBECONFIG" get --raw "$OVN_TOPO_API/find?q=$(jq -rn --arg q "$q" '$q|@uri')" | jq .
+kubectl --kubeconfig "$KUBECONFIG" get --raw "$KVOVN_TOPO_API/find?q=$(jq -rn --arg q "$q" '$q|@uri')" | jq .
 """
 
 [tasks.api-events]
@@ -197,14 +197,14 @@ trap 'kill $KP 2>/dev/null || true; rm -f "$LOG"' EXIT INT TERM
 for _ in $(seq 1 50); do grep -q "Starting to serve" "$LOG" && break; sleep 0.1; done
 ADDR=$(sed -n 's/^Starting to serve on //p' "$LOG")
 [ -n "$ADDR" ] || { cat "$LOG" >&2; exit 1; }
-curl -N -s "http://$ADDR$OVN_TOPO_API/events"
+curl -N -s "http://$ADDR$KVOVN_TOPO_API/events"
 """
 
 [tasks.test-live]
 description = "End-to-end check of the in-cluster daemon through the Kubernetes service proxy (no port-forward)"
 run = """
 set -euo pipefail
-api() { kubectl --kubeconfig "$KUBECONFIG" get --raw "$OVN_TOPO_API$1"; }
+api() { kubectl --kubeconfig "$KUBECONFIG" get --raw "$KVOVN_TOPO_API$1"; }
 echo "==> Checking /readyz..."
 api /readyz | jq .
 echo "==> Checking /version..."
@@ -232,27 +232,27 @@ echo "==> All local tests passed!"
 """
 
 [tasks.install]
-description = "Install ovn-topo into ~/.local/bin (for MCP clients that run `ovn-topo mcp`)"
+description = "Install kvovn-topo into ~/.local/bin (for MCP clients that run `kvovn-topo mcp`)"
 depends = ["build"]
-run = "install -D -m 0755 bin/ovn-topo \"$HOME/.local/bin/ovn-topo\" && echo \"installed $HOME/.local/bin/ovn-topo\""
+run = "install -D -m 0755 bin/kvovn-topo \"$HOME/.local/bin/kvovn-topo\" && echo \"installed $HOME/.local/bin/kvovn-topo\""
 
 [tasks.mcp-offline]
-description = "Smoke-test ovn-topo mcp against the hv-01-lab fixture (no cluster)"
+description = "Smoke-test kvovn-topo mcp against the hv-01-lab fixture (no cluster)"
 depends = ["build"]
 run = "hack/mcp-smoke.sh --fixture-dir testdata/scenarios/hv-01-lab"
 
 [tasks.mcp-live]
-description = "Smoke-test ovn-topo mcp against the in-cluster daemon through the Kubernetes service proxy (no port-forward)"
+description = "Smoke-test kvovn-topo mcp against the in-cluster daemon through the Kubernetes service proxy (no port-forward)"
 depends = ["build"]
 run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\""
 
 [tasks.mcp-local]
-description = "[dev] Smoke-test ovn-topo mcp against the locally running daemon (mise run daemon)"
+description = "[dev] Smoke-test kvovn-topo mcp against the locally running daemon (mise run daemon)"
 depends = ["build"]
 run = "hack/mcp-smoke.sh --daemon-url \"$DAEMON_URL\""
 
 [tasks.mcp-embedded]
-description = "[dev] Smoke-test ovn-topo mcp with the embedded graph over the OVN port-forwards"
+description = "[dev] Smoke-test kvovn-topo mcp with the embedded graph over the OVN port-forwards"
 depends = ["build", "pf"]
 run = "hack/mcp-smoke.sh --kubeconfig \"$KUBECONFIG\" --nb \"tcp:127.0.0.1:$NB_PORT\" --sb \"tcp:127.0.0.1:$SB_PORT\""
 
@@ -262,9 +262,9 @@ depends = ["pf-stop"]
 run = "rm -rf bin/"
 
 [tasks.deploy-cluster]
-description = "Deploy or upgrade ovn-topology daemon Helm chart in cluster with latest tag and Always pull"
+description = "Deploy or upgrade kvovn-topo daemon Helm chart in cluster with latest tag and Always pull"
 run = """
-helm upgrade --install ovn-topology ./charts/ovn-topology \
+helm upgrade --install kvovn-topo ./charts/kvovn-topo \
   --kubeconfig "$KUBECONFIG" \
   --namespace kube-system \
   --set image.tag="latest" \
@@ -272,8 +272,8 @@ helm upgrade --install ovn-topology ./charts/ovn-topology \
 """
 
 [tasks.undeploy-cluster]
-description = "Uninstall ovn-topology daemon Helm chart from cluster"
-run = "helm uninstall ovn-topology --kubeconfig \"$KUBECONFIG\" --namespace kube-system --ignore-not-found"
+description = "Uninstall kvovn-topo daemon Helm chart from cluster"
+run = "helm uninstall kvovn-topo --kubeconfig \"$KUBECONFIG\" --namespace kube-system --ignore-not-found"
 
 
 

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/coulof/ovn-topology/pkg/ovsdb/nbmodel"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/sbmodel"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/nbmodel"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/sbmodel"
 )
 
 // LoadTestSnapshot loads test fixtures from testdata/ovn-nb.json and testdata/ovn-sb.json.

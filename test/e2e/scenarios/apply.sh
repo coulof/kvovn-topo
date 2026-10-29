@@ -15,7 +15,7 @@ source "${ROOT_DIR}/hack/lab/lab.env"
 export KUBE_OVN_VERSION EGRESS_CIDR EGRESS_GATEWAY LAB_NAME
 export EGRESS_NET="${EGRESS_GATEWAY%.*}" # 192.168.107
 export EGRESS_GW_CIDR="${EGRESS_GATEWAY}/${EGRESS_CIDR#*/}" # 192.168.107.1/24
-KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/ovn-topology-lab.yaml}"
+KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/kvovn-topo-lab.yaml}"
 export KUBECONFIG
 
 name="${1:-}"; action="${2:-apply}"

@@ -1,6 +1,6 @@
 # MCP Prompt Guide
 
-This guide lists prompts for AI coding agents (OpenCode, Claude Code, agy) connected to the `ovn-topo mcp` server ([setup](mcp.md)).
+This guide lists prompts for AI coding agents (OpenCode, Claude Code, agy) connected to the `kvovn-topo mcp` server ([setup](mcp.md)).
 
 Each section shows practical troubleshooting questions, which MCP tool the agent invokes, and what data it inspects. All answers come from the OVN Northbound/Southbound configuration and bindings; nothing is captured or traced on the wire.
 

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/ovsdb/sbmodel"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/ovsdb/sbmodel"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")

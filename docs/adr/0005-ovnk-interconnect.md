@@ -45,24 +45,24 @@ Both belong to the ADR-0004 adapter.
 
 ```mermaid
 flowchart LR
-  subgraph node["Each node: DaemonSet ovn-topology-zone"]
+  subgraph node["Each node: DaemonSet kvovn-topo-zone"]
     sock["/var/run/ovn-ic<br/>ovn{nb,sb}_db.sock<br/>read-only hostPath mount"]
     col["zone collector<br/>libovsdb monitors, no graph logic"]
     sock --> col
   end
   col -->|"raw rows: snapshot + deltas<br/>mTLS"| merge
-  subgraph deploy["Deployment ovn-topologyd"]
+  subgraph deploy["Deployment kvovn-topod"]
     merge["merge (flavor adapter)<br/>replicated objects keyed by name<br/>zone-local IDs type:zone/uuid<br/>remote tstor-node → owning zone"]
     api["graph, API, SSE, history"]
     merge --> api
   end
-  api -->|"service proxy"| tui["ovn-topo"] & mcp["ovn-topo mcp"]
+  api -->|"service proxy"| tui["kvovn-topo"] & mcp["kvovn-topo mcp"]
 ```
 
 The collector is the only privileged part (root, hostPath, SCC), and the sockets it reads accept writes. The current per-zone TUI mode is drawn in the [README](../../README.md#openshift-one-node-at-a-time).
 
 1. **Option (a): zone collectors plus a merger in the daemon.**
-   - A DaemonSet `ovn-topology-zone` runs one collector per node. It reads the local NB/SB sockets with libovsdb monitors and serves the zone's raw rows to the daemon on the pod network, protected by mTLS between the daemon and its collectors.
+   - A DaemonSet `kvovn-topo-zone` runs one collector per node. It reads the local NB/SB sockets with libovsdb monitors and serves the zone's raw rows to the daemon on the pod network, protected by mTLS between the daemon and its collectors.
    - The daemon stays a single Deployment and owns the merged graph, the API, SSE and history.
    - Collectors hold no graph logic.
 2. **Merge rules** (flavor adapter, ovn-kubernetes only):
@@ -108,7 +108,7 @@ The collector is the only privileged part (root, hostPath, SCC), and the sockets
 Rejected as the product model, for the daemon and MCP.
 
 It exists as a TUI mode in two forms:
-- **Live (T1):** `ovn-topo --diag --zone <node>`. A `pods/exec` stream runs the allowlisted `socat STDIO UNIX-CONNECT:/var/run/ovn/ovn{nb,sb}_db.sock` in `nbdb`/`sbdb` (`pkg/diag/ovsdbrelay.go`), and libovsdb monitors run over it.
+- **Live (T1):** `kvovn-topo --diag --zone <node>`. A `pods/exec` stream runs the allowlisted `socat STDIO UNIX-CONNECT:/var/run/ovn/ovn{nb,sb}_db.sock` in `nbdb`/`sbdb` (`pkg/diag/ovsdbrelay.go`), and libovsdb monitors run over it.
   - Verified on `hol-powerflex-lab` on 2026-10-27: creating a pod produced one SSE event with its LSP, the node LS and the GR NAT.
 - **Offline:** captured fixtures (`hack/capture-fixtures.sh --flavor ovnk`, `--fixture-dir`), for MCP and for users without exec rights.
 

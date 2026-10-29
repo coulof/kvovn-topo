@@ -1,4 +1,4 @@
-# AGENTS.md — ovn-topology
+# AGENTS.md — kvovn-topo
 
 Instructions for coding agents working in this repository. Read fully before making changes.
 
@@ -10,8 +10,8 @@ Companion documents, to read before starting work:
 
 A **read-only network topology visualizer for OVN as deployed by Kube-OVN**, made of:
 
-- `ovn-topologyd` — Go daemon that monitors the OVN Northbound (NB) and Southbound (SB) databases via OVSDB, builds a joined in-memory graph, and serves it over HTTP JSON + SSE.
-- `ovn-topo` — Go TUI (Bubble Tea) consuming the same graph package.
+- `kvovn-topod` — Go daemon that monitors the OVN Northbound (NB) and Southbound (SB) databases via OVSDB, builds a joined in-memory graph, and serves it over HTTP JSON + SSE.
+- `kvovn-topo` — Go TUI (Bubble Tea) consuming the same graph package.
 - Rancher UI Extension — **paused** (see §7). The code is archived at tag `archive/ui-extension`; it is not in the tree.
 
 Targets: Rancher-managed RKE2 and Rancher-managed Harvester clusters running Kube-OVN. Latest Rancher only.
@@ -22,12 +22,12 @@ Targets: Rancher-managed RKE2 and Rancher-managed Harvester clusters running Kub
 2. **OVSDB is the source of truth for topology.** Do **not** read Kube-OVN CRDs (Vpc, Subnet, IP, Ovn*, Iptables*, SecurityGroup…). Kubernetes identity comes from NB `external_ids`. Allowed Kubernetes reads (get/list/watch only) are exactly: `Node`, `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, `NetworkAttachmentDefinition`. They are used to enrich graph nodes, never to create them.
 3. **Metrics are optional overlays only**, never a source of topology.
 4. **Air-gap friendly.** No runtime calls to the internet. No CDN assets in the UI. All images and charts must be mirrorable (Hauler).
-5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/ovn-topo`. The daemon, `pkg/mcp` and `pkg/kubeproxy` must never depend on `pkg/diag` or `remotecommand`; MCP exposes T0 tools only — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
+5. **Privilege tiers (ADR-0001).** T0 (passive) code may live anywhere. T1 (exec-based diagnostics) lives only in `pkg/diag` and is used only by `cmd/kvovn-topo`. The daemon, `pkg/mcp` and `pkg/kubeproxy` must never depend on `pkg/diag` or `remotecommand`; MCP exposes T0 tools only — enforced by `depguard` and `hack/check-deps.sh`. Commands run by `pkg/diag` come from a typed allowlist; never build commands from free-form strings.
 
 ## 2. Repository layout
 
 ```
-ovn-topology/
+kvovn-topo/
 ├── go.mod                   # module root; tags are plain vX.Y.Z
 ├── api/openapi.yaml         # API contract — single source of truth
 ├── pkg/
@@ -39,13 +39,13 @@ ovn-topology/
 │   ├── server/              # HTTP + SSE handlers
 │   ├── trace/               # T0 configuration-based path computation (M5)
 │   ├── history/             # T0 recorder, stores (memory/bbolt), reconstructor, summarizer (ADR-0002, M8)
-│   ├── mcp/                 # T0 MCP tools for `ovn-topo mcp` (M9) — never imports pkg/diag
+│   ├── mcp/                 # T0 MCP tools for `kvovn-topo mcp` (M9) — never imports pkg/diag
 │   ├── kubeproxy/           # T0 service-proxy client + daemon Service discovery (TUI, MCP) — never imports pkg/diag
 │   └── diag/                # T1 exec-based diagnostics — TUI only (ADR-0001, M6)
 ├── cmd/
-│   ├── ovn-topologyd/
-│   └── ovn-topo/
-├── charts/ovn-topology/     # daemon Helm chart (installed per downstream cluster)
+│   ├── kvovn-topod/
+│   └── kvovn-topo/
+├── charts/kvovn-topo/     # daemon Helm chart (installed per downstream cluster)
 ├── testdata/                # OVSDB snapshots used as fixtures
 ├── test/                    # e2e (Go, tag e2e), ovn/ (raw OVSDB) — see ROADMAP testing strategy
 ├── hack/                    # codegen, check-deps.sh, capture-fixtures.sh, dev-cluster.sh, lab/, harvester/
@@ -69,7 +69,7 @@ make dev-cluster   # hack/: k3s + Kube-OVN lab in local Lima VMs (scenarios: tes
 
 Run `make generate lint test` before declaring any task done. If you change `api/openapi.yaml`, regenerate and update the Go consumers in the same change.
 
-## 4. Backend (`pkg/`, `cmd/ovn-topologyd`)
+## 4. Backend (`pkg/`, `cmd/kvovn-topod`)
 
 ### OVSDB access
 
@@ -163,14 +163,14 @@ git checkout archive/ui-extension -- ui .github/workflows/ui.yml   # restore the
 git show archive/ui-extension:AGENTS.md                              # the full §7/§8 UI rules
 ```
 
-Do not start UI work without an explicit task. The daemon API (`api/openapi.yaml`, SSE with heartbeat, `If-None-Match` polling) stays UI-ready; restoring the extension also means restoring `make ui-*`, the ECI release job and the CI type-drift check (`hack/generate.sh` already generates TS types when `ui/pkg/ovn-topology` exists).
+Do not start UI work without an explicit task. The daemon API (`api/openapi.yaml`, SSE with heartbeat, `If-None-Match` polling) stays UI-ready; restoring the extension also means restoring `make ui-*`, the ECI release job and the CI type-drift check (`hack/generate.sh` already generates TS types when `ui/pkg/kvovn-topo` exists; the archived code still sits at `ui/pkg/ovn-topology` and the old project names, so rename them on restore).
 
 ## 8. Packaging
 
-- Daemon chart `charts/ovn-topology`: installed on **each** downstream cluster running Kube-OVN.
-- Tag `vX.Y.Z`: Go module, daemon image, daemon chart and the `ovn-topologyd`/`ovn-topo` binaries. `release.yml` produces them from one version bump; never hand-craft them.
+- Daemon chart `charts/kvovn-topo`: installed on **each** downstream cluster running Kube-OVN.
+- Tag `vX.Y.Z`: Go module, daemon image, daemon chart and the `kvovn-topod`/`kvovn-topo` binaries. `release.yml` produces them from one version bump; never hand-craft them.
 - Air-gap: release produces a Hauler manifest listing the daemon image and chart.
-- While the extension is paused, its tags (`ovn-topology-X.Y.Z` chart, `ovn-topology-ui-X.Y.Z` ECI) are not produced; the lockstep rules are in `archive/ui-extension`.
+- While the extension is paused, its tags (`kvovn-topo-X.Y.Z` chart, `kvovn-topo-ui-X.Y.Z` ECI) are not produced; the lockstep rules are in `archive/ui-extension`.
 
 ## 9. Testing
 

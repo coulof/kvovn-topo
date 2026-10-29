@@ -18,15 +18,15 @@ ARG TARGETARCH=amd64
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s -X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildDate=${BUILD_DATE}" \
-    -o /bin/ovn-topologyd ./cmd/ovn-topologyd
+    -o /bin/kvovn-topod ./cmd/kvovn-topod
 
 # Final runtime stage: distroless non-root
 FROM gcr.io/distroless/static:nonroot
 
 USER 65534:65534
 
-COPY --from=builder /bin/ovn-topologyd /ovn-topologyd
+COPY --from=builder /bin/kvovn-topod /kvovn-topod
 
 EXPOSE 8080
 
-ENTRYPOINT ["/ovn-topologyd"]
+ENTRYPOINT ["/kvovn-topod"]

@@ -82,10 +82,10 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen \
   -o "${ROOT_DIR}/pkg/api/types.gen.go" \
   "${ROOT_DIR}/api/openapi.yaml"
 
-if [[ -d "${ROOT_DIR}/ui/pkg/ovn-topology" ]]; then
+if [[ -d "${ROOT_DIR}/ui/pkg/kvovn-topo" ]]; then
   echo "Generating TypeScript types for UI..."
-  mkdir -p "${ROOT_DIR}/ui/pkg/ovn-topology/types"
-  npx --yes openapi-typescript "${ROOT_DIR}/api/openapi.yaml" -o "${ROOT_DIR}/ui/pkg/ovn-topology/types/api.ts"
+  mkdir -p "${ROOT_DIR}/ui/pkg/kvovn-topo/types"
+  npx --yes openapi-typescript "${ROOT_DIR}/api/openapi.yaml" -o "${ROOT_DIR}/ui/pkg/kvovn-topo/types/api.ts"
 fi
 
 echo "Generation complete."

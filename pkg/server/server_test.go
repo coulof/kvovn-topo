@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/api"
-	"github.com/coulof/ovn-topology/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/graph"
 )
 
 func setupTestServer(t *testing.T) (*Server, *graph.Store) {

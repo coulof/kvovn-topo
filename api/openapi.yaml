@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: ovn-topology API
+  title: kvovn-topo API
   version: 1.0.0
   description: Read-only network topology API for OVN as deployed by Kube-OVN.
 servers:

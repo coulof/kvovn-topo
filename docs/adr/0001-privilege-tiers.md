@@ -25,7 +25,7 @@ Features are classified into tiers, and the tier decides which binaries may cont
 Enforcement:
 
 1. Tier 1 code lives in `pkg/diag` only, behind an `Executor` interface implemented with client-go `remotecommand`.
-2. `cmd/ovn-topologyd` and `pkg/graph`, `pkg/server` must not import `pkg/diag`. This is enforced by `depguard` in golangci-lint plus a CI check (`go list -deps ./cmd/ovn-topologyd | grep pkg/diag` must be empty).
+2. `cmd/kvovn-topod` and `pkg/graph`, `pkg/server` must not import `pkg/diag`. This is enforced by `depguard` in golangci-lint plus a CI check (`go list -deps ./cmd/kvovn-topod | grep pkg/diag` must be empty).
 3. Every command run by `pkg/diag` comes from a typed allowlist (`ovn-trace`, `tcpdump`, `ovs-vsctl --format=json list|show`, …). No free-form command strings from user input. Arguments are built from graph objects, never interpolated raw.
 4. The TUI shows a persistent "DIAG" badge when Tier 1 is enabled. When RBAC denies exec, it degrades to Tier 0 with a clear message, not an error.
 5. `tcpdump` sessions require a filter and have default packet-count and duration limits.
@@ -42,5 +42,5 @@ Enforcement:
     - `kubectl exec <vpc-nat-gw pod> -- iptables-save -t nat`.
   - Arguments are built from graph objects only. Option-like and non-name characters are rejected.
   - This is a closed set of read-only queries, not the excluded raw `nbctl` passthrough.
-  - It needs `--diag`. The process runner lives in `cmd/ovn-topo`, so the daemon and `pkg/mcp` are unaffected.
+  - It needs `--diag`. The process runner lives in `cmd/kvovn-topo`, so the daemon and `pkg/mcp` are unaffected.
 - Kubernetes read access expands beyond `Node` to: `Pod`, `Service`, `EndpointSlice`, KubeVirt `VirtualMachineInstance`/`VirtualMachine`, and `NetworkAttachmentDefinition`. All are get/list/watch. Kube-OVN CRDs remain out of scope.

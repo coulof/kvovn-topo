@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/api"
 )
 
 // Envelope is the shape of every tool result (ADR-0003 §5).

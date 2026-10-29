@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/coulof/ovn-topology/pkg/api"
+	"github.com/coulof/kvovn-topo/pkg/api"
 	"github.com/google/jsonschema-go/jsonschema"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -54,7 +54,7 @@ func NewServer(b Backend, opts Options) *sdk.Server {
 	if opts.Version == "" {
 		opts.Version = "dev"
 	}
-	s := sdk.NewServer(&sdk.Implementation{Name: "ovn-topology", Title: "OVN topology (read-only)", Version: opts.Version},
+	s := sdk.NewServer(&sdk.Implementation{Name: "kvovn-topo", Title: "OVN topology (read-only)", Version: opts.Version},
 		&sdk.ServerOptions{Instructions: instructions, Logger: opts.Logger})
 	t := &tools{b: b, now: opts.Now}
 

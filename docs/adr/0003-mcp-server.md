@@ -6,7 +6,7 @@
 
 ## Context
 
-M9 (`ROADMAP.md`) adds an MCP server so AI agents can answer network questions from real OVN data. The roadmap already binds the transport (stdio, `ovn-topo mcp`), the two backends (A: daemon through the Kubernetes service proxy; B: embedded `pkg/graph` against OVSDB), the T0-only rule (ADR-0001) and the output discipline. It leaves four things open:
+M9 (`ROADMAP.md`) adds an MCP server so AI agents can answer network questions from real OVN data. The roadmap already binds the transport (stdio, `kvovn-topo mcp`), the two backends (A: daemon through the Kubernetes service proxy; B: embedded `pkg/graph` against OVSDB), the T0-only rule (ADR-0001) and the output discipline. It leaves four things open:
 
 1. **Q9: which MCP Go library.** The roadmap says to use the official Go SDK unless kvtop uses a different one. kvtop (`internal/mcp`) uses **no SDK**: about 550 lines of hand-written JSON-RPC that pin protocol `2024-11-05`.
 2. **How `find` works on backend A.** The daemon API has no search endpoint. The only way to enumerate LSPs is `view=l2` page by page, per LS.
@@ -20,7 +20,7 @@ Forces: air-gapped targets (no runtime network calls beyond the cluster), the re
 1. **Library: official SDK `github.com/modelcontextprotocol/go-sdk` (v1.8.0).** kvtop is not aligned with it; it should migrate when it next touches MCP. That is not in this repo's scope.
 2. **One `Backend` interface in `pkg/mcp`** with `Name`, `Graph`, `Node`, `Find` and `Chassis`:
    - **A, `HTTPBackend`:** talks to the daemon's `/api/v1`, either at an explicit `--daemon-url` or through the API server's service proxy built from the user's kubeconfig (`/api/v1/namespaces/<ns>/services/http:<svc>:http/proxy`). The viewer needs `services/proxy` on that Service, which is the same RBAC as the UI.
-   - **B, `SnapshotBackend`:** reads a `graph.Store`. `ovn-topo mcp --nb … --sb …` fills it from the OVSDB syncer: the user runs `kubectl port-forward` or has direct reach. `--fixture` fills it from a committed snapshot, which tests use too.
+   - **B, `SnapshotBackend`:** reads a `graph.Store`. `kvovn-topo mcp --nb … --sb …` fills it from the OVSDB syncer: the user runs `kubectl port-forward` or has direct reach. `--fixture` fills it from a committed snapshot, which tests use too.
 
    Both backends run the same `pkg/graph` code. Their outputs differ only in `backend`.
 3. **`find` is server-side: `GET /api/v1/find`** is added to `api/openapi.yaml` and implemented as `graph.Snapshot.Find`. Backend B calls the same function in process. The search covers names, IP, MAC, namespace, pod, VM and chassis hostname or encap IP, with an optional type filter and offset paging.
@@ -32,7 +32,7 @@ Forces: air-gapped targets (no runtime network calls beyond the cluster), the re
 
    Cursors are opaque strings.
 6. **Injection hygiene is enforced by types.** `summary` is built by a `summarize` helper whose arguments are only integers, closed enums (`view`, node type) and IDs (`<type>:<uuid>`). It has no string parameter that could carry a name or an `external_ids` value. Names and descriptions appear only inside `data`. A fixture with instruction-like LSP names and `external_ids` proves this (see DoD).
-7. **No T1 path.** `pkg/mcp` imports `pkg/graph`, `pkg/api` and the SDK only, and `depguard` plus `hack/check-deps.sh` already cover it. `ovn-topo mcp` never builds a diag executor, even with `--diag`.
+7. **No T1 path.** `pkg/mcp` imports `pkg/graph`, `pkg/api` and the SDK only, and `depguard` plus `hack/check-deps.sh` already cover it. `kvovn-topo mcp` never builds a diag executor, even with `--diag`.
 8. **stdout belongs to the protocol.** All logs go to stderr through `slog`.
 
 ## Options considered
@@ -85,7 +85,7 @@ The SDK costs one dependency but buys protocol currency and typed schemas. The r
 
 1. [x] `GET /find` in `api/openapi.yaml`, `graph.Snapshot.Find`, and the server handler.
 2. [x] `pkg/mcp`: `Backend`, `HTTPBackend`, `SnapshotBackend`, the four tools, envelope, caps, `summarize`.
-3. [x] `ovn-topo mcp` subcommand (kubeconfig service proxy / `--daemon-url` / `--nb --sb` / `--fixture`).
+3. [x] `kvovn-topo mcp` subcommand (kubeconfig service proxy / `--daemon-url` / `--nb --sb` / `--fixture`).
 4. [x] Golden tests per tool on the fixture, an injection test, and a caps/cursor test.
 5. [x] `docs/mcp.md` with client configs. Answer Q9 in `ROADMAP.md`.
 6. [ ] M4: `resolve_ip`, `effective_acls`, `run_checks`. M5: `compute_path`. M8: history tools, `at`.
