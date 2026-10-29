@@ -1,0 +1,16 @@
+<svg width="440" height="130" viewBox="0 0 440 130" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>KVOvn-topo</title>
+<g transform="translate(15,15) scale(0.5)">
+<path d="M49.81,46.19 L89.19,27.21 Q100,22 110.81,27.21 L150.19,46.19 Q161,51.4 163.66,63.10 L173.34,105.70 Q176,117.4 168.52,126.78 L141.28,160.92 Q133.8,170.3 121.8,170.3 L78.2,170.3 Q66.2,170.3 58.72,160.92 L31.48,126.78 Q24,117.4 26.66,105.70 L36.34,63.10 Q39,51.4 49.81,46.19 Z" fill="none" stroke="#2453FF" stroke-width="5" stroke-linejoin="round"/>
+<g fill="none" stroke="#2453FF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M100,64 L72,98"/><path d="M72,98 L58,136"/><path d="M72,98 L86,136"/><path d="M128,98 L114,136"/>
+</g>
+<path d="M100,64 L128,98 L142,136" fill="none" stroke="#FE7C3F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="60" y="89" width="24" height="18" rx="4" fill="#2453FF"/>
+<rect x="116" y="89" width="24" height="18" rx="4" fill="#2453FF"/>
+<circle cx="58" cy="136" r="6.5" fill="#2453FF"/><circle cx="86" cy="136" r="6.5" fill="#2453FF"/><circle cx="114" cy="136" r="6.5" fill="#2453FF"/>
+<circle cx="142" cy="136" r="6.5" fill="#FE7C3F" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="100" cy="62" r="9" fill="#FE7C3F" stroke="#FFFFFF" stroke-width="2"/>
+</g>
+<text x="135" y="78" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700" fill="#2453FF" letter-spacing="0.5">KVOvn-topo</text>
+</svg>
