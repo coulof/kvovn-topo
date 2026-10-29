@@ -2,8 +2,9 @@
 
 image:
   repository: ghcr.io/coulof/kvovn-topod
-  pullPolicy: Always
-  tag: "latest"
+  pullPolicy: IfNotPresent
+  # Empty: the chart's appVersion (set from the release tag), e.g. 0.1.0.
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""

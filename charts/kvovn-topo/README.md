@@ -136,7 +136,8 @@ kubectl create clusterrolebinding kvovn-topo-discovery \
 | Parameter | Description | Default |
 |---|---|---|
 | `image.repository` | Daemon container image | `ghcr.io/coulof/kvovn-topod` |
-| `image.tag` | Daemon container tag | `v0.1.0` |
+| `image.tag` | Daemon container tag | chart `appVersion` (e.g. `0.1.0`) |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `ovn.nbEndpoints` | OVN Northbound OVSDB connection endpoints | `tcp:ovn-nb.kube-system.svc.cluster.local:6641` |
 | `ovn.sbEndpoints` | OVN Southbound OVSDB connection endpoints | `tcp:ovn-sb.kube-system.svc.cluster.local:6642` |
 | `ovn.tls.enabled` | Enable TLS for OVSDB connections | `false` |
