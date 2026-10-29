@@ -405,7 +405,7 @@ func (m model) helpKeyLines() []string {
 		"   i  details pane",
 		"   d  describe (/node detail, external_ids)",
 		"   y  raw columns",
-		"   x  Tier 1 diagnostics (--diag, ADR-0001)",
+		"   x  Tier 1 diagnostics (--diag)",
 	}
 	right := []string{
 		" " + b("NAVIGATION"),

@@ -270,7 +270,7 @@ func (m model) runCmd(c string) (tea.Model, tea.Cmd) {
 func (m model) openDiag() (tea.Model, tea.Cmd) {
 	switch {
 	case !m.diagMode:
-		m.setFlash("Tier 1 diagnostics are off — run kvovn-topo --diag (ADR-0001)", true)
+		m.setFlash("Tier 1 diagnostics are off — run kvovn-topo --diag", true)
 	case !m.diagAvailable:
 		m.setFlash("diagnostics unavailable: "+m.diagReason, true)
 	default:

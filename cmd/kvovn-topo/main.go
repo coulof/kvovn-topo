@@ -544,7 +544,7 @@ func main() {
 	flag.BoolVar(&useFixture, "fixture", false, "Use bundled dev fixture dataset offline")
 	flag.StringVar(&fixtureDir, "fixture-dir", "", "Explore a captured scenario offline (testdata/scenarios/<name>, or one zone-<node> of an ovn-kubernetes capture)")
 	flag.StringVar(&themeName, "theme", getEnvDefault("THEME", "default"), "Color theme: default, suse, dracula, nord, tokyonight, catppuccin")
-	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics (ADR-0001)")
+	flag.BoolVar(&diagMode, "diag", false, "Enable Tier 1 exec-based diagnostics")
 	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
 	flag.StringVar(&k8sNamespace, "k8s-namespace", "", "Kubernetes namespace of the OVN pods diagnostics exec into (default: detect kube-system for Kube-OVN, else openshift-ovn-kubernetes or ovn-kubernetes)")
 	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
@@ -609,7 +609,7 @@ func main() {
 	// --zone: the zone's NB/SB through exec relays, an embedded graph on loopback.
 	if zone != "" {
 		if !diagMode {
-			fmt.Fprintln(os.Stderr, "Error: live ovn-kubernetes zones are Tier 1 (pods/exec relay, ADR-0001); add --diag")
+			fmt.Fprintln(os.Stderr, "Error: live ovn-kubernetes zones are Tier 1 (pods/exec relay); add --diag")
 			os.Exit(2)
 		}
 		if zone == "list" {
