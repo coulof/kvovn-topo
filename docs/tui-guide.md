@@ -11,17 +11,13 @@ kvovn-topo --daemon-url http://127.0.0.1:8888/api/v1   # a daemon you run yourse
 
 See [§0 Connecting](#0-connecting) for how the TUI reaches the daemon. `?` explains the selected object and the current view; [concepts.md](concepts.md) is the long form, with the Kube-OVN, OVN and ovn-kubernetes names side by side.
 
-Part 1 is organised by **use case**: the question you have, the keys to press, what to look at. Each use case has a **TUI | Harvester** screenshot pair. Part 2 is the **reference** for every screen.
-
-> **Screenshots.**
-> - TUI captures go in `docs/images/tui/`, Harvester captures in `docs/images/harvester/`, named `ucNN-<topic>.png` as in the placeholders.
-> - The Harvester locations are *suggested*: check the exact menu names in your Harvester version when capturing.
+Part 1 is organized by **use case**: the question you have, the keys to press, and what to inspect. Select scenarios pair the TUI view with Harvester. Part 2 is the **reference** for every screen.
 
 ---
 
 ## 0. Connecting
 
-The daemon is never exposed: no NodePort, LoadBalancer, kube-vip IP or Ingress. `kvovn-topo` reaches it through the **Kubernetes API server's service proxy** with your kubeconfig credentials, so the API server authenticates you and checks RBAC. This works the same through Rancher (`https://<rancher>/k8s/clusters/<id>`) and against a Harvester VIP (`https://<vip>:6443`). No port-forward is needed.
+`kvovn-topo` reaches the daemon through the **Kubernetes API server service proxy** using your kubeconfig credentials. The API server authenticates you and enforces RBAC. This works identically through Rancher (`https://<rancher>/k8s/clusters/<id>`) and against a Harvester VIP (`https://<vip>:6443`). No port-forward is needed.
 
 - **Finding the daemon:** with no flags, `kvovn-topo` uses the Service `kube-system/kvovn-topod`. If it isn't there, it looks for the one Service labelled `app.kubernetes.io/name=kvovn-topo` in any namespace. Several matches is an error: the TUI never guesses.
   - `--namespace` / `--service` pin the Service and skip the search.
@@ -71,181 +67,157 @@ Every frame is laid out to exactly the terminal size: nothing scrolls off the to
 
 **Keys:** `1` → select a VPC, then its router (`LR`).
 
-- The tree opens two levels: each VPC with its routers and switches, folded. `l` / `Space` unfolds a router into its ports (`LRP`) and a switch into its ports (`LSP`).
+- The tree opens two levels: each VPC with its routers and switches folded. `l` or `Space` unfolds a router into its ports (`LRP`) and a switch into its ports (`LSP`).
 - The details pane on the router lists **Ports & interconnections**: each router port with its networks, the switch it connects to (`shared interconnect` when several routers use it), its MAC, and the active gateway chassis for centralized ports.
-- **L3** shows the route, policy, NAT and load-balancer counts, then the static routes, policies and NAT rows themselves. Next hops name their owner, such as `node hv-01` for a join IP.
+- **L3** shows route, policy, NAT, and load-balancer counts, followed by the static routes, policies, and NAT rows. Next hops name their owner, such as `node hv-01` for a join IP.
 
-| TUI | Harvester |
-|---|---|
-| ![UC1 — VPCs view with router details](images/tui/uc01-vpc-router.png) | *Suggested:* Networks › Virtual Private Cloud › *vpc* |
-| `1`, VPC unfolded, cursor on its LR | |
+![UC1 — VPCs view with router details](images/tui/uc01-vpc-router.png)
 
 ## UC2. Where does my VM run and how does its traffic leave?
 
 **Keys:** `3` → namespace → VM → its NIC (`LSP`).
 
-- **Workloads view:** namespace → VM / Pod / Node → NICs. A KubeVirt VM is shown as the VM, not its `virt-launcher` pod.
-- The NIC's pane shows its IP and MAC, the **chassis it is bound on** (OVN's `Port_Binding`), and the **Path out**: `LSP → LS (cidr) → LRP gw <ip> → LR (VPC)`.
-- `✗ [unbound]` means OVN has not placed the port on any host (see UC4).
+- **Workloads view:** namespace → VM / Pod / Node → NICs. A KubeVirt VM appears directly as the VM, not its `virt-launcher` pod.
+- The NIC pane shows its IP and MAC, the **chassis it is bound on** (OVN `Port_Binding`), and the **Path out**: `LSP → LS (cidr) → LRP gw <ip> → LR (VPC)`.
+- `✗ [unbound]` indicates OVN has not placed the port on any host (see UC4).
 
-| TUI | Harvester |
-|---|---|
-| ![UC2 — VM NIC and path out](images/tui/uc02-vm-path-out.png) | *Suggested:* Virtual Machines › *vm* › Network |
-| `3`, VM → NIC selected, details pane | |
+![UC2 — VM NIC and path out](images/tui/uc02-vm-path-out.png)
 
 ## UC3. A VM with several NICs on different networks
 
 **Keys:** `3` → a VM with two NICs.
 
 - One workload row, with one NIC child per network (switch), each with its own IP and chassis.
-- `x` on the VM first asks **which NIC** the diagnostics should use; it never silently picks the first one.
+- `x` on the VM asks **which NIC** diagnostics should use; it never silently picks the first one.
 
-| TUI | Harvester |
-|---|---|
-| ![UC3 — multi-NIC VM](images/tui/uc03-multi-nic-vm.png) | *Suggested:* Virtual Machines › *vm* › Edit Config › Networks |
-| `3`, VM unfolded: NICs on two switches | |
+![UC3 — multi-NIC VM](images/tui/uc03-multi-nic-vm.png)
 
 ## UC4. Why is a pod or VM not working? (unbound port)
 
 **Keys:** `/pending` (or the name), or scan for `✗` / `!`.
 
-- `✗ [unbound]` on a port: no chassis claims it (`Port_Binding.chassis` is empty). The workload is scheduled but OVN has not wired it.
-- `!` on a switch: it has unbound ports. The summary says how many.
-- The pane says `Bound on: unbound — no Port_Binding.chassis`. Diagnostics that need a host are disabled with that reason.
+- `✗ [unbound]` on a port: no chassis claims it (`Port_Binding.chassis` is empty). The workload is scheduled, but OVN has not wired it.
+- `!` on a switch: it has unbound ports. The summary reports the count.
+- The pane shows `Bound on: unbound — no Port_Binding.chassis`. Diagnostics requiring a host are disabled with that reason.
 
-| TUI | Harvester |
-|---|---|
-| ![UC4 — unbound port](images/tui/uc04-unbound-port.png) | *Suggested:* Virtual Machines list, VM in *Starting* / *Unschedulable* |
-| `/pending`, unbound LSP selected | |
+![UC4 — unbound port](images/tui/uc04-unbound-port.png)
 
 ## UC5. How do VPCs reach each other and the nodes? (shared switches)
 
 **Keys:** `1` → *Shared & standalone switches*.
 
-- `join` connects every VPC router to every node's `ovn0` (100.64.0.0/16 by default). An external switch can be shared by several VPCs.
+- `join` connects every VPC router to every node `ovn0` (100.64.0.0/16 by default). Several VPCs can share an external switch.
 - `[shared by N routers]` plus one `router ⇢` relation per router. `Enter` on a relation jumps to that router.
-- The pane lists the **connected routers**: router, VPC, through which port and network.
+- The pane lists the **connected routers**: router, VPC, port, and network.
 
 | TUI | Harvester |
 |---|---|
 | ![UC5 — shared join switch](images/tui/uc05-shared-switch.png) | ![UC5 — VPC peering / subnets](images/harvester/uc05-vpc-subnets.png) |
-| `1`, `join` unfolded with `router ⇢` relations | *Suggested:* Networks › Virtual Private Cloud (VPCs and their subnets) |
 
 ## UC6. How does a VPC reach the outside? (gateway, EIP, underlay)
 
 **Keys:** `1` → a VPC → its router → the gateway port, then *External networks*.
 
-- A centralized gateway port carries `[GW active <chassis>]`. Its pane says **Centralized**: traffic leaves through the chassis that holds the `cr-<port>` redirect port, and *Routes out this port* shows the default route that uses it.
+- A centralized gateway port carries `[GW active <chassis>]`. Its pane says **Centralized**: traffic leaves through the chassis holding the `cr-<port>` redirect port, and *Routes out this port* shows the default route that uses it.
 - A subnet gateway port is **Distributed**: every chassis routes it locally.
 - *External networks* lists the provider network (the physical underlay) with its `localnet from ⇢` switch.
 
-| TUI | Harvester |
-|---|---|
-| ![UC6a — centralized gateway port](images/tui/uc06-gateway-port.png) | *Suggested:* Networks › Virtual Machine Networks |
-| `1`, gateway LRP selected, details pane | |
-| ![UC6b — provider network (localnet)](images/tui/uc06-external-network.png) | *Suggested:* Networks › Cluster Network Configuration |
-| `1`, External networks unfolded | |
+![UC6a — centralized gateway port](images/tui/uc06-gateway-port.png)
+
+![UC6b — provider network (localnet)](images/tui/uc06-external-network.png)
 
 ## UC7. Which host runs what, and how does a chassis map to a node?
 
 **Keys:** `2` → a chassis.
 
 - **Chassis view:** each chassis with the ports bound on it and `active gateway for ⇢ LRP`.
-- The pane shows the **System-id** (the chassis identity), hostname, encap (tunnel) IP, and `Node hv-01 ← <rule>`. The rule says how the node was matched: the `ovn.kubernetes.io/chassis` node annotation, the hostname, or a fallback.
+- The pane shows the **System-id** (the chassis identity), hostname, encap (tunnel) IP, and `Node hv-01 ← <rule>`. The rule shows how the node was matched: the `ovn.kubernetes.io/chassis` node annotation, the hostname, or a fallback.
 - **Warnings:**
   - hostname-only match;
   - several chassis with the same hostname (a stale chassis after a reinstall);
   - an interconnect chassis.
 
-| TUI | Harvester |
-|---|---|
-| ![UC7 — chassis and node mapping](images/tui/uc07-chassis.png) | *Suggested:* Hosts › *hv-01* |
-| `2`, chassis selected, details pane | |
+![UC7 — chassis and node mapping](images/tui/uc07-chassis.png)
 
 ## UC8. Follow a relation and come back
 
 **Keys:** unfold a port (`l`), `Enter` on `bound on ⇢ CH …`, then `b`.
 
-- `Enter` jumps to the object in the view where it lives: a chassis opens Chassis, a workload Workloads. The path to it is expanded, and the crumbs say where you jumped.
-- `b` returns to the exact row you left. On a `⇢` row the details pane already describes the target.
+- `Enter` jumps to the object in the view where it lives: a chassis opens Chassis, a workload Workloads. The path to it expands, and the crumbs show where you jumped.
+- `b` returns to the exact row you left. On a `⇢` row, the details pane describes the target.
 
-| TUI | Harvester |
-|---|---|
-| ![UC8a — relation rows](images/tui/uc08-relations.png) | — |
-| ![UC8b — after the jump](images/tui/uc08-jumped.png) | — |
+![UC8a — relation rows](images/tui/uc08-relations.png)
+
+![UC8b — after the jump](images/tui/uc08-jumped.png)
 
 ## UC9. What does OVN really store for this object?
 
 **Keys:** `d` (describe), then `y` (raw).
 
 - **Describe:** graph properties, Kubernetes identity (namespace, owner, VMI, node, NAD), relations, children, NB `external_ids`. Long maps unfold one entry per line.
-- **Raw:** the OVSDB row, pretty-printed like `jq` and keyed by OVSDB column names (`_uuid`, `hostname`, `other_config`…). The title names the table, e.g. `SB Chassis row`.
+- **Raw:** the OVSDB row, formatted as JSON and keyed by OVSDB column names (`_uuid`, `hostname`, `other_config`…). The title names the table, e.g. `SB Chassis row`.
 
-| TUI | Harvester |
-|---|---|
-| ![UC9a — describe](images/tui/uc09-describe.png) | *Suggested:* Virtual Machines › *vm* › ⋮ › Edit YAML |
-| ![UC9b — raw OVSDB row](images/tui/uc09-raw.png) | |
+![UC9a — describe](images/tui/uc09-describe.png)
+
+![UC9b — raw OVSDB row](images/tui/uc09-raw.png)
 
 ## UC10. Will this packet get through? (`ovn-trace`)
 
 **Keys:** `--diag`, select a VM NIC, `x` → `1`, pick a destination, `Enter`.
 
-- The modal header shows the **captured target**: port, datapath, IP/MAC, and the node with where it comes from.
-- **Destination tabs (`Tab`):** VM, Pod, Gateway, **Node ovn0** (a node's port on the join switch, inside OVN), **Underlay** (the chassis tunnel IP, outside OVN), Public DNS. You can also type an IP, or `IP:port`.
-- **Result:** the verdict (`DELIVERED` / `DROPPED`), the hop-by-hop path and the pipeline stages. `o` shows the raw output.
+- The modal header shows the **captured target**: port, datapath, IP/MAC, and the node it originates from.
+- **Destination tabs (`Tab`):** VM, Pod, Gateway, **Node ovn0** (a node port on the join switch, inside OVN), **Underlay** (the chassis tunnel IP, outside OVN), Public DNS. You can also type an IP, or `IP:port`.
+- **Result:** the verdict (`DELIVERED` / `DROPPED`), the hop-by-hop path, and the pipeline stages. `o` toggles raw output.
 
-| TUI | Harvester |
-|---|---|
-| ![UC10a — destination picker](images/tui/uc10-trace-picker.png) | — |
-| ![UC10b — trace delivered](images/tui/uc10-trace-delivered.png) | *Suggested:* Virtual Machines › *vm* › Console (ping the same destination) |
-| ![UC10c — trace dropped](images/tui/uc10-trace-dropped.png) | |
+![UC10a — destination picker](images/tui/uc10-trace-picker.png)
+
+![UC10b — trace delivered](images/tui/uc10-trace-delivered.png)
+
+![UC10c — trace dropped](images/tui/uc10-trace-dropped.png)
 
 ## UC11. Show me the live traffic (`tcpdump`)
 
 **Keys:** `x` → `2` on a VM NIC; or on the join router port `ovn-cluster-join`, `x` → `2`, then choose a chassis.
 
 - **VM or pod NIC:** captures on its host veth (`<hash>_h`), on the node where OVN binds the port.
-- **Join router port:** it runs on every chassis, so you pick one (`c` changes it later). The capture runs on that node's `ovn0`, filtered on the router port IP.
+- **Join router port:** it runs on every chassis, so you pick one (`c` changes it later). The capture runs on that node `ovn0`, filtered on the router port IP.
 - **Presets:** port IP, ICMP, TCP, SSH, web, DNS, or a custom BPF filter. `Space` / `Esc` stops the capture.
 
-| TUI | Harvester |
-|---|---|
-| ![UC11a — capture on the VM veth](images/tui/uc11-tcpdump-vm.png) | *Suggested:* Virtual Machines › *vm* › Console |
-| ![UC11b — chassis picker for the join port](images/tui/uc11-chassis-picker.png) | |
+![UC11a — capture on the VM veth](images/tui/uc11-tcpdump-vm.png)
+
+![UC11b — chassis picker for the join port](images/tui/uc11-chassis-picker.png)
 
 ## UC12. Node-level checks
 
 **Keys:** `2` → a chassis, `x` → `3` / `5` / `6`.
 
 - **`3` conntrack:** filtered on the port IP when started from a port, unfiltered from a chassis.
-- **`5` `ovs-vsctl show`:** bridges, the Geneve tunnel mesh, BFD.
+- **`5` `ovs-vsctl show`:** bridges, Geneve tunnel mesh, BFD.
 - **`6` `ovn-controller` logs** of that node.
 
-| TUI | Harvester |
-|---|---|
-| ![UC12a — ovs-vsctl show](images/tui/uc12-vsctl-show.png) | *Suggested:* Hosts › *hv-01* › Network |
-| ![UC12b — ovn-controller logs](images/tui/uc12-controller-logs.png) | |
+![UC12a — ovs-vsctl show](images/tui/uc12-vsctl-show.png)
+
+![UC12b — ovn-controller logs](images/tui/uc12-controller-logs.png)
 
 ## UC13. Watch a change happen (live migration, VM start)
 
-**Keys:** keep a view open, with the header showing `● live`.
+**Keys:** keep a view open with the header showing `● live`.
 
-- Each change on the daemon's event stream refetches only what changed. Changed rows flash for 3 s, then keep a `▌` mark in the gutter for 15 s (`--flash`, `0` turns it off), and `5` (Changes) keeps the list: `r812 LSP vm-2… broken → ok`.
-- A migrating VM's NIC moves from one chassis to another. With the diagnostics modal open on it, the modal warns `moved: hv-01 → hv-02` and re-targets the new node.
-- `L` pauses and resumes the live updates; `r` reloads everything.
+- Each change on the daemon event stream refetches only what changed. Changed rows flash for 3 s, then keep a `▌` mark in the gutter for 15 s (`--flash`, `0` turns it off). `5` (Changes) keeps the event list: `r812 LSP vm-2… broken → ok`.
+- A migrating VM NIC moves from one chassis to another. With the diagnostics modal open on it, the modal reports `moved: hv-01 → hv-02` and targets the new node.
+- `L` pauses and resumes live updates; `r` reloads everything.
 
 | TUI | Harvester |
 |---|---|
 | ![UC13a — row flashing on change](images/tui/uc13-live-flash.png) | ![UC13 — live migration in progress](images/harvester/uc13-live-migration.png) |
-| ![UC13b — modal: target moved](images/tui/uc13-target-moved.png) | *Suggested:* Virtual Machines › *vm* › ⋮ › Migrate |
 
 ## UC14. What is broken right now?
 
 **Keys:** `4` (Problems). The header shows the count, e.g. `! 3 problems (4)`.
 
-- One list, most severe first: unbound or disabled ports, gateway ports with no active chassis, chassis that match no node or share a hostname, and routers whose NAT gateway may be bypassed by replies.
+- One list, most severe first: unbound or disabled ports, gateway ports with no active chassis, chassis matching no node or sharing a hostname, and routers whose NAT gateway may be bypassed by replies.
 - `Enter` jumps to the object in its view, `b` comes back.
-- The NAT-gateway line is a heuristic: it reads `checking…` while the router's routes load, then warns when `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway. That is the one-water incident.
+- The NAT-gateway line is a heuristic: it reads `checking…` while the router routes load, then warns when `0.0.0.0/0` leaves elsewhere and no `src-ip` route or reroute leads to the gateway.
 
 ---
 
