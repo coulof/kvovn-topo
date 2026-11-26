@@ -53,6 +53,14 @@ spec:
               value: {{ .Values.ovn.nbEndpoints | quote }}
             - name: OVN_SB_ENDPOINTS
               value: {{ .Values.ovn.sbEndpoints | quote }}
+            - name: HISTORY_MODE
+              value: {{ .Values.history.mode | quote }}
+            - name: HISTORY_MAX_RECORDS
+              value: {{ .Values.history.retention.maxRecords | quote }}
+            - name: HISTORY_MAX_BYTES
+              value: {{ .Values.history.retention.maxBytes | int64 | quote }}
+            - name: HISTORY_MAX_AGE
+              value: {{ .Values.history.retention.maxAge | quote }}
             {{- if .Values.ovn.tls.enabled }}
             - name: OVN_CERT
               value: "/etc/ovn-tls/tls.crt"

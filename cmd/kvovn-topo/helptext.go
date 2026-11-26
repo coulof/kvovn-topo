@@ -149,7 +149,7 @@ var viewHelp = map[mode]string{
 	modeChassis:  "Chassis: each ovn-controller (usually one per node) and the ports bound on it. Read it to see where things run and which chassis holds a gateway.",
 	modeWorkload: "Workloads: namespaces → pods and VMs → NICs. Start here from a Kubernetes name.",
 	modeProblems: "Problems: what the tree already knows is wrong, most severe first. Enter jumps to the object.",
-	modeChanges:  "Changes: what moved between revisions since kvovn-topo started, newest first. Enter jumps to the object.",
+	modeChanges:  "Changes: what moved, newest first. With daemon history (M8) it is the daemon's change feed: Enter shows what that revision changed, o jumps to the object, and gaps (daemon or database outages) are marked. Without it, the changes seen since kvovn-topo started; Enter jumps to the object.",
 }
 
 type glossaryEntry struct{ term, kubeOVN, ovn, ovnk, text string }

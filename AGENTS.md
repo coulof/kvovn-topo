@@ -97,6 +97,8 @@ Defined in `api/openapi.yaml`. Base path `/api/v1`.
 | `GET /chassis` | Chassis list with encaps, binding counts, gateway roles |
 | `GET /find?q=&type=&limit=&offset=` | Search LR/LS/LRP/LSP/Chassis by name, IP, MAC, namespace, pod, VM (backs the MCP `find` tool, ADR-0003) |
 | `GET /events` | SSE stream of `{revision, changed: [ids]}` |
+| `GET /diff?from&to&view&focus` | Added / removed / changed nodes and edges between two points (M8) |
+| `GET /history/events`, `GET /history/coverage` | Change feed and retention window (M8); `at=` on `/graph` and `/node/{id}` reconstructs a past state |
 | `GET /healthz`, `/readyz` | Ready only after initial NB+SB snapshot |
 | `GET /version` | Daemon + API version, OVN schema versions |
 

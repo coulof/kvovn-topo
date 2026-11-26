@@ -294,9 +294,22 @@ Shapes and colours both carry the state, so it stays readable without colour.
 
 Opening the view fetches the routes of every router with a NAT gateway, again after each revision.
 
-**Changes** (`5`, `:changes`) logs what moved between revisions, newest first: `added`, `removed`, a health change (`ok → broken`), a badge change (`[unbound] → [—]`), else the new summary. It keeps 500 entries in memory from when `kvovn-topo` started; an offline fixture or paused updates say so. History across restarts is M8.
+**Changes** (`5`, `:changes`) lists what moved, newest first.
 
-In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes back, and `/` filters.
+- **With daemon history** (M8, on by default; the title says `daemon history`), it is the daemon's change feed (the last 500 events): `port … moved hv-01 → hv-02`, `gateway … failed over`, `FIP … moved`, `route … removed on vpc-a`, `history gap: nb unreachable`. It covers the time the daemon has been running, not just this TUI session. `Enter` opens the diff of that revision, `o` jumps to the object.
+- **Without it** (an offline fixture, `history.mode=off`, an older daemon), it logs what the TUI saw between revisions since it started: `added`, `removed`, a health change (`ok → broken`), a badge change (`[unbound] → [—]`), else the new summary, 500 entries in memory. `Enter` jumps to the object.
+
+In both, a removed object says it is gone, `b` comes back, and `/` filters.
+
+## 3b. History — `H`, `:diff`, `:at`
+
+These need the daemon's history; an offline fixture or a daemon without it says so.
+
+- **`H`** on any row: `5` narrowed to that object, e.g. when a port was bound, moved or unbound, or when a router port's gateway failed over. `b` comes back.
+- **`:diff <from> [<to>]`**: what changed in the VPC and chassis views between two points (`to` defaults to now). `+` added, `-` removed, `~` changed with each field as `old → new`. `j`/`k` scroll, `Esc` closes. Example: `:diff 10:10 10:20` after an outage shows the `0.0.0.0/0` route removed on `lr-vpc`.
+- **`:at <point>`** (or `kvovn-topo --at <point>`): every view as it was then. The header shows `⏸ HISTORICAL <point>`, live updates pause, and diagnostics (`x`, `!`) are off because they act on the live cluster. Kubernetes names are current and may differ from then. `:at now` returns to live.
+- **Points:** `15:04` (today), `2026-11-06 15:04`, RFC3339, `-1h`, or a revision (`812`, `r812`). Relative and local times are fixed when entered, so a historical view does not drift.
+- **Outside the TUI:** `kvovn-topo diff --from -1h [--to …] [--view l3|l2|chassis] [--focus ls:<uuid>] [-o json|yaml]`, and `-o json --at <point>` for a past graph. `-o json --view all > topo.json` writes the whole topology (L3, chassis and the L2 view of every switch) to one file for offline debugging; it works with a daemon, `--fixture-dir` and `--at`.
 
 ## 4. Describe & raw — `d` / `y`
 
@@ -319,7 +332,7 @@ In both, `Enter` jumps to the object (a removed one says it is gone), `b` comes 
 - **`/text`:** substring filter on name, summary and badge.
   - Matching rows are shown with all their ancestors, so you keep the context: `/pod-2` shows `VPCs › default › default-subnet › app-pod-2.default`.
   - `Esc` clears it.
-- **`:`:** command prompt with `Tab` completion: `vpc`, `chassis`, `workload` (`xray …` works too, k9s-style), `problems`, `changes`, `theme <name>`, `quit`.
+- **`:`:** command prompt with `Tab` completion: `vpc`, `chassis`, `workload` (`xray …` works too, k9s-style), `problems`, `changes`, `diff <from> [<to>]`, `at <point>`, `theme <name>`, `quit`.
 - **Live updates:** the TUI subscribes to `/events` (SSE).
   - Each event refetches the L3 graph and only the switches whose ports changed. Unknown IDs fall back to all switches.
   - If the stream breaks, it polls `/graph` every 10 s with `If-None-Match` and keeps retrying SSE. Through Rancher's proxy the stream may be buffered: the header then shows `◌ polling`, and updates arrive every 10 s instead of instantly.
@@ -394,6 +407,8 @@ The target is captured when you press `x` and shown at the top of the modal: the
 |---|---|
 | Help (`?`) | `1`–`3` or `←`/`→` tab (This, Glossary, Keys) · `j`/`k` scroll · `Esc`/`q`/`?` close |
 | Everywhere | `1`–`3` tree views · `4` problems · `5` changes · `:` command · `/` filter · `?` help · `r` refresh · `L` live on/off · `t` theme · `b` back · `x` diagnostics · `!` run an Inspect command (`--diag`) · `q` quit |
+| History (daemon) | `H` history of the selected object · in `5`: `Enter` diff of that revision, `o` jump to the object · `:diff <from> [<to>]` · `:at <point>` / `:at now` |
+| Diff screen | `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc`/`q`/`b` close |
 | Inspect picker | `1`–`9` or `j`/`k` + `Enter` run (the TUI is suspended; `Enter` returns) · `Esc` cancel |
 | Tree views | `j`/`k` move · `g`/`G` top/bottom · `ctrl+d`/`ctrl+u` half page · `h`/`l` fold/unfold · `Space` toggle · `Enter` toggle or jump (`⇢`) · `e`/`E` expand/fold all · `i` details pane · `d` describe · `y` raw |
 | Describe / raw | `y` toggle raw · `j`/`k` · `ctrl+d`/`ctrl+u` · `g`/`G` · `Esc` back |

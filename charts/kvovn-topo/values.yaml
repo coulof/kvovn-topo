@@ -58,6 +58,19 @@ rbac:
     # kvovn-topo can find the Service outside kube-system without flags.
     discovery: true
 
+# Topology history (ADR-0002): what changed, and the topology at a past time.
+# It covers only the time the daemon has been running. memory (default) keeps
+# it in the pod and loses it on restart; off disables /diff, /history/* and
+# at=. persistent (bbolt on a PVC) is not implemented yet.
+history:
+  mode: memory
+  retention:
+    # The first limit reached wins; the oldest records are dropped first.
+    maxRecords: 200000
+    # Estimated bytes; keep well under resources.limits.memory.
+    maxBytes: 268435456
+    maxAge: 24h
+
 resources:
   limits:
     cpu: 500m

@@ -146,6 +146,7 @@ func (s *Syncer) enqueueEvent(table string, et eventType, m model.Model) {
 	select {
 	case s.eventsChan <- dbEvent{table: table, eventType: et, m: m}:
 	default:
+		s.store.MarkGap("event queue overflow")
 		s.requestResync("event queue overflow")
 	}
 }
@@ -249,6 +250,7 @@ func (s *Syncer) watchHealth(ctx context.Context) {
 		case err != nil && up.Load():
 			up.Store(false)
 			s.store.SetReady(false)
+			s.store.MarkGap(name + " unreachable")
 			s.logger.Warn("ovn database unreachable, awaiting reconnect", "db", name, "error", err)
 		case err == nil && !up.Load():
 			up.Store(true)

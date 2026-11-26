@@ -67,6 +67,9 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.scr == scrHelp {
 		return m.updateHelp(s)
 	}
+	if m.scr == scrDiff {
+		return m.updateDiff(s)
+	}
 	if m.scr == scrDescribe {
 		switch s {
 		case "esc", "q", "d", "backspace":
@@ -127,6 +130,10 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.setFlash("offline fixture: no live updates", false)
 			return m, nil
 		}
+		if m.at != "" {
+			m.setFlash("historical view at "+m.atLabel+": :at now returns to live", false)
+			return m, nil
+		}
 		m.livePaused = !m.livePaused
 		if m.livePaused {
 			m.setFlash("live updates paused", false)
@@ -138,7 +145,13 @@ func (m model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.back()
 		return m, nil
 	case "x":
+		if m.at != "" {
+			m.setFlash("diagnostics act on the live cluster: :at now returns to live first", true)
+			return m, nil
+		}
 		return m.openDiag()
+	case "H":
+		return m.objectHistory()
 	case "1":
 		return m.runCmd("vpc")
 	case "2":
@@ -193,6 +206,8 @@ func (m model) treeKey(s string) (tea.Model, tea.Cmd) {
 	case "enter":
 		switch {
 		case r == nil:
+		case r.change != nil && r.change.hist:
+			return m.openRevisionDiff(r.change)
 		case r.ref:
 			m.gotoNode(r.n.id)
 		case r.hasKids:
@@ -207,7 +222,15 @@ func (m model) treeKey(s string) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.rebuildRows()
+	case "o":
+		if r != nil && r.change != nil {
+			m.gotoNode(r.n.id)
+		}
 	case "!":
+		if m.at != "" {
+			m.setFlash("Inspect commands act on the live cluster: :at now returns to live first", true)
+			break
+		}
 		return m.startInspect()
 	case "i":
 		m.pinspect = !m.pinspect
@@ -243,6 +266,11 @@ func (m model) runCmd(c string) (tea.Model, tea.Cmd) {
 		m.mode = modeProblems
 	case c == "changes" || c == "change" || c == "log":
 		m.mode = modeChanges
+		m.histObject, m.histName = "", ""
+	case c == "at" || strings.HasPrefix(c, "at "):
+		return m.setAt(strings.TrimPrefix(c, "at"))
+	case c == "diff" || strings.HasPrefix(c, "diff "):
+		return m.runDiffCmd(strings.TrimPrefix(c, "diff"))
 	case c == "q" || c == "quit":
 		return m, tea.Quit
 	case strings.HasPrefix(c, "theme"):
@@ -263,6 +291,9 @@ func (m model) runCmd(c string) (tea.Model, tea.Cmd) {
 	m.rebuildRows()
 	if m.mode == modeProblems {
 		return m, m.problemsFetchCmd()
+	}
+	if m.mode == modeChanges && m.histAvail {
+		return m, m.fetchHistEventsCmd()
 	}
 	return m, nil
 }

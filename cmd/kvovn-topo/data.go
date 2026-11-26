@@ -121,6 +121,18 @@ func explainNotFound(ctx context.Context, client *http.Client, daemon string, er
 	return fmt.Errorf("%w\nkvovn-topod %s (API %s) answered /version but not this route; is the TUI newer than the daemon?", err, v.Version, v.ApiVersion)
 }
 
+// withAt adds the history point of a historical view (M8) to q; "" is live.
+func withAt(q url.Values, at string) url.Values {
+	if at == "" {
+		return q
+	}
+	if q == nil {
+		q = url.Values{}
+	}
+	q.Set("at", at)
+	return q
+}
+
 func apiURL(daemonURL, path string, q url.Values) string {
 	u := strings.TrimRight(daemonURL, "/") + path
 	if len(q) > 0 {
@@ -135,7 +147,10 @@ func (m model) fetchGraphCmd() tea.Cmd {
 	if m.graphResp != nil {
 		etag = strconv.Itoa(m.graphResp.Revision)
 	}
-	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
+	fixture, daemon, client, at := m.fixturePath, m.daemonURL, m.httpClient, m.at
+	if at != "" {
+		etag = "" // a historical point is fetched once
+	}
 	return func() tea.Msg {
 		if fixture != "" {
 			snap, err := fixtureSnapshot(fixture)
@@ -151,7 +166,7 @@ func (m model) fetchGraphCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var resp api.GraphResponse
-		err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{"view": {"l3"}}), etag, &resp)
+		err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", withAt(url.Values{"view": {"l3"}}, at)), etag, &resp)
 		if errors.Is(err, errNotModified) {
 			return graphUnchangedMsg{}
 		}
@@ -175,7 +190,7 @@ func fixtureSnapshot(fixturePath string) (*graph.Snapshot, error) {
 }
 
 // fetchL2All returns every LSP of a switch, following pagination.
-func fetchL2All(fixture, daemon string, client *http.Client, lsID string) ([]api.GraphNode, error) {
+func fetchL2All(fixture, daemon string, client *http.Client, lsID, at string) ([]api.GraphNode, error) {
 	var lsps []api.GraphNode
 	var snap *graph.Snapshot
 	if fixture != "" {
@@ -198,9 +213,9 @@ func fetchL2All(fixture, daemon string, client *http.Client, lsID string) ([]api
 		} else {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			var r api.GraphResponse
-			err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{
+			err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", withAt(url.Values{
 				"view": {"l2"}, "focus": {lsID}, "page": {strconv.Itoa(page)}, "pageSize": {strconv.Itoa(l2PageSize)},
-			}), "", &r)
+			}, at)), "", &r)
 			cancel()
 			if err != nil {
 				return nil, err
@@ -219,15 +234,15 @@ func fetchL2All(fixture, daemon string, client *http.Client, lsID string) ([]api
 }
 
 func (m model) fetchL2Cmd(lsID string) tea.Cmd {
-	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
+	fixture, daemon, client, at := m.fixturePath, m.daemonURL, m.httpClient, m.at
 	return func() tea.Msg {
-		lsps, err := fetchL2All(fixture, daemon, client, lsID)
+		lsps, err := fetchL2All(fixture, daemon, client, lsID, at)
 		return l2LoadedMsg{lsID: lsID, lsps: lsps, err: err}
 	}
 }
 
 func (m model) fetchChassisCmd() tea.Cmd {
-	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
+	fixture, daemon, client, at := m.fixturePath, m.daemonURL, m.httpClient, m.at
 	return func() tea.Msg {
 		if fixture != "" {
 			snap, err := fixtureSnapshot(fixture)
@@ -243,7 +258,7 @@ func (m model) fetchChassisCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var resp api.GraphResponse
-		if err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", url.Values{"view": {"chassis"}}), "", &resp); err != nil {
+		if err := httpGetJSON(ctx, client, apiURL(daemon, "/graph", withAt(url.Values{"view": {"chassis"}}, at)), "", &resp); err != nil {
 			return chassisLoadedMsg{err: err}
 		}
 		return chassisLoadedMsg{resp: &resp}
@@ -252,7 +267,7 @@ func (m model) fetchChassisCmd() tea.Cmd {
 
 // fetchNodeDetailCmd loads /node/{id} for the describe screen.
 func (m model) fetchNodeDetailCmd(id string) tea.Cmd {
-	fixture, daemon, client := m.fixturePath, m.daemonURL, m.httpClient
+	fixture, daemon, client, at := m.fixturePath, m.daemonURL, m.httpClient, m.at
 	return func() tea.Msg {
 		if fixture != "" {
 			snap, err := fixtureSnapshot(fixture)
@@ -268,7 +283,7 @@ func (m model) fetchNodeDetailCmd(id string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		var d api.NodeDetail
-		if err := httpGetJSON(ctx, client, apiURL(daemon, "/node/"+url.PathEscape(id), nil), "", &d); err != nil {
+		if err := httpGetJSON(ctx, client, apiURL(daemon, "/node/"+url.PathEscape(id), withAt(nil, at)), "", &d); err != nil {
 			return nodeDetailMsg{id: id, err: err}
 		}
 		return nodeDetailMsg{id: id, detail: &d}
@@ -433,7 +448,7 @@ func (m *model) applyGraph(resp *api.GraphResponse) {
 	if m.fixturePath != "" {
 		for _, n := range resp.Nodes {
 			if n.Type == api.GraphNodeTypeLS {
-				if lsps, err := fetchL2All(m.fixturePath, m.daemonURL, m.httpClient, n.Id); err == nil {
+				if lsps, err := fetchL2All(m.fixturePath, m.daemonURL, m.httpClient, n.Id, m.at); err == nil {
 					m.switchWorkloads[n.Id] = lsps
 				}
 			}

@@ -105,7 +105,10 @@ func (m model) updateLive(msg tea.Msg) (model, tea.Cmd) {
 	case liveEventMsg:
 		m.live = liveSSE
 		next := readSSE(msg.stream)
-		if m.livePaused || (m.graphResp != nil && msg.ev.Revision == m.graphResp.Revision) {
+		if m.livePaused || m.at != "" || (m.graphResp != nil && msg.ev.Revision == m.graphResp.Revision) {
+			if m.at != "" && m.histAvail && m.mode == modeChanges {
+				return m, tea.Batch(next, m.fetchHistEventsCmd()) // the feed stays live
+			}
 			return m, next
 		}
 		m.pendingIDs = append(m.pendingIDs, msg.ev.Changed...)
@@ -123,7 +126,7 @@ func (m model) updateLive(msg tea.Msg) (model, tea.Cmd) {
 		}
 		m.live = liveConnecting
 		cmds := []tea.Cmd{m.connectLiveCmd()}
-		if !m.livePaused {
+		if !m.livePaused && m.at == "" {
 			cmds = append(cmds, m.fetchGraphCmd())
 		}
 		return m, tea.Batch(cmds...)

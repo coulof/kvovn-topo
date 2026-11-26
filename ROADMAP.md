@@ -45,7 +45,8 @@ Only small debt items closed. The foundation pass is still the next work.
 | M3 | 2/3 | Paused. No live updates and no API-version banner in the extension. |
 | M4, M5 | 0 | Not started. An interim NAT-gateway "Outside OVN" view lives in the TUI (`cmd/kvovn-topo/flavor.go`). |
 | M6 | 5/5 | Done out of order; verified by hand on `hv-01`. Detrace follow-up open. |
-| M7, M8 | 0 | Not started. Two pre-releases (v0.1.0-dev, v0.1.1-dev) ran `release.yml` end to end. |
+| M7 | 0 | Not started. Two pre-releases (v0.1.0-dev, v0.1.1-dev) ran `release.yml` end to end. |
+| M8 | 1/7 | Started out of order on request (2026-11-06, branch `feat/m8-history`). `pkg/history` memory mode (recorder, checkpoints, gaps, reconstructor, summarizer without the M4 events), the API (`at=`, `/diff`, `/history/*`), chart values and the TUI (`5` feed, `H`, `:diff`, `:at`/`--at`, `kvovn-topo diff`). In-process tests on `custom-vpc-ovn-nat`. Open: bbolt persistence, churn-measured denylist and 1 s coalescing, schema-upgrade case, scale numbers, layer 3/4 tests, MCP history tools; in the TUI, the diff as a marked tree with the details pane (it is a flat list today), paging `5` back to coverage start with gaps as break rows, and the coverage window on screen. |
 | M9 | 2/5 | Started out of order (ADR-0003). `find`, `get_graph`, `get_node`, `list_chassis` on both backends; the rest waits for M4/M5/M8 data. |
 
 **Tech-debt register** (open items; closed ones are in git history):
@@ -391,9 +392,12 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   - `GET /history/coverage` — retention window, gaps, mode, store size.
 - Chart: `history.mode` (`memory`|`persistent`), retention limits, optional `persistence.storageClass`/`size`. The default install stays stateless.
 - TUI:
-  - A change-feed pane, filterable by object or kind, with jump-to-object.
-  - `--at <time>` to browse the past, with a visible "HISTORICAL" badge.
-  - `kvovn-topo diff --from --to [-o json]`.
+  - **Change feed in view `5`**, read from `/history/events` when the daemon has history. The in-memory log stays as the fallback (`--fixture`, `--fixture-dir`, a daemon without history). It pages back to the start of coverage and draws gaps as break rows, never interpolated. It is filterable by object or kind. `Enter` on an event opens the diff for its revision (the previous revision → this one), scoped to the object's view. `o` jumps to the object, now or at that time.
+  - **Rewind:** `--at <RFC3339|epoch:revision|-1h>` and `:at <time>` (`:at now` returns to live). The status bar keeps a `⏸ HISTORICAL <epoch:revision> · <time>` badge and live updates pause. Kubernetes enrichment carries the "current, may differ from then" label (ADR-0002 §7). Diagnostics (`x`, `!`) are disabled because they act on the live cluster.
+  - **Diff screen:** `:diff <from> [<to>]` (`to` defaults to now; relative times like `-1h` are accepted) shows the current view as a tree marked `+` added, `-` removed, `~` changed. The symbol and the colour both carry the state, and unchanged ancestors stay as context. The details pane shows field-level `old → new` from `/diff`, for example `active chassis hv-01 → hv-03`. This is the incident triage path: diff 10:10 → 10:20 and see `0.0.0.0/0` removed on `lr-vpc`.
+  - **Object history `H`:** on any row, it opens the change feed filtered to that object (`/history/events?object=<id>`), for example bound/unbound, moved chassis (VM migration), IP or MAC changed, FIP retargeted. `Enter` opens the diff for that revision.
+  - `kvovn-topo diff --from --to [--view] [-o json]`.
+  - Every history feature shows the coverage window from `/history/coverage`. A time before coverage is reported as such, never guessed.
 - Extension:
   - A timeline panel (change feed with gaps drawn as breaks).
   - Time scrubber on the L3 view.
@@ -411,6 +415,7 @@ Each tool gets its own verdict, derived from the expected chassis/port in the gr
   - `graph(at)` p95 < 500 ms
   - `/diff` over 24 h p95 < 1 s
   - memory mode stays within its configured byte limit
+- [x] TUI: on `ha-gateway-failover`, `5` lists the failover event, `Enter` opens a diff showing the active-gateway change, `H` on the router port lists the same event, and `--at` before the failover shows the old active chassis with the HISTORICAL badge. These are golden view tests in `cmd/kvovn-topo` against a fake history backend. (Done 2026-11-06 as `TestHistoryFailoverInTUI`, against the real `pkg/server` + `pkg/history` on `custom-vpc-ovn-nat`: no `ha-gateway-failover` scenario is captured yet. Assertions, not goldens.)
 - [ ] Layer 4 e2e: the timeline shows a subnet creation done during the test, and diff mode highlights it.
 
 ---

@@ -62,6 +62,10 @@ Logs go to stderr (`--log-level`, default `info`; `warn` for a quiet client); st
 
 Client configuration for OpenCode, Claude Code and agy is in the [README](../README.md#tool-setup). `kvovn-topo` must be on your `PATH` (release binary, or `make build` and an absolute path to `bin/kvovn-topo`). Pass the flags from [Backends](#backends) after `mcp` to choose another backend.
 
+### Agent skill
+
+`kvovn-topo skill` prints a skill (tool guide and method) for agents. Tell the agent: "Load the kvovn-topo skill and use it for analysis. Run `kvovn-topo skill` to read the skill." To install it as a Claude Code skill: `mkdir -p ~/.claude/skills/kvovn-topo && kvovn-topo skill > ~/.claude/skills/kvovn-topo/SKILL.md`.
+
 ### Without a cluster
 
 Any client can serve a captured scenario instead: use `kvovn-topo mcp --fixture-dir /path/to/kvovn-topo/testdata/scenarios/hv-01-lab` as the command.

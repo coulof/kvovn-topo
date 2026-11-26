@@ -49,6 +49,16 @@ paths:
             type: integer
             default: 50
           description: Page size for paginated nodes (max 200).
+        - name: at
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            A past point (M8, ADR-0002): RFC3339 time, `<epoch>:<revision>`, a bare
+            revision of the current epoch, or a negative duration from now (`-1h`).
+            The state is reconstructed from history; Kubernetes enrichment is
+            current, not historical. Absent or `now`: the live graph.
         - name: If-None-Match
           in: header
           required: false
@@ -75,6 +85,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The point is outside history coverage (OUT_OF_COVERAGE) or in a gap (IN_GAP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: History is disabled on this daemon (HISTORY_DISABLED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: Daemon is initializing or database monitors not ready.
           content:
@@ -94,6 +116,16 @@ paths:
           schema:
             type: string
           description: Typed node ID (e.g. lr:<uuid>, ls:<uuid>, chassis:<name>).
+        - name: at
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            A past point (M8, ADR-0002): RFC3339 time, `<epoch>:<revision>`, a bare
+            revision of the current epoch, or a negative duration from now (`-1h`).
+            The state is reconstructed from history; Kubernetes enrichment is
+            current, not historical. Absent or `now`: the live graph.
       responses:
         '200':
           description: Node detail.
@@ -103,6 +135,18 @@ paths:
                 $ref: '#/components/schemas/NodeDetail'
         '404':
           description: Node not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The point is outside history coverage (OUT_OF_COVERAGE) or in a gap (IN_GAP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: History is disabled on this daemon (HISTORY_DISABLED).
           content:
             application/json:
               schema:
@@ -186,6 +230,158 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           description: Daemon not ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /history/events:
+    get:
+      summary: Topology change feed
+      description: >-
+        Human-readable changes derived from recorded OVSDB row changes (M8,
+        ADR-0002), newest first. Gaps appear as `gap.start` / `gap.end` events;
+        unmapped row changes appear as generic `row.*` events.
+      operationId: getHistoryEvents
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Oldest time to include (RFC3339 or a negative duration such as `-1h`).
+        - name: until
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Newest time to include (RFC3339 or a negative duration).
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Event kind, exact (`port.bound`) or a prefix up to a dot (`port`).
+        - name: object
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only events about this graph node ID.
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Only events with seq lower than this (the previous page's nextBefore).
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: Maximum events to return (max 1000).
+      responses:
+        '200':
+          description: Events, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryEventList'
+        '400':
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: History is disabled on this daemon (HISTORY_DISABLED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /history/coverage:
+    get:
+      summary: History coverage
+      description: Retention window, gaps, mode and store size of the topology history.
+      operationId: getHistoryCoverage
+      responses:
+        '200':
+          description: Coverage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryCoverage'
+        '501':
+          description: History is disabled on this daemon (HISTORY_DISABLED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /diff:
+    get:
+      summary: Topology diff
+      description: >-
+        Nodes and edges of a view added, removed or changed between two points,
+        with field-level changes. Both graphs are reconstructed with the current
+        graph code.
+      operationId: getDiff
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Older point (same forms as `at` on /graph).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Newer point (default now).
+        - name: view
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [l3, l2, chassis]
+            default: l3
+        - name: focus
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Focus node ID (required for view=l2, an ls:<uuid>).
+        - name: depth
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: The diff.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphDiff'
+        '400':
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The point is outside history coverage (OUT_OF_COVERAGE) or in a gap (IN_GAP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: History is disabled on this daemon (HISTORY_DISABLED).
           content:
             application/json:
               schema:
@@ -678,6 +874,203 @@ components:
           type: array
           items:
             type: string
+
+    HistoryPoint:
+      type: object
+      required: [epoch, revision, time]
+      properties:
+        epoch:
+          type: string
+          description: History epoch (one per daemon start in memory mode).
+        revision:
+          type: integer
+          format: int64
+        time:
+          type: string
+          format: date-time
+
+    HistoryEvent:
+      type: object
+      required: [seq, revision, time, kind, summary]
+      properties:
+        seq:
+          type: integer
+          format: int64
+          description: Monotonic event number; pagination cursor.
+        revision:
+          type: integer
+          format: int64
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          description: >-
+            e.g. lsp.added, port.bound, port.moved, gateway.failover, nat.retargeted,
+            route.removed, chassis.added, lb.backends, gap.start, gap.end, row.modify.
+        object:
+          type: string
+          description: Graph node ID the event is about.
+        name:
+          type: string
+        summary:
+          type: string
+        coalesced:
+          type: boolean
+          description: Derived from a resync after a gap; may merge several changes.
+
+    HistoryEventList:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryEvent'
+        nextBefore:
+          type: integer
+          format: int64
+          description: Pass as `before` for the next (older) page; absent on the last page.
+
+    HistoryGap:
+      type: object
+      required: [start, revision, reason]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+          description: Absent while the gap is open.
+        revision:
+          type: integer
+          format: int64
+          description: Last revision before the gap.
+        reason:
+          type: string
+
+    HistoryCoverage:
+      type: object
+      required: [mode, epoch, records, events, checkpoints, bytes, gaps, limits]
+      properties:
+        mode:
+          type: string
+          enum: [memory, persistent]
+        epoch:
+          type: string
+        oldest:
+          $ref: '#/components/schemas/HistoryPoint'
+        newest:
+          $ref: '#/components/schemas/HistoryPoint'
+        records:
+          type: integer
+        events:
+          type: integer
+        checkpoints:
+          type: integer
+        bytes:
+          type: integer
+          format: int64
+          description: Estimated retained size.
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryGap'
+        limits:
+          type: object
+          required: [maxRecords, maxBytes, maxAgeSeconds]
+          properties:
+            maxRecords:
+              type: integer
+            maxBytes:
+              type: integer
+              format: int64
+            maxAgeSeconds:
+              type: integer
+              format: int64
+
+    FieldChange:
+      type: object
+      required: [field]
+      properties:
+        field:
+          type: string
+          description: Dotted path (name, parent, properties.activeGateway, k8s.namespace…).
+        from:
+          type: string
+          description: Old value rendered as JSON; absent if the field was not set.
+        to:
+          type: string
+          description: New value rendered as JSON; absent if the field is no longer set.
+
+    NodeChange:
+      type: object
+      required: [id, type, name, fields]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldChange'
+
+    EdgeChange:
+      type: object
+      required: [id, source, target, type, fields]
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        target:
+          type: string
+        type:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldChange'
+
+    GraphDiff:
+      type: object
+      required: [from, to, view, addedNodes, removedNodes, changedNodes, addedEdges, removedEdges, changedEdges]
+      properties:
+        from:
+          $ref: '#/components/schemas/HistoryPoint'
+        to:
+          $ref: '#/components/schemas/HistoryPoint'
+        view:
+          type: string
+          enum: [l3, l2, chassis]
+        addedNodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        removedNodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        changedNodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeChange'
+        addedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+        removedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+        changedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/EdgeChange'
 
     StatusResponse:
       type: object

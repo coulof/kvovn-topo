@@ -496,7 +496,7 @@ func TestDaemonPaginationAndETag(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lsps, err := fetchL2All("", srv.URL, nil, "ls:x")
+	lsps, err := fetchL2All("", srv.URL, nil, "ls:x", "")
 	if err != nil || len(lsps) != 3 {
 		t.Fatalf("expected all 3 pages of ports, got %d (%v)", len(lsps), err)
 	}
@@ -696,10 +696,10 @@ func TestThemes(t *testing.T) {
 }
 
 func TestMachineOutput(t *testing.T) {
-	if err := runMachineOutput("", nil, "dev-fixture", "l3", "", "json"); err != nil {
+	if err := runMachineOutput("", nil, "dev-fixture", "l3", "", "", "json"); err != nil {
 		t.Errorf("expected machine output json to succeed, got: %v", err)
 	}
-	if err := runMachineOutput("", nil, "dev-fixture", "chassis", "", "yaml"); err != nil {
+	if err := runMachineOutput("", nil, "dev-fixture", "chassis", "", "", "yaml"); err != nil {
 		t.Errorf("expected machine output yaml to succeed, got: %v", err)
 	}
 }
@@ -713,7 +713,7 @@ func TestFixtureDir(t *testing.T) {
 	if len(snap.LogicalRouters) == 0 {
 		t.Errorf("scenario %s loaded no logical routers", dir)
 	}
-	if err := runMachineOutput("", nil, dir, "l3", "", "json"); err != nil {
+	if err := runMachineOutput("", nil, dir, "l3", "", "", "json"); err != nil {
 		t.Errorf("machine output from --fixture-dir: %v", err)
 	}
 	if _, err := fixtureSnapshot(t.TempDir()); err == nil {
@@ -903,7 +903,7 @@ func TestServiceProxyClientIsUsed(t *testing.T) {
 	if msg, ok := m.connectLiveCmd()().(liveEventMsg); !ok || msg.ev.Revision != 8 {
 		t.Fatalf("SSE via authenticated client: %#v", msg)
 	}
-	if err := runMachineOutput(srv.URL+"/api/v1", client, "", "l3", "", "json"); err != nil {
+	if err := runMachineOutput(srv.URL+"/api/v1", client, "", "l3", "", "", "json"); err != nil {
 		t.Fatalf("machine output via authenticated client: %v", err)
 	}
 	if len(unauthenticated) > 0 {
@@ -934,5 +934,22 @@ func TestHeaderStatusLine(t *testing.T) {
 		if strings.Contains(line, " · ") || strings.Contains(line, "Xray") {
 			t.Errorf("%d cols: old separators or titles in %q", w, line)
 		}
+	}
+}
+
+func TestBuildDumpFixture(t *testing.T) {
+	snap, err := fixtureSnapshot("dev-fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := buildDump(snap, "", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.L3.Nodes) == 0 || len(d.Chassis.Nodes) == 0 || len(d.L2) == 0 {
+		t.Fatalf("incomplete dump: l3=%d chassis=%d l2=%d", len(d.L3.Nodes), len(d.Chassis.Nodes), len(d.L2))
+	}
+	if err := runMachineOutput("", nil, "dev-fixture", "all", "", "", "json"); err != nil {
+		t.Errorf("--view all: %v", err)
 	}
 }

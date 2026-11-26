@@ -14,6 +14,7 @@ const (
 	scrMain screen = iota
 	scrDescribe
 	scrHelp
+	scrDiff
 )
 
 // A changed row is painted solid for flashSolid, then keeps a ▌ mark in its
@@ -71,6 +72,8 @@ func (m model) View() string {
 		out = append(out, m.helpView()...)
 	case m.scr == scrDescribe:
 		out = append(out, m.describeView()...)
+	case m.scr == scrDiff:
+		out = append(out, m.diffView()...)
 	case m.graphResp == nil:
 		out = append(out, m.stateView()...)
 	default:
@@ -85,6 +88,8 @@ func (m model) liveLabel() string {
 	switch {
 	case m.fixturePath != "":
 		return st.MutedText.Render("○ offline fixture")
+	case m.at != "":
+		return m.historicalLabel()
 	case m.livePaused:
 		return st.Warn.Render("‖ paused (L)")
 	case m.live == liveSSE:
@@ -343,6 +348,12 @@ func (m model) treeView() []string {
 		body = append(body, "", st.MutedText.Render(msg))
 	}
 	title := st.Label.Render(firstNonEmpty(viewTitle[m.mode], string(m.mode))) + st.MutedText.Render(fmt.Sprintf(" [%d]", len(m.rows))) + m.filterTitle()
+	if m.mode == modeChanges && m.histAvail {
+		title += st.MutedText.Render(" daemon history")
+		if m.histName != "" {
+			title += st.Value.Render(" · " + m.histName)
+		}
+	}
 	tree := box(body, tw, m.areaH(), title, st.Border)
 	if !m.showPane() {
 		return tree
@@ -399,7 +410,10 @@ func (m model) helpKeyLines() []string {
 		"   2  :xray chassis   chassis → bound ports",
 		"   3  :xray workload  namespace → VM/Pod → NICs",
 		"   4  :problems       what is wrong, most severe first",
-		"   5  :changes        what changed since start, newest first",
+		"   5  :changes        what changed, newest first",
+		"   H  history of the selected object (daemon history)",
+		"      :diff <from> [<to>]   what changed between two points",
+		"      :at <time|-1h|rev>    browse the past · :at now = live",
 		"",
 		" " + b("INSPECT"),
 		"   i  details pane",
@@ -441,7 +455,7 @@ func (m model) helpKeyLines() []string {
 	return l
 }
 
-var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "changes", "theme", "quit"}
+var commands = []string{"xray vpc", "xray chassis", "xray workload", "vpc", "chassis", "workload", "problems", "changes", "diff", "at", "theme", "quit"}
 
 func suggest(prefix string) string {
 	if prefix == "" {

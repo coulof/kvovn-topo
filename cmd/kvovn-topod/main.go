@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/coulof/kvovn-topo/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/history"
 	"github.com/coulof/kvovn-topo/pkg/ovsdb"
 	"github.com/coulof/kvovn-topo/pkg/server"
 	"k8s.io/client-go/kubernetes"
@@ -45,6 +47,11 @@ func run() error {
 		caFile      = getEnvDefault("OVN_CA", "")
 		logLevelStr = getEnvDefault("LOG_LEVEL", "info")
 		kubeconfig  = getEnvDefault("KUBECONFIG", "")
+
+		historyMode       = getEnvDefault("HISTORY_MODE", "memory")
+		historyMaxRecords = getEnvDefault("HISTORY_MAX_RECORDS", "200000")
+		historyMaxBytes   = getEnvDefault("HISTORY_MAX_BYTES", "268435456")
+		historyMaxAge     = getEnvDefault("HISTORY_MAX_AGE", "24h")
 	)
 
 	flag.StringVar(&listenAddr, "listen-addr", listenAddr, "HTTP service listen address")
@@ -55,6 +62,10 @@ func run() error {
 	flag.StringVar(&caFile, "ovn-ca", caFile, "Path to OVN CA certificate file")
 	flag.StringVar(&logLevelStr, "log-level", logLevelStr, "Log level (debug, info, warn, error)")
 	flag.StringVar(&kubeconfig, "kubeconfig", kubeconfig, "Path to kubeconfig file (optional, defaults to in-cluster)")
+	flag.StringVar(&historyMode, "history-mode", historyMode, "Topology history store: memory or off (ADR-0002)")
+	flag.StringVar(&historyMaxRecords, "history-max-records", historyMaxRecords, "History retention: maximum change records")
+	flag.StringVar(&historyMaxBytes, "history-max-bytes", historyMaxBytes, "History retention: maximum estimated bytes")
+	flag.StringVar(&historyMaxAge, "history-max-age", historyMaxAge, "History retention: maximum age (e.g. 24h)")
 	flag.Parse()
 
 	// Configure structured logger
@@ -86,6 +97,12 @@ func run() error {
 
 	// Create thread-safe in-memory graph store
 	store := graph.NewStore(nodeMapper, workloadResolver)
+
+	// Topology history records from the first OVSDB snapshot on (ADR-0002).
+	hist, err := setupHistory(historyMode, historyMaxRecords, historyMaxBytes, historyMaxAge, store, logger)
+	if err != nil {
+		return err
+	}
 	if watchKube != nil {
 		go watchKube(ctx, store)
 	}
@@ -142,6 +159,9 @@ func run() error {
 	}
 
 	srv := server.NewServer(store, versionConfig, logger)
+	if hist != nil {
+		srv.SetHistory(hist)
+	}
 	httpServer := &http.Server{
 		Addr:              listenAddr,
 		Handler:           srv,
@@ -170,6 +190,35 @@ func run() error {
 
 	syncer.Close()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+// setupHistory attaches the history recorder to store; nil when mode is off.
+func setupHistory(mode, maxRecords, maxBytes, maxAge string, store *graph.Store, logger *slog.Logger) (*history.History, error) {
+	switch mode {
+	case "off":
+		logger.Info("topology history disabled")
+		return nil, nil
+	case "memory":
+	case "persistent":
+		return nil, fmt.Errorf("history mode %q is not implemented yet; use memory or off", mode)
+	default:
+		return nil, fmt.Errorf("unknown history mode %q (memory, off)", mode)
+	}
+	cfg := history.DefaultConfig()
+	var err error
+	if cfg.Limits.MaxRecords, err = strconv.Atoi(maxRecords); err != nil {
+		return nil, fmt.Errorf("history max records: %w", err)
+	}
+	if cfg.Limits.MaxBytes, err = strconv.ParseInt(maxBytes, 10, 64); err != nil {
+		return nil, fmt.Errorf("history max bytes: %w", err)
+	}
+	if cfg.Limits.MaxAge, err = time.ParseDuration(maxAge); err != nil {
+		return nil, fmt.Errorf("history max age: %w", err)
+	}
+	rec, _ := history.NewMemoryRecorder(cfg)
+	logger.Info("topology history enabled", "mode", mode, "epoch", rec.Epoch(),
+		"max_records", cfg.Limits.MaxRecords, "max_bytes", cfg.Limits.MaxBytes, "max_age", cfg.Limits.MaxAge)
+	return history.New(rec, store), nil
 }
 
 // setupKubeMappers returns the node mapper and workload resolver, and, with a

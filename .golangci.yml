@@ -37,6 +37,7 @@ linters:
             - "**/pkg/graph/**"
             - "**/pkg/server/**"
             - "**/pkg/ovsdb/**"
+            - "**/pkg/history/**"
             - "**/pkg/mcp/**"
             - "**/pkg/kubeproxy/**"
           deny:

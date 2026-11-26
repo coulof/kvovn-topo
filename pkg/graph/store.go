@@ -18,6 +18,34 @@ type Store struct {
 	subscribers      map[chan api.GraphEvent]struct{}
 	nodeMapper       NodeMapper
 	workloadResolver WorkloadResolver
+	observer         Observer
+}
+
+// Observer sees every published snapshot, in order, and every gap in what the
+// store saw. The topology history recorder (pkg/history) is the only one.
+type Observer interface {
+	// Applied runs after next is published, serialized with other Applies: it
+	// must be quick and must not call back into the store.
+	Applied(prev, next *Snapshot)
+	// Gap reports that changes may be missing from what follows (outage, dropped
+	// events); the next Applied after it is a resync.
+	Gap(reason string, at time.Time)
+}
+
+// SetObserver installs o (nil removes it). Call it before the store is fed.
+func (s *Store) SetObserver(o Observer) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	s.observer = o
+}
+
+// MarkGap tells the observer, if any, that changes may have been missed.
+func (s *Store) MarkGap(reason string) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	if s.observer != nil {
+		s.observer.Gap(reason, time.Now())
+	}
 }
 
 // NewStore initializes an empty Store with revision 0.
@@ -70,6 +98,9 @@ func (s *Store) Apply(fn func(draft *Snapshot) []string) *Snapshot {
 	draft.Reindex()
 
 	s.current.Store(draft)
+	if s.observer != nil {
+		s.observer.Applied(cur, draft)
+	}
 
 	if len(changedIDs) > 0 {
 		event := api.GraphEvent{

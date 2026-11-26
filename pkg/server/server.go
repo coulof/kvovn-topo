@@ -12,6 +12,7 @@ import (
 
 	"github.com/coulof/kvovn-topo/pkg/api"
 	"github.com/coulof/kvovn-topo/pkg/graph"
+	"github.com/coulof/kvovn-topo/pkg/history"
 )
 
 // VersionConfig holds build-time version metadata.
@@ -30,6 +31,8 @@ type Server struct {
 	version VersionConfig
 	logger  *slog.Logger
 	mux     *http.ServeMux
+	// history answers at=, /diff and /history/* (M8); nil when disabled.
+	history *history.History
 	// heartbeat is how often an idle SSE stream gets a comment line, so proxies
 	// (the Rancher service proxy) do not close it between graph changes.
 	heartbeat time.Duration
@@ -59,6 +62,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/v1/chassis", s.handleChassis)
 	s.mux.HandleFunc("GET /api/v1/find", s.handleFind)
 	s.mux.HandleFunc("GET /api/v1/events", s.handleEvents)
+	s.mux.HandleFunc("GET /api/v1/history/events", s.handleHistoryEvents)
+	s.mux.HandleFunc("GET /api/v1/history/coverage", s.handleHistoryCoverage)
+	s.mux.HandleFunc("GET /api/v1/diff", s.handleDiff)
 	s.mux.HandleFunc("GET /api/v1/version", s.handleVersion)
 	s.mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /api/v1/readyz", s.handleReadyz)
@@ -84,7 +90,10 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshot := s.store.Current()
+	snapshot, ok := s.snapshotAt(w, r)
+	if !ok {
+		return
+	}
 	currentETag := fmt.Sprintf(`"%d"`, snapshot.Revision)
 
 	if match := r.Header.Get("If-None-Match"); match != "" {
@@ -127,7 +136,10 @@ func (s *Server) handleNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshot := s.store.Current()
+	snapshot, ok := s.snapshotAt(w, r)
+	if !ok {
+		return
+	}
 	detail, err := snapshot.GetNodeDetail(id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())

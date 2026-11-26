@@ -78,8 +78,16 @@ type model struct {
 	zone       string // ovn-kubernetes zone (node) on screen, from --zone or a zone-<node> capture
 
 	// `!` runs an Inspect command (inspect.go)
-	changes     []change // Changes view log (changes.go)
-	changeSeq   int
+	changes   []change // Changes view log (changes.go)
+	changeSeq int
+
+	// Topology history from the daemon (history.go, M8)
+	histAvail   bool     // the daemon records history (probed at start)
+	histChanges []change // view 5 from the daemon's feed, newest first
+	histObject  string   // H: the graph ID view 5 is narrowed to
+	histName    string   // H: its name (the filter when it has no graph ID)
+	at, atLabel string   // historical view: the point every fetch asks for ("" = live)
+	diff        *diffState
 	helpTab     int // help screen tab and scroll (help.go)
 	helpOff     int
 	inspectPick bool
@@ -254,7 +262,7 @@ func initialModel(daemonURL, fixturePath, themeName string, diagMode bool, kube 
 func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.fetchGraphCmd()}
 	if m.fixturePath == "" {
-		cmds = append(cmds, m.connectLiveCmd())
+		cmds = append(cmds, m.connectLiveCmd(), m.probeHistoryCmd())
 	}
 	if m.diagMode && m.diagExecutor != nil && m.diagLocator != nil {
 		cmds = append(cmds, m.probeDiagCmd())
@@ -344,7 +352,37 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if chassis || m.chassisResp == nil {
 			cmds = append(cmds, m.fetchChassisCmd())
 		}
+		if m.histAvail && m.mode == modeChanges {
+			cmds = append(cmds, m.fetchHistEventsCmd())
+		}
 		return m, tea.Batch(cmds...)
+
+	case histCoverageMsg:
+		m.histAvail = msg.err == nil && msg.cov != nil
+		if m.histAvail && m.mode == modeChanges {
+			return m, m.fetchHistEventsCmd()
+		}
+		return m, nil
+
+	case histEventsMsg:
+		if msg.object != m.histObject || msg.name != m.histName {
+			return m, nil // H moved on while this was loading
+		}
+		if msg.err != nil {
+			m.setFlash("history: "+msg.err.Error(), true)
+			return m, nil
+		}
+		m.histChanges = histChangesFrom(msg.events)
+		if m.mode == modeChanges {
+			m.rebuildRows()
+		}
+		return m, nil
+
+	case diffLoadedMsg:
+		if m.diff != nil && m.diff.title == msg.title {
+			m.diff.loading, m.diff.diffs, m.diff.err = false, msg.diffs, msg.err
+		}
+		return m, nil
 
 	case graphUnchangedMsg:
 		return m, nil
@@ -476,9 +514,23 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewName, focusID, format string) error {
+func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewName, focusID, at, format string) error {
 	var resp *api.GraphResponse
 	var err error
+
+	if viewName == "all" {
+		var snap *graph.Snapshot
+		if fixturePath != "" {
+			if snap, err = fixtureSnapshot(fixturePath); err != nil {
+				return err
+			}
+		}
+		d, err := buildDump(snap, daemonURL, client, at)
+		if err != nil {
+			return err
+		}
+		return writeMachine(d, format)
+	}
 
 	if fixturePath != "" {
 		var snap *graph.Snapshot
@@ -490,6 +542,7 @@ func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewNa
 		if focusID != "" {
 			q.Set("focus", focusID)
 		}
+		withAt(q, at)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var decoded api.GraphResponse
@@ -502,14 +555,18 @@ func runMachineOutput(daemonURL string, client *http.Client, fixturePath, viewNa
 	if err != nil {
 		return err
 	}
+	return writeMachine(resp, format)
+}
 
+// writeMachine prints v to stdout as json or yaml.
+func writeMachine(v any, format string) error {
 	switch strings.ToLower(format) {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(resp)
+		return enc.Encode(v)
 	case "yaml", "yml":
-		yBytes, err := yaml.Marshal(resp)
+		yBytes, err := yaml.Marshal(v)
 		if err != nil {
 			return err
 		}
@@ -534,6 +591,7 @@ func main() {
 	var zone string
 	var flashFor time.Duration
 	var configPath string
+	var atPoint, diffFrom, diffTo string
 
 	var kubeContext, namespace, service, port string
 	flag.StringVar(&daemonURL, "daemon-url", "", "kvovn-topod API URL, e.g. http://127.0.0.1:8080/api/v1 (default: the in-cluster daemon through the Kubernetes service proxy)")
@@ -548,7 +606,7 @@ func main() {
 	flag.StringVar(&kubeconfig, "kubeconfig", getEnvDefault("KUBECONFIG", ""), "Path to kubeconfig (defaults to standard kubeconfig paths)")
 	flag.StringVar(&k8sNamespace, "k8s-namespace", "", "Kubernetes namespace of the OVN pods diagnostics exec into (default: detect kube-system for Kube-OVN, else openshift-ovn-kubernetes or ovn-kubernetes)")
 	flag.StringVar(&outputFormat, "o", "", "Output format: json or yaml (scriptable machine output mode)")
-	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis")
+	flag.StringVar(&viewName, "view", "l3", "View for machine output: l3, l2, chassis, or all (every view and every switch in one document, for offline debugging)")
 	flag.StringVar(&focusID, "focus", "", "Focus target for view (e.g. ls:<name|uuid>)")
 	flashDefault := defaultFlashFor
 	if d, err := time.ParseDuration(os.Getenv("KVOVN_TOPO_FLASH")); err == nil {
@@ -556,6 +614,9 @@ func main() {
 	}
 	flag.DurationVar(&flashFor, "flash", flashDefault, "How long a changed row stays highlighted: solid for 3s, then a ▌ mark; 0 turns it off (env KVOVN_TOPO_FLASH)")
 	flag.StringVar(&configPath, "config", "", "Config file: UI preferences and per-context daemon settings (default: $XDG_CONFIG_HOME/kvovn-topo/config.yaml or ~/.config/kvovn-topo/config.yaml)")
+	flag.StringVar(&atPoint, "at", "", "Browse the topology as it was (daemon history, M8): 15:04, \"2026-11-06 15:04\", RFC3339, -1h or a revision; also applies to -o")
+	flag.StringVar(&diffFrom, "from", "", "kvovn-topo diff: the older point (same forms as --at)")
+	flag.StringVar(&diffTo, "to", "", "kvovn-topo diff: the newer point (default now)")
 	flag.StringVar(&zone, "zone", "", "With --diag: live view of one ovn-kubernetes interconnect zone (node) through an exec relay, e.g. OpenShift; \"list\" prints the zones")
 
 	// "kvovn-topo mcp": the MCP server has its own flags and never starts the TUI.
@@ -563,11 +624,27 @@ func main() {
 		os.Exit(runMCP(os.Args[2:], os.Stderr))
 	}
 
-	// Allow "kvovn-topo graph ..." style invocations
-	if len(os.Args) > 1 && os.Args[1] == "graph" {
+	// "kvovn-topo skill": print the agent skill and exit.
+	if len(os.Args) > 1 && os.Args[1] == "skill" {
+		os.Exit(runSkill(os.Stdout))
+	}
+
+	// Allow "kvovn-topo graph ..." style invocations; "kvovn-topo diff" prints a diff.
+	diffMode := false
+	if len(os.Args) > 1 && (os.Args[1] == "graph" || os.Args[1] == "diff") {
+		diffMode = os.Args[1] == "diff"
 		os.Args = append(os.Args[:1], os.Args[2:]...)
 	}
 	flag.Parse()
+
+	atLabel := ""
+	if atPoint != "" {
+		var err error
+		if atPoint, atLabel, err = normalizePoint(atPoint, time.Now()); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: --at: %v\n", err)
+			os.Exit(2)
+		}
+	}
 
 	fixturePath := ""
 	if useFixture {
@@ -642,8 +719,21 @@ func main() {
 		daemonURL, client, via = conn.BaseURL, conn.Client, "service proxy "+conn.Service.String()
 	}
 
+	if diffMode {
+		err := runDiffCLI(daemonURL, client, fixturePath, diffFrom, diffTo, viewName, focusID, outputFormat, func(s string) { fmt.Println(s) })
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if outputFormat != "" {
-		if err := runMachineOutput(daemonURL, client, fixturePath, viewName, focusID, outputFormat); err != nil {
+		if atPoint != "" && fixturePath != "" {
+			fmt.Fprintln(os.Stderr, "Error: --at needs the daemon's history; an offline fixture has none")
+			os.Exit(2)
+		}
+		if err := runMachineOutput(daemonURL, client, fixturePath, viewName, focusID, atPoint, outputFormat); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -653,6 +743,7 @@ func main() {
 	m := initialModel(daemonURL, fixturePath, themeName, diagMode, loader, k8sNamespace)
 	m.httpClient, m.via = client, via
 	m.flashFor, m.pinspect = flashFor, opts.pane
+	m.at, m.atLabel = atPoint, atLabel
 	m.zone = firstNonEmpty(zone, zoneOf(fixtureDir))
 	m.kube = kubeTarget{kubeconfig: kubeconfig, context: kubeContext, currentContext: currentContext}
 	if zone != "" && m.diagLocator != nil {

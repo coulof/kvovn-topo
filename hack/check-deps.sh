@@ -7,7 +7,7 @@ set -euo pipefail
 
 FORBIDDEN='(github.com/coulof/kvovn-topo/pkg/diag|k8s.io/client-go/tools/remotecommand)'
 status=0
-for pkg in ./cmd/kvovn-topod ./pkg/mcp/... ./pkg/kubeproxy/...; do
+for pkg in ./cmd/kvovn-topod ./pkg/history/... ./pkg/mcp/... ./pkg/kubeproxy/...; do
   dir="${pkg%/...}"
   [[ -d "${dir}" ]] || continue
   deps=$(go list -deps "${pkg}" | grep -E "${FORBIDDEN}" || true)
@@ -17,5 +17,5 @@ for pkg in ./cmd/kvovn-topod ./pkg/mcp/... ./pkg/kubeproxy/...; do
     status=1
   fi
 done
-[[ ${status} -eq 0 ]] && echo "ADR-0001 dependency check passed: cmd/kvovn-topod, pkg/mcp and pkg/kubeproxy do not depend on pkg/diag or remotecommand."
+[[ ${status} -eq 0 ]] && echo "ADR-0001 dependency check passed: cmd/kvovn-topod, pkg/history, pkg/mcp and pkg/kubeproxy do not depend on pkg/diag or remotecommand."
 exit ${status}

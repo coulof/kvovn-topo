@@ -22,8 +22,14 @@ Base path `/api/v1`.
 | `/chassis` | GET | Chassis details, HA groups, and gateway roles |
 | `/find?q=<text>&type=&limit=&offset=` | GET | Search objects by name, IP, MAC, namespace, pod, VM |
 | `/events` | GET | SSE stream emitting graph revision changes |
+| `/graph?…&at=<point>`, `/node/{id}?at=<point>` | GET | The state at a past point, reconstructed from history (M8) |
+| `/diff?from=<point>&to=<point>&view=l3\|l2\|chassis&focus=` | GET | Nodes and edges added, removed or changed between two points, with field-level changes |
+| `/history/events?since=&until=&kind=&object=&before=&limit=` | GET | Change feed, newest first, paginated by `before=<nextBefore>` |
+| `/history/coverage` | GET | Retention window, gaps, mode and estimated store size |
 | `/readyz` | GET | Readiness probe (returns 200 after initial DB sync) |
 | `/healthz` | GET | Liveness probe |
 | `/version` | GET | Daemon version and OVN schema versions |
+
+**History (ADR-0002).** The daemon records OVSDB row changes from its first snapshot on, in memory by default (`history.mode`, bounded by `history.retention`: 200k records / 256 MiB / 24 h, oldest dropped first). It is lost on restart, and `history.mode=off` turns it off (the history endpoints then answer 501 `HISTORY_DISABLED`). A `<point>` is an RFC3339 time, `<epoch>:<revision>`, a bare revision of the current epoch, or a negative duration (`-1h`); absent or `now` is live. A point before coverage answers 422 `OUT_OF_COVERAGE`, a time inside a gap (database outage, dropped events) 422 `IN_GAP`: the state there is unknown and never interpolated. Past graphs are rebuilt with the current graph code; Kubernetes enrichment (owner, VM, NAD) is current, not historical. `persistent` (bbolt on a PVC) is not implemented yet.
 
 `/graph` never lists every port: switches carry port counts, and ports appear only in `view=l2&focus=ls:<id>`, paginated. `/node/{id}` on a router adds `staticRoutes`, `policies` and `nats`. If the SSE stream breaks (a proxy may buffer it), clients poll `/graph` with `If-None-Match: <revision>`.

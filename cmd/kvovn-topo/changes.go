@@ -25,6 +25,7 @@ type change struct {
 	what      string
 	removed   bool
 	afterHlth health
+	hist      bool // from the daemon's history feed: Enter opens its diff
 }
 
 var healthWord = map[health]string{hNone: "infra", hOK: "ok", hWarn: "degraded", hBad: "broken"}
@@ -84,6 +85,20 @@ func (m *model) recordChanges(next *xtree, rev int) {
 // changeRows lists the log newest first. A removed object keeps a stand-in
 // node, so Enter says it is gone instead of jumping.
 func (m *model) changeRows() {
+	if m.histAvail { // the daemon's feed, already newest first
+		for i := range m.histChanges {
+			c := &m.histChanges[i]
+			if m.filter != "" && !containsFold(c.name+" "+c.what, m.filter) {
+				continue
+			}
+			n := m.histNode(c)
+			if n == nil || c.removed {
+				n = &xnode{id: c.id, kind: c.kind, name: c.name}
+			}
+			m.rows = append(m.rows, row{n: n, key: fmt.Sprintf("%s/h%d", modeChanges, c.seq), ref: true, change: c})
+		}
+		return
+	}
 	for i := len(m.changes) - 1; i >= 0; i-- {
 		c := m.changes[i]
 		if m.filter != "" && !containsFold(c.name+" "+c.what, m.filter) {
@@ -115,6 +130,10 @@ func (m model) noChangesText() string {
 	switch {
 	case m.fixturePath != "":
 		return "   no live updates: this is an offline fixture"
+	case m.histAvail && m.histName != "":
+		return "   no recorded change for " + m.histName + " in the daemon's history"
+	case m.histAvail:
+		return "   the daemon's history has no change yet"
 	case m.livePaused:
 		return "   live updates are paused (L resumes them)"
 	}
